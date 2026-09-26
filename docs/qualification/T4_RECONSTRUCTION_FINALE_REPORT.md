@@ -1,6 +1,6 @@
 # RARE//SHIFT — T4 RECONSTRUCTION / IDENTITY RESTORED Qualification Report
 
-**Status:** AUTOMATED QUALIFICATION PASS — FINAL REAL-HOLDER T4 GATE OPEN  
+**Status:** QUALIFIED — REAL-HOLDER FINALE + RELOAD DETERMINISM PASS  
 **Qualified implementation commit:** `21b6bc02bf80d837439d1c5d2a1445c808048576`  
 **Base:** T3 qualified closeout `db477eed836ca69f2347681c4e0ce7e52f959492`  
 **FriendSDK:** v0.1.2  
@@ -8,13 +8,15 @@
 
 ## Decision
 
-The bounded T4 implementation passes automated qualification for the complete competition-facing sequence:
+The bounded T4 implementation and final real-holder qualification PASS for the complete competition-facing sequence:
 
 `SCAN → CHAMBER I / DISCOVER → CHAMBER II / TIMING → CHAMBER III / SYNCHRONIZE → RECONSTRUCTION / IDENTITY RESTORED`
 
 T4 adds no fourth puzzle and does not modify the qualified T0–T3 gameplay contracts. The finale reconstructs the exact selected canonical pair from the existing phase decomposition, captures ephemeral accepted SHIFT counts from the three completed chambers, displays the unchanged T1/T2/T3 proof chain, and produces one deterministic internal RUN PROOF.
 
-The final real-holder Friend `#13699` end-to-end run remains OPEN as the final gameplay qualification gate. Deployment, submission, and merge to `main` remain unauthorized by this report.
+The final real-holder Friend `#13699` end-to-end run and fresh-session repeat both PASS. Full gameplay qualification is therefore CLOSED / PASS for the currently qualified feature branch.
+
+Deployment, submission, and merge to `main` remain unauthorized by this report.
 
 ## Exact reconstruction authority
 
@@ -127,6 +129,38 @@ Final repaired screenshot SHA-256 values:
 - T4 final 960: `76a34b3d4959abc048073d6015b645d3ecda60be7d0621910e2a2b587ca16f81`;
 - T4 final 390: `ec2cbd86abf09f92a5b222475eae4ee3954bf3151340514ae5359188f574d81a`.
 
+## Final real-holder evidence — Friend #13699
+
+The final manual holder qualification used the normal FriendSDK wallet/Friend flow with real Friend `#13699` and no test-only state overrides.
+
+Both complete finale runs visibly reproduced:
+
+- Friend: `#13699`;
+- family: `Cellular`;
+- selected canonical frames: `33 ↔ 34`;
+- T1 proof: `fdef6617`;
+- T2 proof: `78145332`;
+- T3 proof: `2032f2f5`;
+- RUN PROOF: `14e271f4`;
+- Chamber I accepted SHIFTs: `2`;
+- Chamber II accepted SHIFTs: `2`;
+- Chamber III accepted SHIFTs: `2`;
+- total accepted SHIFTs: `6`;
+- qualified minimum: `6`;
+- finale state: `IDENTITY RESTORED`.
+
+The browser was fully refreshed between the two end-to-end runs. The second run reproduced the same Friend identity, frame pair, T1/T2/T3 proof chain, and exact RUN PROOF `14e271f4`.
+
+Therefore:
+
+- final real-holder end-to-end T4 run: **PASS**;
+- fresh-session RUN PROOF stability: **PASS**;
+- identity/proof-chain continuity: **PASS**;
+- exact `2 / 2 / 2 = 6` SHIFT accounting: **PASS**;
+- final gameplay qualification: **PASS**.
+
+No wallet address, credential, secret, or private holder information is recorded in this report.
+
 ## Nine-family evidence
 
 No new live-RPC nine-family T4 corpus was run, by design.
@@ -135,14 +169,17 @@ T4 introduces no family-dependent topology, frame selector, threshold, fallback,
 
 A new live corpus becomes mandatory if later changes introduce family-dependent reconstruction behavior or alter canonical pair selection/acceptance.
 
-## Remaining gates
+## Remaining release / submission gates
 
-- final bounded real-holder Friend `#13699` end-to-end T4 run: **OPEN / AUTHORIZED**;
-- repeat/reload RUN PROOF stability for that holder run: **OPEN**;
+Gameplay qualification is complete. The remaining work is release/submission qualification rather than another gameplay tranche:
+
 - physical-phone touch: **OPEN / PRE-SUBMISSION**;
-- wrong-network/ineligible/RPC/art-read/error-state release checks: **OPEN**;
+- wrong-network / ineligible Friend / RPC failure / art-read failure / paused-session error-state checks: **OPEN**;
 - public HTTPS qualification: **OPEN**;
-- privacy/submission artifact audit: **OPEN**;
-- submission PR: **NOT AUTHORIZED BY THIS REPORT**.
+- privacy and submission-artifact audit: **OPEN**;
+- competition README / screenshots / short gameplay evidence packaging: **OPEN**;
+- merge to `main`: **NOT AUTHORIZED BY THIS REPORT**;
+- deployment/public preview: **NOT AUTHORIZED BY THIS REPORT**;
+- official Vibeathon submission PR: **NOT AUTHORIZED BY THIS REPORT**.
 
-T4 is automated-qualified. Full gameplay qualification requires the final real-holder finale evidence.
+T4 and the complete gameplay loop are qualified. Further work must proceed as a separate pre-submission/release tranche under explicit review.
