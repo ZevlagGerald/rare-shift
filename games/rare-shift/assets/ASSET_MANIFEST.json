@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "project": "RARE//SHIFT V2",
+  "tranche": "V2-ART-00",
+  "status": "OPEN",
+  "policy": {
+    "canonicalFriendArtworkMustRemainUnmodified": true,
+    "externalAssetDefaultLicense": "CC0 only unless individually reviewed",
+    "bulkLibraryImportsAllowed": false,
+    "productionAdmissionRequiresHashes": true,
+    "signatureEffectsAreProcedural": [
+      "DELTA_BURST",
+      "RECONSTRUCTION_FIELD",
+      "SHIFT_TRANSITION"
+    ]
+  },
+  "phasePalette": {
+    "phaseA": "#4cc9f0",
+    "phaseB": "#f72585",
+    "common": "#e8edf2",
+    "void": "#202832",
+    "backgroundPrimary": "#0b0e12",
+    "backgroundSecondary": "#11151b"
+  },
+  "requiredProductionSet": [
+    "fracture-grid-environment",
+    "canonical-friend-presentation",
+    "trace-enemy",
+    "split-a-enemy",
+    "split-b-enemy",
+    "signal-xp-pickup",
+    "hud-fragment",
+    "shift-control",
+    "three-card-draft-ui",
+    "delta-burst",
+    "shift-transition",
+    "enemy-spawn-fx",
+    "enemy-hit-fx",
+    "enemy-death-fx",
+    "candidate-sfx-map"
+  ],
+  "assets": [],
+  "proceduralSystems": [],
+  "notes": [
+    "No asset is production-approved until provenance, license evidence, source hash, transformation history, production path and production hash are recorded.",
+    "Kenney CC0 is the primary external source family. OpenGameArt candidates require per-asset CC0 verification.",
+    "This scaffold does not claim any third-party asset has been imported or approved."
+  ]
+}
