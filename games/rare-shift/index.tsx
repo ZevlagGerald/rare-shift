@@ -5,11 +5,24 @@ import type { GameComponentProps } from "@rarefriends/friendsdk/runtime";
 import { createFriendReader, decodeSpriteBitmap } from "@rarefriends/friendsdk/sprites";
 import { buildProofChamber, derivePhaseField, selectFramePair } from "./src/phase-core.ts";
 import { solveProofChamber } from "./src/solver.ts";
+import { buildTimingChamber, buildTimingProfile } from "./src/timing-core.ts";
+import { solveTimingChamber } from "./src/timing-solver.ts";
 import { mountPhaserProof, type PhaserProofController } from "./src/phaser-proof.ts";
-import type { FrameCandidate, FrameRows, PixelClass, ProofChamber, SelectedFramePair, SolveResult } from "./src/types.ts";
+import { mountPhaserTiming, type PhaserTimingController } from "./src/phaser-timing.ts";
+import type {
+  FrameCandidate,
+  FrameRows,
+  PixelClass,
+  ProofChamber,
+  SelectedFramePair,
+  SolveResult,
+  TimingChamber,
+  TimingProfile,
+  TimingSolveResult,
+} from "./src/types.ts";
 import "./style.css";
 
-type Stage = "loading" | "scan" | "chamber" | "error";
+type Stage = "loading" | "scan" | "chamber1" | "between" | "chamber2" | "error";
 
 interface PreparedRun {
   friendLabel: string;
@@ -17,6 +30,9 @@ interface PreparedRun {
   pair: SelectedFramePair;
   chamber: ProofChamber;
   solved: SolveResult;
+  timingChamber: TimingChamber;
+  timingProfile: TimingProfile;
+  timingSolved: TimingSolveResult;
 }
 
 function CanonicalFrame({ rows, label, view }: { rows: FrameRows; label: string; view: string }) {
@@ -96,9 +112,22 @@ function ScanStage({ prepared, paused, onEnter }: { prepared: PreparedRun; pause
   </div>;
 }
 
+function ChamberTransition({ prepared, paused, onEnter }: { prepared: PreparedRun; paused: boolean; onEnter: () => void }) {
+  return <div className="rare-shift-overlay" data-stage="chamber1-transition" role="status">
+    <strong>CHAMBER I COMPLETE</strong>
+    <p>
+      Collision obeys your canonical frames. Chamber II adds a second requirement: match the correct phase to the correct pulse window.
+    </p>
+    <p>
+      Timing proof <strong>{prepared.timingChamber.fingerprint}</strong> · solver minimum {prepared.timingSolved.minShifts} SHIFTs
+    </p>
+    <button type="button" disabled={paused} onClick={onEnter}>ENTER CHAMBER II // TIMING</button>
+  </div>;
+}
+
 export default function RareShift({ friendId, client, paused }: GameComponentProps) {
   const host = useRef<HTMLDivElement>(null);
-  const controller = useRef<PhaserProofController | null>(null);
+  const controller = useRef<PhaserProofController | PhaserTimingController | null>(null);
   const [stage, setStage] = useState<Stage>("loading");
   const [prepared, setPrepared] = useState<PreparedRun | null>(null);
   const [error, setError] = useState("");
@@ -133,8 +162,15 @@ export default function RareShift({ friendId, client, paused }: GameComponentPro
       const pair = selectFramePair(frames);
       const chamber = buildProofChamber(pair);
       const solved = solveProofChamber(chamber);
-      if (!solved.solvable || solved.reachableWithoutShiftFromStartPhase || solved.minShifts === null || solved.minShifts < 2) {
+      if (!solved.solvable || solved.reachableWithoutShiftFromStartPhase || solved.minShifts !== 2) {
         throw new Error("Generated Chamber I failed its solver acceptance gate.");
+      }
+
+      const timingProfile = buildTimingProfile(chamber.fingerprint);
+      const timingChamber = buildTimingChamber(pair, chamber.fingerprint);
+      const timingSolved = solveTimingChamber(timingChamber, timingProfile);
+      if (!timingSolved.solvable || timingSolved.reachableWithoutShiftFromStartPhase || timingSolved.minShifts === null || timingSolved.minShifts < 2) {
+        throw new Error("Generated Chamber II failed its timing solver acceptance gate.");
       }
 
       setPrepared({
@@ -143,6 +179,9 @@ export default function RareShift({ friendId, client, paused }: GameComponentPro
         pair,
         chamber,
         solved,
+        timingChamber,
+        timingProfile,
+        timingSolved,
       });
       setStage("scan");
     }).catch(cause => {
@@ -156,7 +195,7 @@ export default function RareShift({ friendId, client, paused }: GameComponentPro
   }, [friendId, client, retry]);
 
   useEffect(() => {
-    if (stage !== "chamber" || !prepared || !host.current) return;
+    if (stage !== "chamber1" || !prepared || !host.current) return;
     const mounted = mountPhaserProof({
       parent: host.current,
       chamber: prepared.chamber,
@@ -174,10 +213,48 @@ export default function RareShift({ friendId, client, paused }: GameComponentPro
     };
   }, [stage, prepared]);
 
-  return <section className="rare-shift-proof" aria-label="RARE SHIFT" aria-busy={stage === "loading"} data-app-stage={stage}>
-    <div ref={host} className="rare-shift-canvas" inert={paused || stage !== "chamber" || undefined} aria-hidden={stage !== "chamber"} />
+  useEffect(() => {
+    if (stage !== "chamber1") return;
+    let frame = 0;
+    const watch = () => {
+      const canvas = host.current?.querySelector("canvas");
+      if (canvas?.dataset.complete === "true") {
+        setStage("between");
+        return;
+      }
+      frame = requestAnimationFrame(watch);
+    };
+    frame = requestAnimationFrame(watch);
+    return () => cancelAnimationFrame(frame);
+  }, [stage]);
 
-    {stage === "scan" && prepared && <ScanStage prepared={prepared} paused={paused} onEnter={() => setStage("chamber")} />}
+  useEffect(() => {
+    if (stage !== "chamber2" || !prepared || !host.current) return;
+    const mounted = mountPhaserTiming({
+      parent: host.current,
+      chamber: prepared.timingChamber,
+      pair: prepared.pair,
+      profile: prepared.timingProfile,
+      solved: prepared.timingSolved,
+      reducedMotion,
+      friendLabel: prepared.friendLabel,
+      familyName: prepared.familyName,
+    });
+    controller.current = mounted;
+    mounted.setPaused(paused);
+    return () => {
+      mounted.destroy();
+      if (controller.current === mounted) controller.current = null;
+    };
+  }, [stage, prepared]);
+
+  const canvasVisible = stage === "chamber1" || stage === "chamber2";
+
+  return <section className="rare-shift-proof" aria-label="RARE SHIFT" aria-busy={stage === "loading"} data-app-stage={stage}>
+    <div ref={host} className="rare-shift-canvas" inert={paused || !canvasVisible || undefined} aria-hidden={!canvasVisible} />
+
+    {stage === "scan" && prepared && <ScanStage prepared={prepared} paused={paused} onEnter={() => setStage("chamber1")} />}
+    {stage === "between" && prepared && <ChamberTransition prepared={prepared} paused={paused} onEnter={() => setStage("chamber2")} />}
 
     {(stage === "loading" || stage === "error") && <div className="rare-shift-overlay" role={stage === "error" ? "alert" : "status"}>
       <strong>{stage === "loading" ? "Reading your Friend's 64 canonical frames…" : "RARE//SHIFT could not start"}</strong>
@@ -186,7 +263,7 @@ export default function RareShift({ friendId, client, paused }: GameComponentPro
 
     <div className="rare-shift-accessibility">
       <label><input type="checkbox" checked={reducedMotion} onChange={event => setReducedMotion(event.target.checked)} /> Reduce motion</label>
-      <span>T1 SCAN + DISCOVER · no RF spending · no persistent state</span>
+      <span>T2 SCAN + DISCOVER + TIMING · no RF spending · no persistent state</span>
     </div>
   </section>;
 }
