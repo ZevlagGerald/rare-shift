@@ -95,10 +95,10 @@ class ProofScene extends Phaser.Scene {
       const color = state === "COMMON" ? 0xe8edf2 : state === "A_ONLY" ? 0x4cc9f0 : state === "B_ONLY" ? 0xf72585 : 0x232a33;
       g.fillStyle(color, state === "VOID" ? 0.45 : 1).fillRect(ox + x * cell, oy + y * cell, cell - 1, cell - 1);
     }
-    this.add.text(748, 366, "cyan  A-only\nmagenta  B-only\nwhite  common", { fontFamily: "monospace", fontSize: "11px", color: "#9aa7b5", lineSpacing: 4 });
-    this.add.text(748, 431,
+    this.add.text(748, 360, "cyan  A-only\nmagenta  B-only\nwhite  common", { fontFamily: "monospace", fontSize: "11px", color: "#9aa7b5", lineSpacing: 2 });
+    this.add.text(748, 410,
       `A gate source  (${this.chamber.gateASourcePixel.x},${this.chamber.gateASourcePixel.y})\nB gate source  (${this.chamber.gateBSourcePixel.x},${this.chamber.gateBSourcePixel.y})`,
-      { fontFamily: "monospace", fontSize: "11px", color: "#9aa7b5", lineSpacing: 4 });
+      { fontFamily: "monospace", fontSize: "11px", color: "#9aa7b5", lineSpacing: 2 });
   }
 
   private syncTestState(): void {
