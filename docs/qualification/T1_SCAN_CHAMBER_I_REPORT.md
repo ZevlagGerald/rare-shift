@@ -1,6 +1,6 @@
 # RARE//SHIFT — T1 SCAN + CHAMBER I / DISCOVER Qualification Report
 
-**Status:** AUTOMATED QUALIFICATION PASS — REAL-WALLET T1 PLAYTHROUGH OPEN  
+**Status:** QUALIFIED — AUTOMATED + REAL-HOLDER PASS  
 **Qualified implementation commit:** `5a8cae44bd5538fa9caa25b30e0592db0be79973`  
 **Base:** T0.5 qualified closeout `7cd70bd0d9a43819de613c21abdd8b37c41ed34f`  
 **FriendSDK:** v0.1.2  
@@ -8,11 +8,13 @@
 
 ## Decision
 
-The bounded T1 implementation is automated-qualified for the intended **SCAN → CHAMBER I / DISCOVER** sequence. The unchanged T0/T0.5 deterministic selector, chamber builder and solver remain the mechanical authority.
+The bounded T1 implementation is fully qualified for the intended **SCAN → CHAMBER I / DISCOVER** sequence.
 
-This report does not authorize Chamber II, Chamber III, reconstruction, economy, contracts, backend systems, selector-threshold changes or other scope expansion.
+Automated browser qualification passed at desktop and narrow viewport, and the Owner subsequently completed the same T1 sequence with the real selected Friend `#13699`. The real-holder evidence reproduced the deterministic values established before T1 and completed Chamber I after exactly two accepted SHIFT actions.
 
-A real holder-wallet T1 playthrough remains required before T1 is treated as fully holder-qualified.
+The unchanged T0/T0.5 deterministic selector, chamber builder and solver remain the mechanical authority.
+
+This report closes T1. It does not authorize Chamber III, reconstruction, economy, contracts, backend systems, selector-threshold changes or other unrelated scope expansion. Chamber II requires its own bounded protocol and branch.
 
 ## Implemented sequence
 
@@ -33,7 +35,7 @@ A real holder-wallet T1 playthrough remains required before T1 is treated as ful
 7. **CHAMBER I // DISCOVER** reuses the qualified two-gate deterministic topology.
 8. Gate A requires the first SPACE/touch SHIFT.
 9. Gate B requires the second SHIFT.
-10. EXIT reports Chamber I completion after exactly two accepted SHIFTs in the qualified browser fixture.
+10. EXIT reports Chamber I completion after exactly two accepted SHIFTs.
 
 ## Final automated evidence
 
@@ -88,9 +90,43 @@ The custom browser qualifier verifies at both 960px and 390px:
 - EXIT is reached;
 - completion state becomes `chamber1-complete`.
 
+## Real-holder T1 evidence
+
+Owner-supplied runtime screenshots on 2026-09-26 prove the T1 flow with the selected eligible Friend `#13699`.
+
+### SCAN
+
+PASS. The real session visibly reproduced:
+
+- Friend: `#13699`;
+- family: `Cellular`;
+- canonical frames: `33 ↔ 34`;
+- deterministic fingerprint: `fdef6617`;
+- delta: `25`;
+- balance: `9`;
+- source clip group: `4`;
+- solver minimum: `2 SHIFT`;
+- exact canonical Frame A, XOR field and Frame B presentation;
+- reduced-motion mode enabled.
+
+### CHAMBER I / DISCOVER
+
+PASS. After the explicit SCAN transition, the same real Friend completed Chamber I. The completion state visibly reported:
+
+- Friend `#13699`;
+- family `Cellular`;
+- canonical frames `33 ↔ 34`;
+- fingerprint `fdef6617`;
+- `CHAMBER I COMPLETE`;
+- `2 SHIFTs`;
+- final Phase B / Frame 34;
+- reduced-motion mode still enabled.
+
+No wallet address, private account data or wallet secret is recorded in this public qualification report.
+
 ## Visual review
 
-The CI evidence screenshots were reviewed rather than accepting only exit codes.
+The CI evidence screenshots and real-holder screenshots were reviewed rather than accepting only exit codes.
 
 ### SCAN 960
 
@@ -98,11 +134,15 @@ PASS. The composition clearly presents RARE//SHIFT, the central thesis, selected
 
 ### SCAN 390
 
-PASS after repair. FriendSDK preserves the 960:640 game aspect ratio, so a 390px-wide host gives only about 260px of game height. The initial implementation stacked scan panels vertically and pushed critical information below the host toolbar. The repaired narrow layout keeps Frame A, XOR, Frame B, metrics and ENTER CHAMBER I visible together above the toolbar.
+PASS after repair. FriendSDK preserves the 960:640 game aspect ratio, so a 390px-wide host gives only about 260px of game height. The repaired narrow layout keeps Frame A, XOR, Frame B, metrics and ENTER CHAMBER I visible together above the toolbar.
 
 ### Chamber I 960 / 390
 
-PASS after repair. An intermediate layout moved touch controls upward for the narrow host but overlapped right-panel diagnostic text at 960px. Final spacing separates diagnostics from the touch HUD. The narrow completion status and the complete touch-control cluster remain above the FriendSDK toolbar.
+PASS after repair. Final spacing separates diagnostics from the touch HUD. The narrow completion status and the complete touch-control cluster remain above the FriendSDK toolbar.
+
+### Real-holder desktop
+
+PASS. The real SCAN and completed Chamber I remain readable and consistent with the automated evidence. No blocking overlap or clipping is visible in the supplied screenshots.
 
 ## Mechanics preserved
 
@@ -122,41 +162,29 @@ The physical Shift key remains unbound. Keyboard SHIFT action is SPACE; touch us
 
 ## PROVEN
 
-- T1 SCAN implementation exists and is deterministic from already-qualified canonical data.
+- T1 SCAN implementation exists and is deterministic from qualified canonical data.
 - SCAN precedes chamber gameplay.
 - SCAN communicates the NFT-to-world derivation rather than treating the Friend as a skin.
 - Chamber I retains the solver-qualified two-phase lesson.
 - Desktop and narrow automated runtime flows complete.
-- Reduced-motion browser fixture remains compatible.
+- Real-holder Friend `#13699` reproduces the expected deterministic SCAN and Chamber I result.
+- Reduced-motion flow remains playable in automated and supplied real-holder evidence.
 - FriendSDK check/build/smoke remain green.
 - No RF spending or persistent state was introduced.
 
 ## OPEN / UNPROVEN
 
-- real holder-wallet T1 SCAN with Friend `#13699`;
-- real holder-wallet T1 Chamber I completion after the new SCAN transition;
 - physical-phone touch playthrough;
 - real-world cross-clip fallback occurrence/rate;
-- Chamber II design/implementation;
+- Chamber II implementation and qualification;
 - Chamber III design/implementation;
 - reconstruction finale;
 - final audio and submission polish.
 
-## Next gate
+## T1 closeout
 
-**NEXT: REAL-WALLET T1 PLAYTHROUGH — Friend `#13699`.**
+**T1_STATUS=QUALIFIED**  
+**REAL_HOLDER_GATE=PASS**  
+**NEXT=DESIGN T2 — CHAMBER II / TIMING UNDER A NEW ISOLATED BRANCH**
 
-Expected deterministic SCAN values from the previously qualified Friend remain:
-
-- family: `Cellular`;
-- frames: `33 ↔ 34`;
-- fingerprint: `fdef6617`;
-- solver minimum: `2 SHIFTs`.
-
-Required holder evidence:
-
-1. SCAN screenshot showing the real selected Friend and expected deterministic values;
-2. explicit ENTER CHAMBER I transition;
-3. Chamber I completion screenshot showing the real Friend after two accepted SHIFTs.
-
-Do not begin Chamber II until that holder-wallet T1 evidence is reviewed and the Owner authorizes the next tranche.
+Do not silently advance beyond the bounded Chamber II tranche. Chamber III remains blocked until T2 is independently reviewed and qualified.
