@@ -8,6 +8,7 @@ on:
       - feature/t1-scan-chamber1-discover
       - feature/t2-chamber2-timing
       - feature/t3-chamber3-synchronize
+      - feature/t4-reconstruction-finale
     paths:
       - ".github/workflows/t0-browser-qualification.yml"
       - "games/rare-shift/**"
@@ -120,6 +121,10 @@ jobs:
           test -s artifacts/rare-shift-t3-transition2-390.png
           test -s artifacts/rare-shift-t3-960.png
           test -s artifacts/rare-shift-t3-390.png
+          test -s artifacts/rare-shift-t4-final-960.png
+          test -s artifacts/rare-shift-t4-final-390.png
+          test -s artifacts/rare-shift-t4-host-960.png
+          test -s artifacts/rare-shift-t4-host-390.png
           sha256sum \
             artifacts/rare-shift-smoke.png \
             artifacts/rare-shift-t3-scan-960.png \
@@ -129,7 +134,11 @@ jobs:
             artifacts/rare-shift-t3-transition2-960.png \
             artifacts/rare-shift-t3-transition2-390.png \
             artifacts/rare-shift-t3-960.png \
-            artifacts/rare-shift-t3-390.png
+            artifacts/rare-shift-t3-390.png \
+            artifacts/rare-shift-t4-final-960.png \
+            artifacts/rare-shift-t4-final-390.png \
+            artifacts/rare-shift-t4-host-960.png \
+            artifacts/rare-shift-t4-host-390.png
           echo "SCREENSHOT_EVIDENCE=PASS"
 
       - name: Upload browser evidence
