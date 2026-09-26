@@ -6,8 +6,8 @@ import { testGame } from "@rarefriends/friendsdk/testing";
 const gameDirectory = resolve("games/rare-shift");
 await mkdir(resolve("artifacts"), { recursive: true });
 
-function qualifyT3(width) {
-  return async function completeT3({ page, game, friendId }) {
+function qualifyT4(width) {
+  return async function completeT4({ page, game, friendId }) {
     const body = game.locator("body");
     const root = game.locator(".rare-shift-proof");
     const scan = game.locator('[data-stage="scan"]');
@@ -18,11 +18,16 @@ function qualifyT3(width) {
     assert.ok((await scan.getAttribute("data-family"))?.length);
     assert.match(await scan.getAttribute("data-frame-a"), /^\d+$/);
     assert.match(await scan.getAttribute("data-frame-b"), /^\d+$/);
-    assert.match(await scan.getAttribute("data-fingerprint"), /^[0-9a-f]{8}$/);
+    const t1Proof = await scan.getAttribute("data-fingerprint");
+    assert.match(t1Proof, /^[0-9a-f]{8}$/);
     assert.equal(await scan.getAttribute("data-solver-min"), "2");
     assert.equal(await game.locator('svg[data-scan-view="frame-a"]').count(), 1);
     assert.equal(await game.locator('svg[data-scan-view="frame-b"]').count(), 1);
     assert.equal(await game.locator('svg[data-scan-view="phase-field"]').count(), 1);
+    const frameA = await game.locator('svg[data-scan-view="frame-a"]').getAttribute("data-rows");
+    const frameB = await game.locator('svg[data-scan-view="frame-b"]').getAttribute("data-rows");
+    assert.equal(frameA?.length, 256);
+    assert.equal(frameB?.length, 256);
 
     await page.locator(".rf-game-frame").screenshot({ path: resolve(`artifacts/rare-shift-t3-scan-${width}.png`) });
     await game.getByRole("button", { name: /ENTER CHAMBER I/i }).click();
@@ -52,6 +57,7 @@ function qualifyT3(width) {
     assert.equal(Number(await data("x")), gateB - 1);
     await press("Space");
     await press("d");
+    assert.equal(await data("shifts"), "2");
 
     const movesToExit = exitX - Number(await data("x"));
     for (let i = 0; i < movesToExit - 1; i++) await press("d");
@@ -78,6 +84,8 @@ function qualifyT3(width) {
     assert.equal(await data("stage"), "chamber2");
     assert.equal(await data("phase"), "B");
     assert.equal(await data("min-shifts"), "2");
+    const t2Proof = await data("fingerprint");
+    assert.match(t2Proof, /^[0-9a-f]{8}$/);
 
     const shutterA = Number(await data("shutter-a"));
     const shutterB = Number(await data("shutter-b"));
@@ -132,7 +140,8 @@ function qualifyT3(width) {
     assert.equal(await data("phase"), "B");
     assert.equal(await data("next-node"), "0");
     assert.equal(await data("min-shifts"), "2");
-    assert.match(await data("fingerprint"), /^[0-9a-f]{8}$/);
+    const t3Proof = await data("fingerprint");
+    assert.match(t3Proof, /^[0-9a-f]{8}$/);
     assert.match(await data("base-fingerprint"), /^[0-9a-f]{8}$/);
 
     const node1 = { x: Number(await data("node1-x")), y: Number(await data("node1-y")) };
@@ -185,14 +194,41 @@ function qualifyT3(width) {
     await pressT3("ArrowLeft");
     await pressT3("ArrowRight");
     assert.equal(await data("next-node"), "3");
-
-    await moveTo(syncExit.x, syncExit.y);
-    assert.equal(await data("complete"), "true");
-    assert.equal(await data("stage"), "chamber3-complete");
-    assert.equal(await data("shifts"), "2");
-    assert.equal(await data("sync-count"), "3");
-
     await page.locator(".rf-game-frame").screenshot({ path: resolve(`artifacts/rare-shift-t3-${width}.png`) });
+
+    await moveTo(syncExit.x - 1, syncExit.y);
+    await canvas.press("ArrowRight");
+
+    const finale = game.locator('[data-stage="finale"]');
+    await finale.waitFor({ state: "visible" });
+    assert.equal(await root.getAttribute("data-app-stage"), "finale");
+    assert.equal(await finale.getAttribute("data-friend"), String(friendId));
+    assert.equal(await finale.getAttribute("data-exact-a"), "true");
+    assert.equal(await finale.getAttribute("data-exact-b"), "true");
+    assert.equal(await finale.getAttribute("data-reconstructed-a"), frameA);
+    assert.equal(await finale.getAttribute("data-reconstructed-b"), frameB);
+    assert.equal(await finale.getAttribute("data-t1-proof"), t1Proof);
+    assert.equal(await finale.getAttribute("data-t2-proof"), t2Proof);
+    assert.equal(await finale.getAttribute("data-t3-proof"), t3Proof);
+    assert.match(await finale.getAttribute("data-run-proof"), /^[0-9a-f]{8}$/);
+    assert.equal(await finale.getAttribute("data-shifts-1"), "2");
+    assert.equal(await finale.getAttribute("data-shifts-2"), "2");
+    assert.equal(await finale.getAttribute("data-shifts-3"), "2");
+    assert.equal(await finale.getAttribute("data-shifts-total"), "6");
+    assert.equal(await finale.getAttribute("data-min-total"), "6");
+    assert.equal(await game.getByText("IDENTITY RESTORED", { exact: true }).count(), 1);
+    assert.equal(await game.locator('svg[data-finale-view="reconstructed-a"]').count(), 1);
+    assert.equal(await game.locator('svg[data-finale-view="reconstructed-b"]').count(), 1);
+
+    await page.locator(".rf-game-frame").screenshot({ path: resolve(`artifacts/rare-shift-t4-final-${width}.png`) });
+
+    const runProof = await finale.getAttribute("data-run-proof");
+    await game.getByRole("button", { name: /^RUN AGAIN$/i }).click();
+    await scan.waitFor({ state: "visible" });
+    assert.equal(await root.getAttribute("data-app-stage"), "scan");
+    assert.equal(await scan.getAttribute("data-friend"), String(friendId));
+    assert.equal(await scan.getAttribute("data-fingerprint"), t1Proof);
+    assert.match(runProof, /^[0-9a-f]{8}$/);
   };
 }
 
@@ -200,9 +236,9 @@ for (const width of [960, 390]) {
   await testGame(gameDirectory, {
     width,
     height: width === 960 ? 800 : 844,
-    timeout: 45_000,
-    screenshot: resolve(`artifacts/rare-shift-t3-final-${width}.png`),
-    check: qualifyT3(width),
+    timeout: 60_000,
+    screenshot: resolve(`artifacts/rare-shift-t4-host-${width}.png`),
+    check: qualifyT4(width),
   });
-  console.log(`RARE_SHIFT_T3_BROWSER_${width}=PASS`);
+  console.log(`RARE_SHIFT_T4_BROWSER_${width}=PASS`);
 }
