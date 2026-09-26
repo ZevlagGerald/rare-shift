@@ -91,7 +91,7 @@ class TimingScene extends Phaser.Scene {
     this.pulseGraphics = this.add.graphics();
     this.friendContainer = this.add.container(0, 0);
     this.phaseText = this.add.text(744, 118, "", { fontFamily: "monospace", fontSize: "18px", color: "#f2f6f8", fontStyle: "bold" });
-    this.pulseText = this.add.text(744, 150, "", { fontFamily: "monospace", fontSize: "13px", color: "#c7d1da", fontStyle: "bold" });
+    this.pulseText = this.add.text(744, 164, "", { fontFamily: "monospace", fontSize: "13px", color: "#c7d1da", fontStyle: "bold" });
 
     this.renderDynamic(true);
     this.installKeyboard();
@@ -188,7 +188,7 @@ class TimingScene extends Phaser.Scene {
   private renderPulseIndicator(pulse: PulseSegment): void {
     this.pulseGraphics.clear();
     const segments: PulseSegment[] = ["TELEGRAPH_A", "OPEN_A", "TELEGRAPH_B", "OPEN_B"];
-    const y = 181;
+    const y = 188;
     for (let i = 0; i < segments.length; i++) {
       const active = segments[i] === pulse;
       const phaseA = segments[i].endsWith("A");
