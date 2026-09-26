@@ -7,7 +7,7 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "test:core": "node --experimental-strip-types --test games/rare-shift/tests/phase-proof.test.ts",
+    "test:core": "node --experimental-strip-types --test games/rare-shift/tests/phase-proof.test.ts games/rare-shift/tests/sync.test.ts",
     "typecheck:core": "tsc -p tsconfig.core.json",
     "typecheck": "tsc -p games/rare-shift/tsconfig.json --noEmit",
     "dev": "friendsdk dev ./games/rare-shift",
@@ -16,7 +16,8 @@
     "test:sdk": "friendsdk test ./games/rare-shift --width 960 --screenshot ./artifacts/rare-shift-smoke.png",
     "test:browser": "node scripts/browser-check.mjs",
     "corpus:t0-5": "node --experimental-strip-types scripts/t0-5-corpus.mjs",
-    "corpus:t2": "node --experimental-strip-types scripts/t2-corpus.mjs"
+    "corpus:t2": "node --experimental-strip-types scripts/t2-corpus.mjs",
+    "corpus:t3": "node --experimental-strip-types scripts/t3-corpus.mjs"
   },
   "dependencies": {
     "@rarefriends/friendsdk": "file:vendor/rarefriends-friendsdk-0.1.2.tgz",

@@ -7,12 +7,14 @@ on:
       - feature/t0-5-real-friend-corpus
       - feature/t1-scan-chamber1-discover
       - feature/t2-chamber2-timing
+      - feature/t3-chamber3-synchronize
     paths:
       - ".github/workflows/t0-browser-qualification.yml"
       - "games/rare-shift/**"
       - "scripts/browser-check.mjs"
       - "scripts/t0-5-corpus.mjs"
       - "scripts/t2-corpus.mjs"
+      - "scripts/t3-corpus.mjs"
       - "package.json"
       - "tsconfig.core.json"
   workflow_dispatch:
@@ -82,6 +84,7 @@ jobs:
         run: |
           node --check scripts/t0-5-corpus.mjs
           node --check scripts/t2-corpus.mjs
+          node --check scripts/t3-corpus.mjs
 
       - name: Core tests
         run: npm run test:core
@@ -109,20 +112,24 @@ jobs:
         run: |
           set -euo pipefail
           test -s artifacts/rare-shift-smoke.png
-          test -s artifacts/rare-shift-t2-scan-960.png
-          test -s artifacts/rare-shift-t2-scan-390.png
-          test -s artifacts/rare-shift-t2-transition-960.png
-          test -s artifacts/rare-shift-t2-transition-390.png
-          test -s artifacts/rare-shift-t2-960.png
-          test -s artifacts/rare-shift-t2-390.png
+          test -s artifacts/rare-shift-t3-scan-960.png
+          test -s artifacts/rare-shift-t3-scan-390.png
+          test -s artifacts/rare-shift-t3-transition1-960.png
+          test -s artifacts/rare-shift-t3-transition1-390.png
+          test -s artifacts/rare-shift-t3-transition2-960.png
+          test -s artifacts/rare-shift-t3-transition2-390.png
+          test -s artifacts/rare-shift-t3-960.png
+          test -s artifacts/rare-shift-t3-390.png
           sha256sum \
             artifacts/rare-shift-smoke.png \
-            artifacts/rare-shift-t2-scan-960.png \
-            artifacts/rare-shift-t2-scan-390.png \
-            artifacts/rare-shift-t2-transition-960.png \
-            artifacts/rare-shift-t2-transition-390.png \
-            artifacts/rare-shift-t2-960.png \
-            artifacts/rare-shift-t2-390.png
+            artifacts/rare-shift-t3-scan-960.png \
+            artifacts/rare-shift-t3-scan-390.png \
+            artifacts/rare-shift-t3-transition1-960.png \
+            artifacts/rare-shift-t3-transition1-390.png \
+            artifacts/rare-shift-t3-transition2-960.png \
+            artifacts/rare-shift-t3-transition2-390.png \
+            artifacts/rare-shift-t3-960.png \
+            artifacts/rare-shift-t3-390.png
           echo "SCREENSHOT_EVIDENCE=PASS"
 
       - name: Upload browser evidence
