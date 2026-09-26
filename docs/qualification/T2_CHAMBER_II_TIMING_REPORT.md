@@ -1,18 +1,21 @@
 # RARE//SHIFT — T2 CHAMBER II / TIMING Qualification Report
 
-**Status:** AUTOMATED QUALIFICATION PASS — NINE-FAMILY T2 CORPUS OPEN  
+**Status:** NINE-FAMILY CORPUS PASS — REAL-HOLDER T2 GATE OPEN  
 **Qualified implementation commit:** `0aaec2604c03f22388c0c188ba820a32e08c3017`  
+**Automated qualification report commit:** `05703686f95ab35758ca4e6d17f0a082c6e12390`  
 **Base:** T1 qualified closeout `dac2c405ad18a3f91a31c4764f79328aaef2e1cb`  
 **FriendSDK:** v0.1.2  
 **Engine:** Phaser 4.2.1
 
 ## Decision
 
-The bounded T2 implementation is automated-qualified for the intended **SCAN → CHAMBER I / DISCOVER → explicit transition → CHAMBER II / TIMING** sequence.
+The bounded T2 implementation is automated-qualified for the intended **SCAN → CHAMBER I / DISCOVER → explicit transition → CHAMBER II / TIMING** sequence, and the canonical nine-family real-Friend corpus now passes.
 
 T2 introduces one new mechanic only: **PHASE PULSE**. A timed shutter is passable only when the selected Friend is in the matching canonical phase and the pulse clock is in that phase's matching OPEN segment.
 
-This report does **not** yet mark T2 fully qualified. The protocol requires the Chamber II generator and time-expanded solver to pass the canonical nine-family real-Friend corpus before the real-holder T2 gate.
+The nine-family corpus gate is closed. The next authorized qualification step is the real-holder Chamber II playthrough with Friend `#13699`.
+
+This report does **not** yet mark T2 fully qualified. The real-holder Chamber II run and physical-phone touch run remain separate evidence gates.
 
 This report does not authorize Chamber III, reconstruction, economy, contracts, backend systems, selector-threshold changes, or other scope expansion.
 
@@ -26,7 +29,7 @@ The deterministic pulse cycle is:
 4. `OPEN_B`
 5. repeat
 
-Global pulse segment duration is currently `1200 ms`, identical for every Friend.
+Global pulse segment duration is `1200 ms`, identical for every Friend.
 
 ### A shutter
 
@@ -131,6 +134,55 @@ Final screenshot SHA-256 values:
 - Chamber II complete 960: `27c3070267ba44710748f3810c72b81c321e9c8140178023397e4b8e7163039c`;
 - Chamber II complete 390: `366afff0a4337698709a87df2e1c0d29837c74a360179a340835a442e1cd1190`.
 
+## Canonical nine-family corpus evidence
+
+Owner-local read-only corpus run was executed from exact T2 report head `05703686f95ab35758ca4e6d17f0a082c6e12390` using `npm run corpus:t2`.
+
+Corpus artifact: `artifacts/t2-canonical-nine.json`  
+Artifact SHA-256: `5c25e466feba6a811d5d4c7114e6989a174b25c827d8b33cb3ed0a622b963d6e`
+
+Corpus summary:
+
+- qualified: `9/9`;
+- families qualified: `Skeleton, Mask, Family, Cellular, Asymmetry, Hoverer, Colossus, Sparkling, Hollow`;
+- families missing: none;
+- deterministic: PASS;
+- solver: PASS;
+- timing authority: PASS;
+- ready for real-holder T2 gate: YES.
+
+Per-family evidence:
+
+| Family | Friend | Gen | Frames | T2 fingerprint | Pulse start | Waits | Min SHIFTs |
+|---|---:|---:|---|---|---:|---:|---:|
+| Skeleton | #13655 | 5 | 33↔34 | `7c517c3f` | 2 | 12 | 2 |
+| Mask | #3112 | 3 | 41↔42 | `2c82db01` | 3 | 18 | 2 |
+| Family | #289218 | 6 | 33↔34 | `bb36e92b` | 0 | 17 | 2 |
+| Cellular | #13699 | 6 | 33↔34 | `78145332` | 2 | 12 | 2 |
+| Asymmetry | #334511 | 6 | 33↔34 | `7a75df9b` | 3 | 15 | 2 |
+| Hoverer | #14193 | 4 | 4↔6 | `64746e7c` | 0 | 14 | 2 |
+| Colossus | #14223 | 4 | 48↔51 | `c97c9bae` | 1 | 16 | 2 |
+| Sparkling | #14584 | 2 | 34↔37 | `3e21d08a` | 3 | 15 | 2 |
+| Hollow | #14412 | 5 | 8↔11 | `ee666a66` | 3 | 18 | 2 |
+
+Every corpus row independently proved:
+
+- deterministic repeated generation;
+- A shutter source is canonical `A_ONLY`;
+- B shutter source is canonical `B_ONLY`;
+- wrong phase during matching OPEN is blocked;
+- correct phase during closed/telegraph is blocked;
+- correct phase during matching OPEN passes;
+- Chamber II solver is solvable;
+- no-SHIFT completion is impossible;
+- minimum accepted SHIFT count is exactly `2`.
+
+The corpus includes multiple initial pulse offsets (`0`, `1`, `2`, `3`) and multiple solver WAIT counts (`12` through `18`), proving the chamber is not accidentally qualified only from one pulse starting state.
+
+Colossus independently passes using frames `48↔51`, fingerprint `c97c9bae`, initial pulse segment `1`, and `16` WAIT transitions. No Colossus-specific exception was introduced.
+
+The local run left only the pre-existing untracked `package-lock.json`; no corpus evidence required committing that local file.
+
 ## Visual review
 
 The evidence screenshots were manually reviewed rather than accepting only CI exit codes.
@@ -168,16 +220,17 @@ No gameplay rule was weakened to make either test pass.
 - A/B shutter source pixels are canonical A_ONLY/B_ONLY authority.
 - Chamber II generation is deterministic for the same canonical input.
 - PHASE authority is mechanically independent from TIMING authority.
-- Time-expanded solver finds bounded completion and requires exactly two SHIFTs in the qualified fixture.
+- Time-expanded solver finds bounded completion and requires exactly two SHIFTs.
 - Pause behavior is deterministic in the timing core and the Phaser adapter freezes the active pulse clock when the SDK pauses the scene.
 - Reduced motion does not alter timing rules.
 - 960px and 390px browser flows pass.
 - FriendSDK check/build/smoke remain green.
-- No RF spending, backend, contract, HP/death, inventory, or persistent state was introduced.
+- canonical nine-family corpus passes `9/9`, including Colossus.
+- all four deterministic pulse start offsets are represented in the nine-family corpus.
+- no RF spending, backend, contract, HP/death, inventory, or persistent state was introduced.
 
 ## OPEN / UNPROVEN
 
-- T2 canonical nine-family real-Friend corpus;
 - real-holder Chamber II run with Friend `#13699`;
 - physical-phone touch run;
 - real-world cross-clip fallback occurrence/rate;
@@ -187,16 +240,21 @@ No gameplay rule was weakened to make either test pass.
 
 ## Next gate
 
-**NEXT: T2 CANONICAL NINE-FAMILY CORPUS.**
+**NEXT: REAL-HOLDER T2 CHAMBER II PLAYTHROUGH — FRIEND #13699.**
 
-Run the read-only `npm run corpus:t2` qualifier against the already-established canonical representatives. T2 must remain blocked unless all nine families independently prove:
+The run must use the normal FriendSDK wallet/Friend selection path and production pulse clock. Test-only pulse overrides are not permitted.
 
-- deterministic Chamber II generation;
-- canonical A/B shutter source authority;
-- PHASE + TIMING three-way behavior;
-- T2 solver PASS;
-- no-SHIFT completion impossible;
-- exactly two required SHIFTs;
-- no family-specific cadence exception.
+Required evidence:
 
-Only after that corpus is reviewed may the real-holder T2 playthrough be requested. Chamber III remains blocked.
+- Friend `#13699` selected through FriendSDK;
+- SCAN still derives frames `33↔34`;
+- Chamber I remains completable and transitions normally;
+- Chamber II reports timing fingerprint `78145332`;
+- at least one visible TIMING block while in the correct phase but outside its OPEN window;
+- at least one visible PHASE block from the wrong canonical phase;
+- both A and B shutters crossed only during their matching OPEN states;
+- exactly two accepted SHIFTs by completion;
+- Chamber II completion reached without debug/test override;
+- reload repeat preserves the same canonical frame pair and timing fingerprint.
+
+Only after this holder run is reviewed may T2 be considered holder-qualified. Chamber III remains blocked.
