@@ -11,6 +11,7 @@ import {
   fractureCellAt,
   renderPixelRowsSvg,
 } from "../src/v2-art-core.ts";
+import { V2_EFFECT_SPECS, effectDuration, effectTone } from "../src/v2-fx-core.ts";
 import type { FrameRows } from "../src/types.ts";
 
 function emptyRows(): string[][] {
@@ -112,4 +113,21 @@ test("locked V2 phase palette remains aligned with governance", () => {
       backgroundSecondary: "#11151b",
     },
   );
+});
+
+test("combat FX stay brief, bounded, non-hazard-like, and reduced-motion safe", () => {
+  assert.deepEqual(Object.keys(V2_EFFECT_SPECS).sort(), ["DELTA_BURST", "ENEMY_DEATH", "ENEMY_HIT", "ENEMY_SPAWN", "SHIFT_TRANSITION"].sort());
+  for (const spec of Object.values(V2_EFFECT_SPECS)) {
+    assert.ok(spec.durationMs >= 0 && spec.durationMs <= 240, spec.id);
+    assert.ok(spec.reducedMotionDurationMs >= 0 && spec.reducedMotionDurationMs <= spec.durationMs, spec.id);
+    assert.ok(spec.maxParticles >= 0 && spec.maxParticles <= 8, spec.id);
+    assert.equal(spec.hazardLike, false, spec.id);
+    assert.equal(spec.blocksInput, false, spec.id);
+    assert.equal(effectDuration(spec.id, false), spec.durationMs);
+    assert.equal(effectDuration(spec.id, true), spec.reducedMotionDurationMs);
+  }
+  assert.equal(effectDuration("SHIFT_TRANSITION", true), 0);
+  assert.equal(effectTone("SHIFT_TRANSITION", "A"), V2_PALETTE.phaseA);
+  assert.equal(effectTone("SHIFT_TRANSITION", "B"), V2_PALETTE.phaseB);
+  assert.equal(effectTone("ENEMY_DEATH", "A"), V2_PALETTE.common);
 });
