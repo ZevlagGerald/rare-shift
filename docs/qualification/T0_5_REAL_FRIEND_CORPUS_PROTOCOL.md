@@ -1,6 +1,6 @@
 # RARE//SHIFT — T0.5 Real-Friend Corpus Qualification Protocol
 
-Status: ACTIVE — bounded evidence collection only.
+Status: CLOSED — QUALIFIED; see `T0_5_REAL_FRIEND_CORPUS_REPORT.md`.
 
 ## Purpose
 
@@ -77,3 +77,7 @@ A complete nine-family pass is evidence for reviewing T1 readiness; it does not 
 ## Governance rule
 
 Do not tune thresholds from intuition or from one Friend. Any proposed selector normalization or fallback change requires a separate reviewed tranche based on corpus evidence and Owner approval.
+
+## Closeout
+
+The canonical one-per-family corpus qualified `9/9` real hardwired Friends across all nine canonical families and generations 2–6. All nine were deterministic, solver-valid, SHIFT-dependent, exactly two-SHIFT solvable, and selected same-clip pairs. No T0 selector/scoring threshold changes were authorized. Canonical local evidence artifact SHA-256: `41ecd3dc978e25baa70180e74f1ab8f7e9928b45f357ccdccf9953abcc5fffa4`.

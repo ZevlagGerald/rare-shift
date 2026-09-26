@@ -2,11 +2,11 @@
 
 ## Decision
 
-**T0_FRAME_PHASE_PROOF: QUALIFIED — REAL-WALLET PASS; REAL-FRIEND CORPUS GATE NEXT**
+**T0_FRAME_PHASE_PROOF: QUALIFIED — REAL-WALLET PASS; T0.5 NINE-FAMILY CORPUS PASS; T1 READINESS REVIEW PASS**
 
-The deterministic core, FriendSDK integration, build, canonical SDK smoke test, desktop/mobile browser mechanics, and one real eligible holder-wallet playthrough are qualified. T0 now proves the central RARE//SHIFT premise with an actual owned Rare Friend: canonical animation frames deterministically generate phase-dependent collision, two accepted SHIFT actions are required, and the chamber completes.
+The deterministic core, FriendSDK integration, build, canonical SDK smoke test, desktop/mobile browser mechanics, one real eligible holder-wallet playthrough, and the bounded real-Friend corpus are qualified. T0 proves the central RARE//SHIFT premise with actual Rare Friends: canonical animation frames deterministically generate phase-dependent collision, accepted SHIFT actions are required, and the chamber completes.
 
-T1 gameplay expansion remains blocked until the bounded real-Friend corpus qualification evaluates behavior across all nine Rare Friends families.
+T1 may proceed only as a bounded **SCAN + CHAMBER I / DISCOVER** tranche under the active design governance. Chamber II, Chamber III, reconstruction, economy, contracts, backend systems and selector-threshold changes remain outside this authorization.
 
 ## PROVEN
 
@@ -60,7 +60,38 @@ Observed deterministic real-Friend evidence:
 - Reduced-motion mode remains playable through completion.
 - Reloading and selecting the same Friend reproduces frame pair `33 ↔ 34`, fingerprint `fdef6617`, solver minimum `2`, and initial Phase B.
 
-This qualifies one real Friend and the end-to-end holder-wallet path. It does not establish population-wide or family-wide behavior.
+## T0.5 REAL-FRIEND CORPUS QUALIFICATION
+
+The bounded one-per-family corpus completed with `9/9` qualified hardwired Generations Friends across all nine canonical families. Generations 2–6 are represented.
+
+Canonical representatives:
+
+- Skeleton `#13655` — Gen 5 — frames `33 ↔ 34` — fingerprint `47ea85c6`.
+- Mask `#3112` — Gen 3 — frames `41 ↔ 42` — fingerprint `4d42dceb`.
+- Family `#289218` — Gen 6 — frames `33 ↔ 34` — fingerprint `943c62ac`.
+- Cellular `#13699` — Gen 6 — frames `33 ↔ 34` — fingerprint `fdef6617`.
+- Asymmetry `#334511` — Gen 6 — frames `33 ↔ 34` — fingerprint `14e9b2d5`.
+- Hoverer `#14193` — Gen 4 — frames `4 ↔ 6` — fingerprint `74b07681`.
+- Colossus `#14223` — Gen 4 — frames `48 ↔ 51` — fingerprint `af707b1b`.
+- Sparkling `#14584` — Gen 2 — frames `34 ↔ 37` — fingerprint `5aad3dc9`.
+- Hollow `#14412` — Gen 5 — frames `8 ↔ 11` — fingerprint `a1ecb2a1`.
+
+Corpus results:
+
+- deterministic repeat: `9/9 PASS`;
+- solver solvable: `9/9 PASS`;
+- no-SHIFT completion blocked: `9/9 PASS`;
+- minimum SHIFT count: exactly `2` for all nine;
+- same-clip selection: `9/9`;
+- cross-clip fallback: `0/9`;
+- no-qualifying-pair cases: `0` in the canonical corpus;
+- solver rejects: `0`;
+- determinism failures: `0`;
+- canonical corpus artifact SHA-256: `41ecd3dc978e25baa70180e74f1ab8f7e9928b45f357ccdccf9953abcc5fffa4`.
+
+The corpus does not justify selector/scoring threshold changes or family-specific normalization. Colossus qualifies directly from raw canonical frames and requires no T0/T1 special-case art handling. Real cross-clip fallback remains unproven because all nine canonical samples qualified through the preferred same-clip path.
+
+See `docs/qualification/T0_5_REAL_FRIEND_CORPUS_REPORT.md` for the formal review.
 
 ## QUALIFICATION DEFECTS FOUND AND RESOLVED
 
@@ -96,19 +127,16 @@ UI-repair qualification:
 
 ## STILL UNPROVEN / OPEN
 
-- physical-phone touch playthrough.
-- behavior across a real corpus covering all nine Rare Friends families.
-- percentage of real Friends that qualify using a same-clip pair.
-- cross-clip fallback rate.
-- whether any real Friend has no pair satisfying the current T0 thresholds.
-- whether T0 pair scoring needs family-specific normalization.
-- whether Colossus or any other family needs family-specific handling beyond the canonical SDK sprite behavior.
+- physical-phone touch playthrough;
+- real cross-clip fallback occurrence/rate;
+- population-wide qualification rate beyond the bounded nine-family corpus;
+- T1-specific browser and real-wallet qualification after T1 implementation.
 
-Do not tune thresholds from intuition. Collect real corpus evidence first.
+These items remain explicit and must not be silently treated as proven.
 
-## Gate before T1
+## Gate after T0/T0.5
 
-T0 acceptance requirements are satisfied:
+Satisfied:
 
 - `CORE_TESTS=PASS`
 - `TYPECHECK=PASS`
@@ -122,5 +150,8 @@ T0 acceptance requirements are satisfied:
 - real selected Friend canonical-frame retrieval PASS
 - real phase-dependent collision and two-SHIFT completion PASS
 - same-Friend reload determinism PASS
+- bounded real corpus across all nine canonical families PASS
+- Colossus raw canonical-frame behavior PASS
+- T0.5 formal T1-readiness review PASS
 
-**Next gate:** run the bounded real-Friend corpus qualification before promoting more of the phase field into T1's final chamber topology. Physical-phone touch qualification remains a separate pre-submission requirement and is not implied by the automated 390px proof.
+**Next authorized tranche:** T1 — `SCAN + CHAMBER I / DISCOVER` only. Physical-phone touch qualification remains a separate pre-submission requirement.
