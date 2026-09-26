@@ -7,7 +7,7 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "test:core": "node --experimental-strip-types --test games/rare-shift/tests/phase-proof.test.ts games/rare-shift/tests/sync.test.ts",
+    "test:core": "node --experimental-strip-types --test games/rare-shift/tests/phase-proof.test.ts games/rare-shift/tests/sync.test.ts games/rare-shift/tests/reconstruction.test.ts",
     "typecheck:core": "tsc -p tsconfig.core.json",
     "typecheck": "tsc -p games/rare-shift/tsconfig.json --noEmit",
     "dev": "friendsdk dev ./games/rare-shift",
