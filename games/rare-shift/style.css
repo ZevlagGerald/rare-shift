@@ -222,6 +222,56 @@ button, input { font: inherit; }
 }
 .rare-shift-accessibility label { display: inline-flex; gap: 5px; align-items: center; }
 
+.rare-shift-finale {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  overflow: auto;
+  padding: 34px 42px 70px;
+  background:
+    radial-gradient(circle at 50% 28%, rgba(232,237,242,.08), transparent 34%),
+    linear-gradient(180deg, rgba(10,13,18,.98), rgba(14,18,24,.995));
+  text-align: center;
+}
+.rare-shift-finale-header p { margin: 0 0 5px; color: #8da0b2; font-size: 10px; letter-spacing: .18em; }
+.rare-shift-finale-header h1 { margin: 0; font-size: clamp(27px, 4vw, 42px); letter-spacing: .04em; }
+.rare-shift-finale-header span { display: block; margin-top: 7px; color: #bac5cf; font-size: 11px; }
+.rare-shift-finale-components,
+.rare-shift-finale-equations { display: grid; justify-content: center; margin: 14px auto 0; gap: 12px; }
+.rare-shift-finale-components { grid-template-columns: repeat(3, 112px); }
+.rare-shift-finale-equations { grid-template-columns: repeat(2, 176px); }
+.rare-shift-finale-pixels { margin: 0; padding: 7px; border: 1px solid #35414d; background: rgba(16,21,27,.9); }
+.rare-shift-finale-pixels figcaption { min-height: 18px; margin-bottom: 5px; color: #9faeba; font-size: 8px; line-height: 1.2; }
+.rare-shift-finale-pixels svg { display: block; width: 100%; aspect-ratio: 1; image-rendering: pixelated; border: 1px solid #3b4652; }
+.rare-shift-finale-pixels .finale-grid-bg { fill: #202832; }
+.rare-shift-finale-pixels.common rect:not(.finale-grid-bg) { fill: #e8edf2; }
+.rare-shift-finale-pixels.a-only rect:not(.finale-grid-bg) { fill: #4cc9f0; }
+.rare-shift-finale-pixels.b-only rect:not(.finale-grid-bg) { fill: #f72585; }
+.rare-shift-finale-pixels.resolved-a { border-top-color: #4cc9f0; }
+.rare-shift-finale-pixels.resolved-b { border-top-color: #f72585; }
+.rare-shift-finale-pixels.resolved-a .finale-grid-bg,
+.rare-shift-finale-pixels.resolved-b .finale-grid-bg { fill: #e8edf2; }
+.rare-shift-finale-pixels.resolved-a rect:not(.finale-grid-bg),
+.rare-shift-finale-pixels.resolved-b rect:not(.finale-grid-bg) { fill: #07090c; }
+.rare-shift-finale-proofchain,
+.rare-shift-finale-stats {
+  max-width: 760px;
+  margin: 12px auto 0;
+  display: grid;
+  gap: 1px;
+  border: 1px solid #323d48;
+  background: #323d48;
+}
+.rare-shift-finale-proofchain { grid-template-columns: repeat(4, 1fr); }
+.rare-shift-finale-stats { grid-template-columns: repeat(5, 1fr); margin-top: 6px; }
+.rare-shift-finale-proofchain span,
+.rare-shift-finale-stats span { padding: 6px 8px; background: #11161c; color: #7f90a0; font-size: 8px; white-space: nowrap; }
+.rare-shift-finale-proofchain strong,
+.rare-shift-finale-stats strong { display: block; margin-top: 2px; color: #f0f4f7; font-size: 10px; }
+.rare-shift-finale-note { margin: 8px auto 9px; max-width: 660px; color: #8595a4; font-size: 8px; }
+.rare-shift-run-again { min-width: 180px; min-height: 38px; padding: 7px 18px; border: 1px solid #dce5ed; background: #e8edf2; color: #0c1116; font-weight: 800; cursor: pointer; }
+.rare-shift-run-again:disabled { opacity: .45; cursor: not-allowed; }
+
 /* FriendSDK preserves the 960:640 game aspect ratio, so a 390px-wide host is only 260px tall. */
 @media (max-width: 560px) {
   .rare-shift-scan {
@@ -305,6 +355,26 @@ button, input { font: inherit; }
     font-size: 9px;
   }
 
+  .rare-shift-finale {
+    overflow: hidden;
+    padding: 24px 6px 56px;
+  }
+  .rare-shift-finale-header p { display: none; }
+  .rare-shift-finale-header h1 { font-size: 14px; line-height: 1; }
+  .rare-shift-finale-header span { margin-top: 3px; font-size: 6px; }
+  .rare-shift-finale-components { margin-top: 4px; grid-template-columns: repeat(3, 39px); gap: 4px; }
+  .rare-shift-finale-equations { margin-top: 4px; grid-template-columns: repeat(2, 55px); gap: 6px; }
+  .rare-shift-finale-pixels { padding: 2px; }
+  .rare-shift-finale-pixels figcaption { min-height: 7px; margin-bottom: 1px; font-size: 5px; white-space: nowrap; }
+  .rare-shift-finale-proofchain { width: 100%; margin-top: 4px; grid-template-columns: repeat(4, 1fr); }
+  .rare-shift-finale-stats { width: 100%; margin-top: 3px; grid-template-columns: repeat(5, 1fr); }
+  .rare-shift-finale-proofchain span,
+  .rare-shift-finale-stats span { padding: 2px 1px; font-size: 5px; }
+  .rare-shift-finale-proofchain strong,
+  .rare-shift-finale-stats strong { margin-top: 0; font-size: 6px; }
+  .rare-shift-finale-note { display: none; }
+  .rare-shift-run-again { min-width: 110px; min-height: 24px; margin-top: 4px; padding: 2px 8px; font-size: 7px; }
+
   .rare-shift-accessibility {
     right: 5px;
     top: 4px;
@@ -315,5 +385,5 @@ button, input { font: inherit; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rare-shift-enter, .rare-shift-scan * { scroll-behavior: auto; transition: none !important; animation: none !important; }
+  .rare-shift-enter, .rare-shift-run-again, .rare-shift-scan *, .rare-shift-finale * { scroll-behavior: auto; transition: none !important; animation: none !important; }
 }
