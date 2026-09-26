@@ -1,23 +1,22 @@
 # RARE//SHIFT — T2 CHAMBER II / TIMING Qualification Report
 
-**Status:** NINE-FAMILY CORPUS PASS — REAL-HOLDER T2 GATE OPEN  
+**Status:** T2 QUALIFIED — PHYSICAL-PHONE TOUCH GATE OPEN  
 **Qualified implementation commit:** `0aaec2604c03f22388c0c188ba820a32e08c3017`  
 **Automated qualification report commit:** `05703686f95ab35758ca4e6d17f0a082c6e12390`  
+**Nine-family corpus closeout commit:** `e0417ab1aae9e0b70e8434e1b0fe22bb12cb5736`  
 **Base:** T1 qualified closeout `dac2c405ad18a3f91a31c4764f79328aaef2e1cb`  
 **FriendSDK:** v0.1.2  
 **Engine:** Phaser 4.2.1
 
 ## Decision
 
-The bounded T2 implementation is automated-qualified for the intended **SCAN → CHAMBER I / DISCOVER → explicit transition → CHAMBER II / TIMING** sequence, and the canonical nine-family real-Friend corpus now passes.
+The bounded T2 implementation is qualified for the intended **SCAN → CHAMBER I / DISCOVER → explicit transition → CHAMBER II / TIMING** sequence.
 
 T2 introduces one new mechanic only: **PHASE PULSE**. A timed shutter is passable only when the selected Friend is in the matching canonical phase and the pulse clock is in that phase's matching OPEN segment.
 
-The nine-family corpus gate is closed. The next authorized qualification step is the real-holder Chamber II playthrough with Friend `#13699`.
+The automated browser gate, canonical nine-family real-Friend corpus, and real-holder Friend `#13699` Chamber II playthrough all pass.
 
-This report does **not** yet mark T2 fully qualified. The real-holder Chamber II run and physical-phone touch run remain separate evidence gates.
-
-This report does not authorize Chamber III, reconstruction, economy, contracts, backend systems, selector-threshold changes, or other scope expansion.
+The physical-phone touch run remains a separate pre-submission qualification gate. This report does not authorize Chamber III implementation, reconstruction, economy, contracts, backend systems, selector-threshold changes, or other scope expansion.
 
 ## Mechanics implemented
 
@@ -183,6 +182,32 @@ Colossus independently passes using frames `48↔51`, fingerprint `c97c9bae`, in
 
 The local run left only the pre-existing untracked `package-lock.json`; no corpus evidence required committing that local file.
 
+## Real-holder T2 evidence — Friend #13699
+
+The real-holder qualification used the normal FriendSDK wallet/Friend selection path and the production pulse clock. No test pulse override or debug state was used.
+
+Observed identity remained stable:
+
+- Friend: `#13699`;
+- family: `Cellular`;
+- generation: `6`;
+- canonical frames: `33↔34`;
+- T1/base fingerprint: `fdef6617`;
+- T2 timing fingerprint: `78145332`;
+- T2 solver minimum: `2 SHIFTs`.
+
+The holder screenshots prove all required T2 authority conditions:
+
+1. **PHASE authority PASS** — while in Phase B / Frame 34, the A shutter rejects movement with `BLOCKED: PHASE mismatch · SHIFT to the shutter's canonical phase.`
+2. **TIMING authority PASS** — while in Phase A / Frame 33 and the pulse is outside `OPEN A`, the A shutter rejects movement with `BLOCKED: TIMING window closed · wait for matching OPEN A.`
+3. **Valid crossing/completion PASS** — the same real Friend completes Chamber II under production timing rules.
+4. **Minimum SHIFT proof PASS** — final holder completion reports `CHAMBER II COMPLETE · 78145332 · 2 SHIFTs · phase + timing synchronized.`
+5. **Reload determinism PASS** — after a fresh reload and repeat of Chamber I, the transition screen regenerates `Timing proof 78145332 · solver minimum 2 SHIFTs` unchanged.
+
+Earlier exploratory holder attempts completed the chamber with more than two accepted SHIFTs. Those attempts were retained as user-operation evidence, not treated as qualification failures, because the final clean holder run independently demonstrated the solver-minimal two-SHIFT path without any gameplay-rule change.
+
+No wallet address, private key, seed phrase, recovery material, or other private holder credential is recorded in this report.
+
 ## Visual review
 
 The evidence screenshots were manually reviewed rather than accepting only CI exit codes.
@@ -193,15 +218,19 @@ PASS. The qualified T1 SCAN remains unchanged and readable at 960px and inside t
 
 ### Chamber I → Chamber II transition
 
-PASS after repair. The initial narrow transition placed the CTA under FriendSDK's bottom toolbar, causing the real host toolbar to intercept pointer events. The final narrow layout reserves bottom clearance and keeps `ENTER CHAMBER II // TIMING` fully visible and clickable above SDK chrome.
+PASS after repair. The final narrow layout reserves bottom clearance and keeps `ENTER CHAMBER II // TIMING` fully visible and clickable above SDK chrome.
 
 ### Chamber II 960
 
-PASS after repair. The first green mechanical build placed the `PULSE` label too close to the second `PHASE / FRAME` line. The final layout separates phase, frame, pulse label, pulse indicator, canonical phase field, source diagnostics, and touch controls without overlap.
+PASS after repair. Phase, frame, pulse label, pulse indicator, canonical phase field, source diagnostics, and touch controls remain separated without overlap.
 
 ### Chamber II 390
 
 PASS. The complete touch cluster remains above FriendSDK chrome. The phase/pulse state and canonical field remain visible, and the chamber completion state fits inside the host.
+
+### Real-holder desktop evidence
+
+PASS. The holder screenshots visibly preserve Friend `#13699`, frames `33↔34`, timing fingerprint `78145332`, explicit PHASE/TIMING block messages, and the exact two-SHIFT completion state.
 
 ## Failure history retained
 
@@ -227,11 +256,11 @@ No gameplay rule was weakened to make either test pass.
 - FriendSDK check/build/smoke remain green.
 - canonical nine-family corpus passes `9/9`, including Colossus.
 - all four deterministic pulse start offsets are represented in the nine-family corpus.
+- real-holder Friend `#13699` proves PHASE blocking, TIMING blocking, exact two-SHIFT completion, and reload-stable T2 fingerprint.
 - no RF spending, backend, contract, HP/death, inventory, or persistent state was introduced.
 
 ## OPEN / UNPROVEN
 
-- real-holder Chamber II run with Friend `#13699`;
 - physical-phone touch run;
 - real-world cross-clip fallback occurrence/rate;
 - Chamber III / SYNCHRONIZE;
@@ -240,21 +269,8 @@ No gameplay rule was weakened to make either test pass.
 
 ## Next gate
 
-**NEXT: REAL-HOLDER T2 CHAMBER II PLAYTHROUGH — FRIEND #13699.**
+**T2 REAL-HOLDER GATE: CLOSED / PASS.**
 
-The run must use the normal FriendSDK wallet/Friend selection path and production pulse clock. Test-only pulse overrides are not permitted.
+T2 is qualified for desktop/browser holder behavior. The physical-phone touch run remains a separate pre-submission gate and should not be silently treated as complete.
 
-Required evidence:
-
-- Friend `#13699` selected through FriendSDK;
-- SCAN still derives frames `33↔34`;
-- Chamber I remains completable and transitions normally;
-- Chamber II reports timing fingerprint `78145332`;
-- at least one visible TIMING block while in the correct phase but outside its OPEN window;
-- at least one visible PHASE block from the wrong canonical phase;
-- both A and B shutters crossed only during their matching OPEN states;
-- exactly two accepted SHIFTs by completion;
-- Chamber II completion reached without debug/test override;
-- reload repeat preserves the same canonical frame pair and timing fingerprint.
-
-Only after this holder run is reviewed may T2 be considered holder-qualified. Chamber III remains blocked.
+Chamber III remains unimplemented. Any Chamber III / SYNCHRONIZE work requires a fresh review/design tranche and a new isolated branch. The qualified T2 branch should be treated as frozen after this holder closeout.
