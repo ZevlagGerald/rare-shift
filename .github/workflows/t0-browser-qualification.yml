@@ -18,6 +18,7 @@ on:
       - "scripts/t2-corpus.mjs"
       - "scripts/t3-corpus.mjs"
       - "scripts/v2-art00-generate.mjs"
+      - "scripts/v2-art00-browser.mjs"
       - "package.json"
       - "tsconfig.core.json"
   workflow_dispatch:
@@ -89,21 +90,38 @@ jobs:
           node --check scripts/t2-corpus.mjs
           node --check scripts/t3-corpus.mjs
           node --check scripts/v2-art00-generate.mjs
+          node --check scripts/v2-art00-browser.mjs
 
       - name: Core tests
         run: npm run test:core
 
-      - name: V2 ART 00 invariants and static proof
+      - name: V2 ART 00 invariants and static/motion proof
         shell: bash
         run: |
           set -euo pipefail
           npm run test:v2-art
           npm run proof:v2-art
+          npm run test:v2-art-browser
           test -s artifacts/v2-art00-proof-960.svg
           test -s artifacts/v2-art00-proof-390.svg
           test -s artifacts/v2-art00-report.json
-          node -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync("artifacts/v2-art00-report.json","utf8")); if(r.outputs.length!==2 || !r.outputs.every(x=>/^[0-9a-f]{64}$/.test(x.sha256))) process.exit(1); console.log("V2_ART_00_REPORT=PASS")'
-          sha256sum artifacts/v2-art00-proof-960.svg artifacts/v2-art00-proof-390.svg artifacts/v2-art00-report.json
+          test -s artifacts/v2-art00-960-initial.png
+          test -s artifacts/v2-art00-960-motion.png
+          test -s artifacts/v2-art00-960-reduced.png
+          test -s artifacts/v2-art00-390-initial.png
+          test -s artifacts/v2-art00-390-motion.png
+          test -s artifacts/v2-art00-390-reduced.png
+          node -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync("artifacts/v2-art00-report.json","utf8")); if(r.outputs.length!==2 || !r.outputs.every(x=>x.animated===true && x.reducedMotionCss===true && /^[0-9a-f]{64}$/.test(x.sha256))) process.exit(1); console.log("V2_ART_00_REPORT=PASS")'
+          sha256sum \
+            artifacts/v2-art00-proof-960.svg \
+            artifacts/v2-art00-proof-390.svg \
+            artifacts/v2-art00-report.json \
+            artifacts/v2-art00-960-initial.png \
+            artifacts/v2-art00-960-motion.png \
+            artifacts/v2-art00-960-reduced.png \
+            artifacts/v2-art00-390-initial.png \
+            artifacts/v2-art00-390-motion.png \
+            artifacts/v2-art00-390-reduced.png
 
       - name: Core TypeScript typecheck
         run: npm run typecheck:core
