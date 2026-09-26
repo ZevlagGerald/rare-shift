@@ -1,10 +1,11 @@
-name: T0 Browser Qualification
+name: RARE SHIFT Qualification
 
 on:
   push:
     branches:
       - feature/t0-frame-phase-proof
       - feature/t0-5-real-friend-corpus
+      - feature/t1-scan-chamber1-discover
     paths:
       - ".github/workflows/t0-browser-qualification.yml"
       - "games/rare-shift/**"
@@ -100,19 +101,23 @@ jobs:
         run: |
           set -euo pipefail
           test -s artifacts/rare-shift-smoke.png
-          test -s artifacts/rare-shift-t0-960.png
-          test -s artifacts/rare-shift-t0-390.png
+          test -s artifacts/rare-shift-t1-scan-960.png
+          test -s artifacts/rare-shift-t1-scan-390.png
+          test -s artifacts/rare-shift-t1-960.png
+          test -s artifacts/rare-shift-t1-390.png
           sha256sum \
             artifacts/rare-shift-smoke.png \
-            artifacts/rare-shift-t0-960.png \
-            artifacts/rare-shift-t0-390.png
+            artifacts/rare-shift-t1-scan-960.png \
+            artifacts/rare-shift-t1-scan-390.png \
+            artifacts/rare-shift-t1-960.png \
+            artifacts/rare-shift-t1-390.png
           echo "SCREENSHOT_EVIDENCE=PASS"
 
       - name: Upload browser evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: rare-shift-t0-browser-evidence-${{ github.run_id }}
+          name: rare-shift-browser-evidence-${{ github.run_id }}
           path: artifacts/
           if-no-files-found: warn
           retention-days: 14

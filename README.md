@@ -20,23 +20,26 @@ Gerald / ZevByte
 
 ## Current status
 
-`RARE_SHIFT_T0_FRAME_PHASE_PROOF` is the first bounded engineering tranche. It is deliberately not the final visual game.
+T0 and T0.5 are qualified. The current bounded tranche is **T1 — SCAN + CHAMBER I / DISCOVER**.
 
-Locally proven in the deterministic core:
+Qualified foundation:
 
-- exact 16×16 phase classification;
-- deterministic qualifying frame-pair selection;
-- deterministic proof chamber fingerprint;
-- solver-proven reachability;
-- solver-proven SHIFT dependency;
-- two SHIFT minimum in the T0 fixture;
-- 128 additional deterministic synthetic pair invariants.
+- exact 16×16 canonical phase classification;
+- deterministic same-clip-first frame-pair selection;
+- deterministic proof fingerprint/chamber;
+- solver-proven reachability and SHIFT dependency;
+- automated FriendSDK/browser qualification at desktop and narrow viewport;
+- real holder-wallet completion with Friend `#13699`;
+- bounded real corpus: `9/9` canonical families qualified across Generations 2–6;
+- Colossus qualifies directly from raw canonical frames without family-specific T0 handling.
 
-FriendSDK/Phaser integration is implemented but still requires the owner's dependency installation, SDK browser qualification and real eligible holder-wallet playthrough before T0 can be marked fully qualified.
+T1 converts that engineering proof into the first competition-facing sequence: a visible identity/canonical-frame SCAN followed by the safe two-gate Chamber I tutorial. Chamber II, Chamber III, reconstruction and economy remain deferred.
 
 See:
 
 - `T0_IMPLEMENTATION_REPORT.md`
+- `docs/qualification/T0_5_REAL_FRIEND_CORPUS_REPORT.md`
+- `docs/qualification/T1_SCAN_CHAMBER_I_PROTOCOL.md`
 - `games/rare-shift/README.md`
 - `docs/governance/RARE_SHIFT_VIBEATHON_DESIGN_GOVERNANCE_v1.md`
 - `docs/security/SUBMISSION_PRIVACY_POLICY_v1.md`

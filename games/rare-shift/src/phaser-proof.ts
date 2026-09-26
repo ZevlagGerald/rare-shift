@@ -14,6 +14,8 @@ interface ProofOptions {
   pair: SelectedFramePair;
   solved: SolveResult;
   reducedMotion: boolean;
+  friendLabel: string;
+  familyName: string;
 }
 
 const VIEW_W = 960, VIEW_H = 640;
@@ -34,7 +36,7 @@ class ProofScene extends Phaser.Scene {
   private shiftCount = 0;
 
   constructor(private readonly opts: Omit<ProofOptions, "parent">) {
-    super({ key: "RareShiftProof" });
+    super({ key: "RareShiftChamberOne" });
   }
 
   create(): void {
@@ -47,15 +49,17 @@ class ProofScene extends Phaser.Scene {
 
     this.cameras.main.setBackgroundColor("#11151b");
     this.add.text(42, 28, "RARE//SHIFT", { fontFamily: "monospace", fontSize: "30px", color: "#f2f6f8", fontStyle: "bold" });
-    this.add.text(42, 68, "T0 FRAME / PHASE PROOF", { fontFamily: "monospace", fontSize: "14px", color: "#8b98a7" });
-    this.add.text(42, 100, `canonical frames ${this.pair.a.index} ↔ ${this.pair.b.index}  ·  proof ${this.chamber.fingerprint}  ·  solver min SHIFT ${this.solved.minShifts}`,
+    this.add.text(42, 68, "CHAMBER I // DISCOVER", { fontFamily: "monospace", fontSize: "14px", color: "#8b98a7" });
+    this.add.text(42, 100,
+      `Friend #${this.opts.friendLabel} · ${this.opts.familyName} · canonical frames ${this.pair.a.index} ↔ ${this.pair.b.index} · proof ${this.chamber.fingerprint}`,
       { fontFamily: "monospace", fontSize: "13px", color: "#b7c2ce" });
 
     this.drawBoard();
     this.drawPhaseField();
     this.gates = this.add.graphics();
     this.friendContainer = this.add.container(0, 0);
-    this.status = this.add.text(42, 548, "Reach EXIT. Press SPACE to SHIFT phase. Canonical Friend frames rewrite collision.",
+    this.status = this.add.text(42, 548,
+      "Reach EXIT. Move with WASD/arrows. When a phase gate blocks the path, press SPACE to SHIFT.",
       { fontFamily: "monospace", fontSize: "14px", color: "#cbd4dc", wordWrap: { width: 650 } });
     this.phaseText = this.add.text(744, 118, "", { fontFamily: "monospace", fontSize: "18px", color: "#f2f6f8", fontStyle: "bold" });
 
@@ -85,7 +89,7 @@ class ProofScene extends Phaser.Scene {
     const field = derivePhaseField(this.pair.a.rows, this.pair.b.rows);
     const g = this.add.graphics();
     const ox = 748, oy = 196, cell = 10;
-    this.add.text(748, 174, "CANONICAL XOR", { fontFamily: "monospace", fontSize: "12px", color: "#9aa7b5" });
+    this.add.text(748, 174, "PHASE FIELD", { fontFamily: "monospace", fontSize: "12px", color: "#9aa7b5" });
     for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
       const state = field[y][x];
       const color = state === "COMMON" ? 0xe8edf2 : state === "A_ONLY" ? 0x4cc9f0 : state === "B_ONLY" ? 0xf72585 : 0x232a33;
@@ -99,6 +103,9 @@ class ProofScene extends Phaser.Scene {
 
   private syncTestState(): void {
     const canvas = this.game.canvas;
+    canvas.dataset.stage = this.finished ? "chamber1-complete" : "chamber1";
+    canvas.dataset.friend = this.opts.friendLabel;
+    canvas.dataset.family = this.opts.familyName;
     canvas.dataset.phase = this.phase;
     canvas.dataset.x = String(this.player.x);
     canvas.dataset.y = String(this.player.y);
@@ -161,7 +168,7 @@ class ProofScene extends Phaser.Scene {
     if (x === this.chamber.exit.x && y === this.chamber.exit.y) {
       this.finished = true;
       this.syncTestState();
-      this.status.setText(`PROOF COMPLETE · ${this.chamber.fingerprint} · collision changed with canonical frame state · solver minimum ${this.solved.minShifts} SHIFTs.`);
+      this.status.setText(`CHAMBER I COMPLETE · ${this.chamber.fingerprint} · your canonical frame state rewrote collision · ${this.shiftCount} SHIFTs.`);
     }
   }
 
@@ -169,7 +176,7 @@ class ProofScene extends Phaser.Scene {
     if (this.finished) return;
     const next = otherPhase(this.phase);
     if (!isPassable(this.chamber, this.player.x, this.player.y, next)) {
-      this.status.setText("SHIFT refused: the destination phase would materialize collision under the Friend.");
+      this.status.setText("SHIFT refused: the destination phase would materialize collision under your Friend.");
       return;
     }
     this.phase = next;
@@ -206,7 +213,14 @@ class ProofScene extends Phaser.Scene {
 }
 
 export function mountPhaserProof(options: ProofOptions): PhaserProofController {
-  const scene = new ProofScene({ chamber: options.chamber, pair: options.pair, solved: options.solved, reducedMotion: options.reducedMotion });
+  const scene = new ProofScene({
+    chamber: options.chamber,
+    pair: options.pair,
+    solved: options.solved,
+    reducedMotion: options.reducedMotion,
+    friendLabel: options.friendLabel,
+    familyName: options.familyName,
+  });
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     width: VIEW_W,
@@ -221,10 +235,10 @@ export function mountPhaserProof(options: ProofOptions): PhaserProofController {
     input: { keyboard: true, mouse: true, touch: true },
   });
   game.canvas.tabIndex = 0;
-  game.canvas.setAttribute("aria-label", "RARE SHIFT proof canvas. WASD or arrows move. Space shifts phase.");
+  game.canvas.setAttribute("aria-label", "RARE SHIFT Chamber I. WASD or arrows move. Space shifts phase.");
   return {
     destroy: () => game.destroy(true),
-    setPaused: paused => paused ? game.scene.pause("RareShiftProof") : game.scene.resume("RareShiftProof"),
+    setPaused: paused => paused ? game.scene.pause("RareShiftChamberOne") : game.scene.resume("RareShiftChamberOne"),
     setReducedMotion: reduced => scene.setReducedMotion(reduced),
   };
 }

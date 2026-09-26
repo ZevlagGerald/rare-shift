@@ -1,10 +1,24 @@
-# RARE//SHIFT — T0 Frame/Phase Proof
+# RARE//SHIFT — T1 SCAN + CHAMBER I / DISCOVER
 
-**Status:** engineering proof, not final Vibeathon presentation.
+**Status:** bounded T1 implementation; Chamber II/III and reconstruction remain out of scope.
 
-RARE//SHIFT reads the selected ownership-verified Generations Friend through FriendSDK v0.1.2, evaluates its 64 canonical 16×16 frames, selects a useful pair from the same eight-frame animation clip where possible, and turns their exact pixel delta into a two-phase collision proof.
+RARE//SHIFT reads the selected ownership-verified Generations Friend through FriendSDK v0.1.2, evaluates its 64 canonical 16×16 frames, selects a deterministic useful pair, and turns the exact pixel delta into phase-controlled world rules.
 
-## T0 proof
+> **Your Friend is not a skin. Its animation is the rules.**
+
+## T1 sequence
+
+1. **SCAN** — selected Friend identity and canonical family are shown before gameplay.
+2. Exact canonical frame A/B pixel maps are displayed.
+3. `COMMON`, `A_ONLY`, `B_ONLY`, and `VOID` are displayed as the canonical XOR/phase field.
+4. Pair delta/balance, clip group, proof fingerprint and solver minimum are surfaced.
+5. The player explicitly enters **CHAMBER I / DISCOVER**.
+6. The qualified two-gate tutorial teaches SPACE/touch SHIFT.
+7. Gate A requires the first SHIFT, Gate B requires the second, and EXIT completes Chamber I.
+
+The T0/T0.5 deterministic selector thresholds, chamber topology and solver are unchanged in this tranche.
+
+## Phase authority
 
 - `COMMON = A ∩ B`
 - `A_ONLY = A − B`
@@ -12,11 +26,8 @@ RARE//SHIFT reads the selected ownership-verified Generations Friend through Fri
 - `DELTA = A XOR B`
 - one `A_ONLY` canonical pixel deterministically controls the Phase-A gate
 - one `B_ONLY` canonical pixel deterministically controls the Phase-B gate
-- the proof begins in Phase B, so the first A gate requires SHIFT and the later B gate requires another SHIFT
-- a deterministic 0-1 BFS validates that the exit is reachable and reports the minimum number of SHIFT actions
-- the Phaser scene is not mounted if the solver acceptance gate fails
-
-The T0 chamber intentionally uses simple authored barrier geometry around the source-derived gates. Later production tranches may promote more of the 16×16 phase field into topology only after corpus testing proves generation safety.
+- the chamber begins in Phase B
+- solver minimum is exactly two accepted SHIFT actions for the qualified topology
 
 ## Controls
 
@@ -24,13 +35,13 @@ The T0 chamber intentionally uses simple authored barrier geometry around the so
 - `Space`: SHIFT Phase A ↔ B
 - touch directional buttons + SHIFT: mobile input
 
-SHIFT is rejected when the destination phase would materialize collision under the player's current cell.
+The physical Shift key is not bound. SHIFT is rejected when the destination phase would materialize collision under the player's current cell.
 
 ## FriendSDK boundary
 
-FriendSDK remains responsible for wallet connection, eligible Friend selection and the sandbox/runtime boundary. Phaser receives only already-selected game data. No parallel wallet flow is implemented.
+FriendSDK remains responsible for wallet connection, hardwired generation eligibility, owned-Friend selection and the sandbox/runtime boundary. Phaser receives only already-selected, solver-qualified game data. No parallel wallet flow is implemented.
 
-The economy schema in `game.json` is a reference definition required by the SDK; this T0 proof never invokes `buy`, `play`, `settle`, or `redeem` and makes no Token Activity claim.
+The economy schema in `game.json` is a FriendSDK reference definition. T1 never invokes `buy`, `play`, `settle`, or `redeem`, spends no RF, and makes no Token Activity claim.
 
 ## Development
 
@@ -54,21 +65,25 @@ A playable FriendSDK preview requires a browser wallet on Robinhood mainnet (`46
 .\scripts\qualify.ps1
 ```
 
-The bounded qualification runs core deterministic tests, TypeScript, FriendSDK validation, static build, and the SDK browser test with screenshot output.
+CI additionally runs FriendSDK smoke and the custom browser proof at 960px and 390px. T1 browser proof must verify both the SCAN stage and the complete Chamber I two-SHIFT traversal.
 
-## T0 acceptance criteria
+## T1 acceptance criteria
 
-- canonical 64-frame read works
-- same-frame pair selection is deterministic
-- same Friend/frame pair creates the same fingerprint/chamber
-- SHIFT modifies collision/passability
-- solver proves completion
-- solver proves SHIFT is necessary
-- SDK ownership/runtime boundary remains unchanged
-- no persistent browser storage is required
+- selected Friend/session equality is preserved;
+- canonical 64-frame read works;
+- SCAN visibly exposes Friend identity, family, frame A/B and phase field;
+- pair selection and fingerprint remain deterministic;
+- ENTER CHAMBER I explicitly transitions into gameplay;
+- SHIFT modifies collision/passability;
+- Gate A/Gate B behavior remains phase-correct;
+- solver proves completion and SHIFT dependency;
+- desktop and narrow browser proofs pass;
+- reduced-motion mode remains playable;
+- no persistent browser storage is required.
 
 ## Current limitations
 
-- T0 uses only two source-derived phase gates as collision authority; it is not the final three-chamber design.
-- final art, audio, economy, scan sequence and reconstruction sequence are intentionally deferred.
-- a real-wallet hosted playthrough is still required before this tranche can be marked fully qualified.
+- Chamber I intentionally retains the proven simple authored barrier geometry around source-derived gates.
+- Chamber II timing, Chamber III synchronization, reconstruction, final audio and final submission polish are deferred.
+- real cross-clip fallback occurrence remains unproven because the canonical nine-family T0.5 corpus qualified entirely through same-clip pairs.
+- physical-phone touch qualification remains a separate pre-submission requirement.
