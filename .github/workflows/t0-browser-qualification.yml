@@ -1,0 +1,113 @@
+name: T0 Browser Qualification
+
+on:
+  push:
+    branches:
+      - feature/t0-frame-phase-proof
+    paths:
+      - ".github/workflows/t0-browser-qualification.yml"
+      - "games/rare-shift/**"
+      - "scripts/browser-check.mjs"
+      - "package.json"
+      - "tsconfig.core.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    name: FriendSDK + Chromium qualification
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --init
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      FRIENDSDK_ARCHIVE: vendor/rarefriends-friendsdk-0.1.2.tgz
+      FRIENDSDK_SHA256: a6352e187916089b6829c5387fe87f386c5774004f181990e4e3c8ae641cfe83
+      FRIENDSDK_URL: https://github.com/spokesz/friendsdk/releases/download/v0.1.2/rarefriends-friendsdk-0.1.2.tgz
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Record runtime versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --version
+          npm --version
+          npx playwright --version
+          npx playwright install --list
+
+      - name: Fetch and verify FriendSDK v0.1.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p vendor
+          curl \
+            --fail \
+            --location \
+            --retry 5 \
+            --retry-all-errors \
+            --connect-timeout 20 \
+            --max-time 180 \
+            --output "$FRIENDSDK_ARCHIVE" \
+            "$FRIENDSDK_URL"
+          printf '%s  %s\n' "$FRIENDSDK_SHA256" "$FRIENDSDK_ARCHIVE" | sha256sum --check --strict
+          echo "FRIENDSDK_SHA256=PASS"
+
+      - name: Install project dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-audit --no-fund
+          sha256sum package-lock.json
+          npm ls --depth=1
+
+      - name: Core tests
+        run: npm run test:core
+
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      - name: FriendSDK check
+        run: npm run check
+
+      - name: FriendSDK build
+        run: npm run build
+
+      - name: FriendSDK smoke
+        run: npm run test:sdk
+
+      - name: RARE SHIFT desktop and mobile browser proof
+        run: npm run test:browser
+
+      - name: Verify screenshot evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s artifacts/rare-shift-smoke.png
+          test -s artifacts/rare-shift-t0-960.png
+          test -s artifacts/rare-shift-t0-390.png
+          sha256sum \
+            artifacts/rare-shift-smoke.png \
+            artifacts/rare-shift-t0-960.png \
+            artifacts/rare-shift-t0-390.png
+          echo "SCREENSHOT_EVIDENCE=PASS"
+
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rare-shift-t0-browser-evidence-${{ github.run_id }}
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 14
