@@ -7,6 +7,7 @@ import {
   buildFractureGrid,
   exclusiveDeltaRows,
 } from "../games/rare-shift/src/v2-art-core.ts";
+import { V2_EFFECT_SPECS } from "../games/rare-shift/src/v2-fx-core.ts";
 
 const outDir = resolve("artifacts");
 await mkdir(outDir, { recursive: true });
@@ -30,7 +31,6 @@ const bOnly = [[10,4],[11,5],[9,3],[8,8],[7,8]];
 const frameA = frame([...common, ...aOnly]);
 const frameB = frame([...common, ...bOnly]);
 const deltaA = exclusiveDeltaRows(frameA, frameB, "A");
-const deltaB = exclusiveDeltaRows(frameA, frameB, "B");
 
 function esc(value) {
   return String(value).replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;").replace(/"/gu, "&quot;");
@@ -112,6 +112,37 @@ function draftCard(x, y, w, title, rank, description, tone) {
   ].join("");
 }
 
+function fxIcon(kind, cx, cy, tone) {
+  if (kind === "SHIFT_TRANSITION") {
+    return `<circle cx="${cx}" cy="${cy}" r="11" fill="none" stroke="${tone}" stroke-width="2"/><path d="M${cx - 18} ${cy}L${cx - 12} ${cy - 5}M${cx - 18} ${cy}L${cx - 12} ${cy + 5}M${cx + 18} ${cy}L${cx + 12} ${cy - 5}M${cx + 18} ${cy}L${cx + 12} ${cy + 5}" stroke="${tone}" stroke-width="2"/>`;
+  }
+  if (kind === "ENEMY_SPAWN") {
+    return `<path d="M${cx - 14} ${cy - 10}H${cx - 7}M${cx - 14} ${cy - 10}V${cy - 3}M${cx + 14} ${cy - 10}H${cx + 7}M${cx + 14} ${cy - 10}V${cy - 3}M${cx - 14} ${cy + 10}H${cx - 7}M${cx - 14} ${cy + 10}V${cy + 3}M${cx + 14} ${cy + 10}H${cx + 7}M${cx + 14} ${cy + 10}V${cy + 3}" stroke="${tone}" stroke-width="2" fill="none"/>`;
+  }
+  if (kind === "ENEMY_HIT") {
+    return `<path d="M${cx - 12} ${cy}H${cx + 12}M${cx} ${cy - 12}V${cy + 12}M${cx - 8} ${cy - 8}L${cx + 8} ${cy + 8}M${cx + 8} ${cy - 8}L${cx - 8} ${cy + 8}" stroke="${tone}" stroke-width="2"/>`;
+  }
+  return `<g fill="${tone}"><rect x="${cx - 14}" y="${cy - 9}" width="5" height="5"/><rect x="${cx + 9}" y="${cy - 11}" width="4" height="4"/><rect x="${cx - 12}" y="${cy + 7}" width="4" height="4"/><rect x="${cx + 8}" y="${cy + 8}" width="6" height="6"/><rect x="${cx - 2}" y="${cy - 2}" width="4" height="4"/></g>`;
+}
+
+function fxStrip(x, y, w, h) {
+  const entries = [
+    ["SHIFT_TRANSITION", "SHIFT", V2_PALETTE.phaseA],
+    ["ENEMY_SPAWN", "SPAWN", V2_PALETTE.phaseB],
+    ["ENEMY_HIT", "HIT", V2_PALETTE.common],
+    ["ENEMY_DEATH", "DEATH", V2_PALETTE.common],
+  ];
+  const cellW = w / entries.length;
+  const parts = [panel(x, y, w, h), label("FX GRAMMAR", x + 8, y + 14, 8, "#8ea0b3")];
+  entries.forEach(([id, short, tone], index) => {
+    const cx = x + cellW * index + cellW / 2;
+    const cy = y + Math.min(33, h / 2);
+    parts.push(fxIcon(id, cx, cy, tone));
+    parts.push(label(short, cx, y + h - 7, 7, tone, "middle"));
+  });
+  return parts.join("");
+}
+
 function proofSvg(width, height) {
   const narrow = width < 600;
   const arenaX = 12;
@@ -151,6 +182,7 @@ function proofSvg(width, height) {
       draftCard(rightX, cardsY, rightW, "DELTA BURST", "II → III", "canonical local burst", V2_PALETTE.phaseA),
       draftCard(rightX, cardsY + cardH + cardGap, rightW, "VECTOR NEEDLE", "NEW WEAPON", "precision auto-target", V2_PALETTE.common),
       draftCard(rightX, cardsY + (cardH + cardGap) * 2, rightW, "COMMON CORE", "PROTOCOL I", "stability / EVO path", V2_PALETTE.phaseB),
+      fxStrip(rightX, 742, rightW, 78),
     );
   } else {
     parts.push(
@@ -158,11 +190,12 @@ function proofSvg(width, height) {
       draftCard(rightX, cardsY, rightW, "DELTA BURST", "II → III", "canonical local burst", V2_PALETTE.phaseA),
       draftCard(rightX, cardsY + cardH + cardGap, rightW, "VECTOR NEEDLE", "NEW WEAPON", "precision auto-target", V2_PALETTE.common),
       draftCard(rightX, cardsY + (cardH + cardGap) * 2, rightW, "COMMON CORE", "PROTOCOL I", "stability / EVO path", V2_PALETTE.phaseB),
-      panel(rightX, cardsY + 318, rightW, 104),
-      label("PHASE GRAMMAR", rightX + 12, cardsY + 339, 10, V2_PALETTE.common),
-      label("A  ◀ angular / broken", rightX + 12, cardsY + 361, 9, V2_PALETTE.phaseA),
-      label("B  ▶ offset / mirrored", rightX + 12, cardsY + 381, 9, V2_PALETTE.phaseB),
-      label("COMMON  stable / structural", rightX + 12, cardsY + 401, 9, V2_PALETTE.common),
+      panel(rightX, cardsY + 306, rightW, 88),
+      label("PHASE GRAMMAR", rightX + 12, cardsY + 325, 9, V2_PALETTE.common),
+      label("A  ◀ angular / broken", rightX + 12, cardsY + 345, 8, V2_PALETTE.phaseA),
+      label("B  ▶ offset / mirrored", rightX + 12, cardsY + 363, 8, V2_PALETTE.phaseB),
+      label("COMMON stable / structural", rightX + 12, cardsY + 381, 8, V2_PALETTE.common),
+      fxStrip(rightX, cardsY + 402, rightW, 66),
     );
   }
 
@@ -185,15 +218,37 @@ for (const output of outputs) {
 }
 
 const artCorePath = resolve("games/rare-shift/src/v2-art-core.ts");
-const artCore = await readFile(artCorePath);
+const fxCorePath = resolve("games/rare-shift/src/v2-fx-core.ts");
+const [artCore, fxCore] = await Promise.all([readFile(artCorePath), readFile(fxCorePath)]);
 const report = {
   schemaVersion: 1,
   tranche: "V2-ART-00",
   generator: "scripts/v2-art00-generate.mjs",
   proceduralFirst: true,
   canonicalFriendContract: "runtime FriendSDK rows are presented without recolor/redraw; synthetic canonical-shape rows are used only by this static normalization proof",
-  productionElements: ["FRACTURE_GRID", "TRACE", "SPLIT_A", "SPLIT_B", "SIGNAL_XP", "HUD", "SHIFT_CONTROL", "THREE_CARD_DRAFT", "DELTA_BURST_PROOF"],
+  productionElements: [
+    "FRACTURE_GRID",
+    "TRACE",
+    "SPLIT_A",
+    "SPLIT_B",
+    "SIGNAL_XP",
+    "HUD",
+    "SHIFT_CONTROL",
+    "THREE_CARD_DRAFT",
+    "DELTA_BURST_PROOF",
+    "SHIFT_TRANSITION",
+    "ENEMY_SPAWN",
+    "ENEMY_HIT",
+    "ENEMY_DEATH"
+  ],
+  effectSpecs: Object.fromEntries(Object.entries(V2_EFFECT_SPECS).map(([id, spec]) => [id, {
+    geometry: spec.geometry,
+    durationMs: spec.durationMs,
+    reducedMotionDurationMs: spec.reducedMotionDurationMs,
+    maxParticles: spec.maxParticles,
+  }])),
   artCoreSha256: sha256(artCore),
+  fxCoreSha256: sha256(fxCore),
   outputs: evidence,
 };
 const reportText = `${JSON.stringify(report, null, 2)}\n`;
@@ -201,4 +256,5 @@ await writeFile(resolve(outDir, "v2-art00-report.json"), reportText, "utf8");
 
 for (const item of evidence) console.log(`V2_ART_00_PROOF_${item.width}_SHA256=${item.sha256}`);
 console.log(`V2_ART_00_CORE_SHA256=${report.artCoreSha256}`);
+console.log(`V2_ART_00_FX_SHA256=${report.fxCoreSha256}`);
 console.log("V2_ART_00_STATIC_PROOF=PASS");
