@@ -1,20 +1,21 @@
 # RARE//SHIFT — T3 CHAMBER III / SYNCHRONIZE Qualification Report
 
-**Status:** AUTOMATED QUALIFICATION PASS — NINE-FAMILY T3 CORPUS OPEN  
+**Status:** AUTOMATED + NINE-FAMILY CORPUS PASS — REAL-HOLDER T3 GATE OPEN  
 **Qualified implementation commit:** `649a803d54606ed7b8c8bd9b9c52fe17b05eaacc`  
+**Automated qualification report commit:** `5ef4bd6bfa10439ddfd5353d767c270a782bc16c`  
 **Base:** T2 qualified closeout `f767f392b101e23e6afe0d7f037b0444df94409c`  
 **FriendSDK:** v0.1.2  
 **Engine:** Phaser 4.2.1
 
 ## Decision
 
-The bounded T3 implementation passes automated qualification for the intended sequence:
+The bounded T3 implementation passes automated qualification and the canonical nine-family real-Friend corpus for the intended sequence:
 
 `SCAN → CHAMBER I / DISCOVER → CHAMBER II / TIMING → CHAMBER III / SYNCHRONIZE`
 
 T3 introduces one new mechanic only: three ordered canonical SYNC NODES. Their authority sequence is fixed at `B → A → B`, with source coordinates selected deterministically from the selected Friend's real `B_ONLY → A_ONLY → distinct B_ONLY` frame-difference pixels.
 
-Automated qualification is complete. The real nine-family read-only corpus remains OPEN and must pass before the bounded real-holder T3 gate is authorized. Reconstruction/finale remains out of scope.
+The automated gate and live read-only nine-family corpus now both pass. The bounded real-holder Friend `#13699` T3 run is authorized as the final T3 qualification gate. Reconstruction/finale remains out of scope.
 
 ## Mechanics implemented
 
@@ -137,39 +138,56 @@ Final screenshot SHA-256 values:
 
 Manual visual review of the evidence bundle found no remaining SDK-toolbar collision, touch-control overlap, diagnostic overlap, or SCAN regression. Chamber III completion visibly reports `3/3 SYNCHRONIZED · 2 SHIFTs` and preserves the canonical phase-field/source diagnostics.
 
-## Nine-family corpus gate — OPEN
+## Canonical nine-family corpus evidence
 
-The read-only `scripts/t3-corpus.mjs` runner uses the same canonical T0.5 representatives:
+Owner-local read-only corpus run was executed from exact automated-report head `5ef4bd6bfa10439ddfd5353d767c270a782bc16c` using `npm run corpus:t3`.
 
-- Skeleton `#13655`;
-- Mask `#3112`;
-- Family `#289218`;
-- Cellular `#13699`;
-- Asymmetry `#334511`;
-- Hoverer `#14193`;
-- Colossus `#14223`;
-- Sparkling `#14584`;
-- Hollow `#14412`.
+Corpus artifact: `artifacts/t3-canonical-nine.json`  
+Artifact SHA-256: `00b699da14781b4186e3608fe088797a5147e211b882c233686e25fb96b1e918`
 
-Required acceptance remains:
+Corpus summary:
 
-- `9/9` qualified;
-- all nine canonical families present;
+- qualified: `9/9`;
+- families qualified: `Skeleton, Mask, Family, Cellular, Asymmetry, Hoverer, Colossus, Sparkling, Hollow`;
+- families missing: none;
+- deterministic: PASS;
+- canonical source authority: PASS;
+- synchronization sequence authority: PASS;
+- solver: PASS;
+- ready for real-holder T3 gate: YES.
+
+Per-family evidence:
+
+| Family | Friend | Gen | Frames | T3 fingerprint | Node 1 | Node 2 | Node 3 | Min SHIFTs |
+|---|---:|---:|---|---|---|---|---|---:|
+| Skeleton | #13655 | 5 | 33↔34 | `f3c6d9c2` | `(7,4) B_ONLY` | `(9,14) A_ONLY` | `(8,4) B_ONLY` | 2 |
+| Mask | #3112 | 3 | 41↔42 | `53bd1944` | `(6,2) B_ONLY` | `(3,9) A_ONLY` | `(4,8) B_ONLY` | 2 |
+| Family | #289218 | 6 | 33↔34 | `91c3eb0f` | `(9,3) B_ONLY` | `(9,5) A_ONLY` | `(6,7) B_ONLY` | 2 |
+| Cellular | #13699 | 6 | 33↔34 | `2032f2f5` | `(9,9) B_ONLY` | `(10,8) A_ONLY` | `(6,5) B_ONLY` | 2 |
+| Asymmetry | #334511 | 6 | 33↔34 | `6901969c` | `(11,8) B_ONLY` | `(4,14) A_ONLY` | `(4,8) B_ONLY` | 2 |
+| Hoverer | #14193 | 4 | 4↔6 | `d1ce7542` | `(12,6) B_ONLY` | `(9,4) A_ONLY` | `(11,6) B_ONLY` | 2 |
+| Colossus | #14223 | 4 | 48↔51 | `14efeac9` | `(9,13) B_ONLY` | `(7,14) A_ONLY` | `(10,11) B_ONLY` | 2 |
+| Sparkling | #14584 | 2 | 34↔37 | `c478a3f9` | `(10,7) B_ONLY` | `(2,2) A_ONLY` | `(8,10) B_ONLY` | 2 |
+| Hollow | #14412 | 5 | 8↔11 | `14d30bcb` | `(10,4) B_ONLY` | `(6,3) A_ONLY` | `(9,4) B_ONLY` | 2 |
+
+Every corpus row independently proved:
+
 - deterministic repeated T3 generation;
-- canonical source classes exactly `B_ONLY / A_ONLY / B_ONLY`;
-- Node 1 and Node 3 source coordinates distinct;
-- sequence authority PASS;
-- duplicate-credit protection PASS;
-- EXIT-lock authority PASS;
-- no-SHIFT completion impossible;
-- exact minimum accepted SHIFT count `2`;
-- no family-specific exception.
+- exact source-class sequence `B_ONLY / A_ONLY / B_ONLY`;
+- Node 1 / Node 3 B sources are distinct;
+- phase authority;
+- ordered-routing authority;
+- duplicate-credit protection;
+- EXIT lock before `3/3` and unlock after `3/3`;
+- Chamber III solver is solvable;
+- no-SHIFT completion is impossible;
+- minimum accepted SHIFT count is exactly `2`.
 
-Until this live corpus passes, T3 real-holder qualification remains blocked.
+The corpus includes the Colossus vertical-family case and Hollow's lower-delta qualified pair without any family-specific exception.
 
 ## Remaining gates
 
-- T3 canonical nine-family real-Friend corpus: **OPEN**;
-- T3 bounded real-holder Friend `#13699` run: **BLOCKED BY CORPUS**;
+- T3 canonical nine-family real-Friend corpus: **PASS**;
+- T3 bounded real-holder Friend `#13699` run: **OPEN / AUTHORIZED**;
 - physical-phone touch: **OPEN / PRE-SUBMISSION**;
 - reconstruction/finale: **NOT AUTHORIZED**.
