@@ -57,6 +57,19 @@
       "approvalState": "IMPLEMENTED_PENDING_VISUAL_REVIEW"
     },
     {
+      "id": "v2-fx-core",
+      "covers": [
+        "shift-transition",
+        "enemy-spawn-fx",
+        "enemy-hit-fx",
+        "enemy-death-fx"
+      ],
+      "authority": "project-native bounded effect grammar",
+      "sourcePath": "games/rare-shift/src/v2-fx-core.ts",
+      "testPath": "games/rare-shift/tests/v2-art.test.ts",
+      "approvalState": "IMPLEMENTED_PENDING_VISUAL_REVIEW"
+    },
+    {
       "id": "v2-art-static-proof",
       "covers": [
         "fracture-grid-environment",
@@ -68,7 +81,11 @@
         "hud-fragment",
         "shift-control",
         "three-card-draft-ui",
-        "delta-burst"
+        "delta-burst",
+        "shift-transition",
+        "enemy-spawn-fx",
+        "enemy-hit-fx",
+        "enemy-death-fx"
       ],
       "authority": "project-native deterministic generator",
       "sourcePath": "scripts/v2-art00-generate.mjs",
