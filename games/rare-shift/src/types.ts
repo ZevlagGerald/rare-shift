@@ -1,5 +1,6 @@
 export type Phase = "A" | "B";
 export type PixelClass = "COMMON" | "A_ONLY" | "B_ONLY" | "VOID";
+export type PulseSegment = "TELEGRAPH_A" | "OPEN_A" | "TELEGRAPH_B" | "OPEN_B";
 
 export type FrameRows = readonly string[];
 
@@ -62,4 +63,45 @@ export interface SolverStep {
   y: number;
   phase: Phase;
   action: "START" | "UP" | "DOWN" | "LEFT" | "RIGHT" | "SHIFT";
+}
+
+export type TimingTileKind = "FLOOR" | "WALL" | "SHUTTER_A" | "SHUTTER_B";
+
+export interface TimingProfile {
+  segmentMs: number;
+  initialSegmentIndex: number;
+  initialOffsetMs: number;
+}
+
+export interface TimingChamber {
+  width: number;
+  height: number;
+  tiles: readonly (readonly TimingTileKind[])[];
+  start: Point;
+  exit: Point;
+  startPhase: Phase;
+  shutterA: Point;
+  shutterB: Point;
+  shutterASourcePixel: Point;
+  shutterBSourcePixel: Point;
+  frameAIndex: number;
+  frameBIndex: number;
+  baseFingerprint: string;
+  fingerprint: string;
+}
+
+export interface TimingSolverStep {
+  x: number;
+  y: number;
+  phase: Phase;
+  pulse: PulseSegment;
+  action: "START" | "UP" | "DOWN" | "LEFT" | "RIGHT" | "SHIFT" | "WAIT";
+}
+
+export interface TimingSolveResult {
+  solvable: boolean;
+  minShifts: number | null;
+  path: readonly TimingSolverStep[];
+  reachableWithoutShiftFromStartPhase: boolean;
+  waits: number | null;
 }
