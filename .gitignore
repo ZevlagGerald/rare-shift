@@ -1,0 +1,22 @@
+node_modules/
+vendor/*.tgz
+artifacts/
+games/rare-shift/.friendsdk/
+
+# Local environment / credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+secrets/
+private/
+
+# Logs / OS / editor noise
+*.log
+.DS_Store
+Thumbs.db
+.vscode/*.local.json
