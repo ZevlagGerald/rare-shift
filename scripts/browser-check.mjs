@@ -51,9 +51,11 @@ function qualifyTiming(width) {
     assert.equal(Number(await data("x")), gateB - 1, "Phase A must block Chamber I Gate B");
     await pressAndSettle("Space");
     await pressAndSettle("d");
-    for (let i = 0; i < 20; i++) await pressAndSettle("d");
-    assert.equal(Number(await data("x")), exitX);
-    assert.equal(await data("complete"), "true");
+
+    const movesToExit = exitX - Number(await data("x"));
+    assert.ok(movesToExit > 0, "Chamber I must still have a bounded path from Gate B to EXIT");
+    for (let i = 0; i < movesToExit - 1; i++) await pressAndSettle("d");
+    await canvas.press("d");
 
     const transition = game.locator('[data-stage="chamber1-transition"]');
     await transition.waitFor({ state: "visible" });
