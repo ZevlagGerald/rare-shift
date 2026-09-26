@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "project": "RARE//SHIFT V2",
   "tranche": "V2-ART-00",
-  "status": "OPEN",
+  "status": "IMPLEMENTATION_IN_PROGRESS",
   "policy": {
     "canonicalFriendArtworkMustRemainUnmodified": true,
     "externalAssetDefaultLicense": "CC0 only unless individually reviewed",
@@ -40,10 +40,122 @@
     "candidate-sfx-map"
   ],
   "assets": [],
-  "proceduralSystems": [],
+  "proceduralSystems": [
+    {
+      "id": "v2-art-core",
+      "covers": [
+        "fracture-grid-environment",
+        "trace-enemy",
+        "split-a-enemy",
+        "split-b-enemy",
+        "signal-xp-pickup",
+        "delta-burst"
+      ],
+      "authority": "project-native deterministic code",
+      "sourcePath": "games/rare-shift/src/v2-art-core.ts",
+      "testPath": "games/rare-shift/tests/v2-art.test.ts",
+      "approvalState": "IMPLEMENTED_PENDING_VISUAL_REVIEW"
+    },
+    {
+      "id": "v2-art-static-proof",
+      "covers": [
+        "fracture-grid-environment",
+        "canonical-friend-presentation-contract",
+        "trace-enemy",
+        "split-a-enemy",
+        "split-b-enemy",
+        "signal-xp-pickup",
+        "hud-fragment",
+        "shift-control",
+        "three-card-draft-ui",
+        "delta-burst"
+      ],
+      "authority": "project-native deterministic generator",
+      "sourcePath": "scripts/v2-art00-generate.mjs",
+      "evidencePath": "artifacts/v2-art00-report.json",
+      "approvalState": "IMPLEMENTED_PENDING_CI_AND_VISUAL_REVIEW"
+    }
+  ],
+  "verifiedSourcePools": [
+    {
+      "publisher": "Kenney",
+      "name": "1-Bit Pack",
+      "license": "CC0-1.0",
+      "licensePath": "kenney/2D assets/1-Bit Pack/License.txt",
+      "licenseGitBlobSha": "b0d059e9c64331d2855252bf4db376a25ceccc7f",
+      "state": "SOURCE_POOL_ONLY"
+    },
+    {
+      "publisher": "Kenney",
+      "name": "UI Pack: Sci-fi",
+      "license": "CC0-1.0",
+      "licensePath": "kenney/UI assets/UI Pack - Sci-fi/License.txt",
+      "licenseGitBlobSha": "ba344288bdfc1d7cb0a4e6775c01e635cc4c6774",
+      "state": "SOURCE_POOL_ONLY"
+    },
+    {
+      "publisher": "Kenney",
+      "name": "Sci-Fi Sounds",
+      "license": "CC0-1.0",
+      "licensePath": "kenney/Audio/Sci-Fi Sounds/License.txt",
+      "licenseGitBlobSha": "7afc21fd71c486d1b93308c03f5994b8cf463a44",
+      "state": "CANDIDATE_POOL"
+    },
+    {
+      "publisher": "Kenney",
+      "name": "Interface Sounds",
+      "license": "CC0-1.0",
+      "licensePath": "kenney/Audio/Interface Sounds/License.txt",
+      "licenseGitBlobSha": "1fc5acf8243a8ac899403e7297f8c5efdc4258f2",
+      "state": "CANDIDATE_POOL"
+    }
+  ],
+  "externalCandidates": [
+    {
+      "intendedEvent": "SHIFT",
+      "sourcePack": "Kenney Sci-Fi Sounds",
+      "sourcePath": "kenney/Audio/Sci-Fi Sounds/Audio/forceField_000.ogg",
+      "sourceGitBlobSha": "4e0ec193ced9174ffef7ab812de592e315175ac0",
+      "license": "CC0-1.0",
+      "state": "CANDIDATE_NOT_IMPORTED"
+    },
+    {
+      "intendedEvent": "DELTA_BURST",
+      "sourcePack": "Kenney Sci-Fi Sounds",
+      "sourcePath": "kenney/Audio/Sci-Fi Sounds/Audio/laserSmall_000.ogg",
+      "sourceGitBlobSha": "da58a9a11df6687f9b7aab36c98ca6c085a2af15",
+      "license": "CC0-1.0",
+      "state": "CANDIDATE_NOT_IMPORTED"
+    },
+    {
+      "intendedEvent": "ENEMY_HIT",
+      "sourcePack": "Kenney Sci-Fi Sounds",
+      "sourcePath": "kenney/Audio/Sci-Fi Sounds/Audio/impactMetal_000.ogg",
+      "sourceGitBlobSha": "29ef4c9bf64e8beae6a3658965c0d2dd93af6506",
+      "license": "CC0-1.0",
+      "state": "CANDIDATE_NOT_IMPORTED"
+    },
+    {
+      "intendedEvent": "ENEMY_DEATH",
+      "sourcePack": "Kenney Sci-Fi Sounds",
+      "sourcePath": "kenney/Audio/Sci-Fi Sounds/Audio/explosionCrunch_000.ogg",
+      "sourceGitBlobSha": "d424c04eecf8a8d26dd8701a218a62567c3c7c02",
+      "license": "CC0-1.0",
+      "state": "CANDIDATE_NOT_IMPORTED"
+    },
+    {
+      "intendedEvent": "UPGRADE_SELECT",
+      "sourcePack": "Kenney Interface Sounds",
+      "sourcePath": "kenney/Audio/Interface Sounds/Audio/click_001.ogg",
+      "sourceGitBlobSha": "667db57313b5dd7ce3e8871992a54c00d7acbf1c",
+      "license": "CC0-1.0",
+      "state": "CANDIDATE_NOT_IMPORTED"
+    }
+  ],
   "notes": [
-    "No asset is production-approved until provenance, license evidence, source hash, transformation history, production path and production hash are recorded.",
+    "No external binary is production-approved until provenance, license evidence, source SHA-256, transformation history, production path and production SHA-256 are recorded.",
     "Kenney CC0 is the primary external source family. OpenGameArt candidates require per-asset CC0 verification.",
-    "This scaffold does not claim any third-party asset has been imported or approved."
+    "The current production visual kit is procedural-first; third-party files remain candidates only.",
+    "Canonical Friend presentation continues to use FriendSDK/on-chain rows without redraw or recolor."
   ]
 }
