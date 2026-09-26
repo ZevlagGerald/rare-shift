@@ -54,13 +54,13 @@ class ProofScene extends Phaser.Scene {
       `Friend #${this.opts.friendLabel} · ${this.opts.familyName} · canonical frames ${this.pair.a.index} ↔ ${this.pair.b.index} · proof ${this.chamber.fingerprint}`,
       { fontFamily: "monospace", fontSize: "13px", color: "#b7c2ce" });
 
+    this.status = this.add.text(42, 127,
+      "Reach EXIT · WASD/arrows move · SPACE shifts phase when a gate blocks you.",
+      { fontFamily: "monospace", fontSize: "11px", color: "#cbd4dc", wordWrap: { width: 650 } });
     this.drawBoard();
     this.drawPhaseField();
     this.gates = this.add.graphics();
     this.friendContainer = this.add.container(0, 0);
-    this.status = this.add.text(42, 548,
-      "Reach EXIT. Move with WASD/arrows. When a phase gate blocks the path, press SPACE to SHIFT.",
-      { fontFamily: "monospace", fontSize: "14px", color: "#cbd4dc", wordWrap: { width: 650 } });
     this.phaseText = this.add.text(744, 118, "", { fontFamily: "monospace", fontSize: "18px", color: "#f2f6f8", fontStyle: "bold" });
 
     this.renderDynamic(true);
@@ -160,7 +160,7 @@ class ProofScene extends Phaser.Scene {
     if (this.finished) return;
     const x = this.player.x + dx, y = this.player.y + dy;
     if (!isPassable(this.chamber, x, y, this.phase)) {
-      this.status.setText(`BLOCKED in Phase ${this.phase}. SHIFT changes which canonical-pixel gate is solid.`);
+      this.status.setText(`BLOCKED in Phase ${this.phase} · SPACE shifts which canonical-pixel gate is solid.`);
       return;
     }
     this.player = { x, y };
@@ -168,7 +168,7 @@ class ProofScene extends Phaser.Scene {
     if (x === this.chamber.exit.x && y === this.chamber.exit.y) {
       this.finished = true;
       this.syncTestState();
-      this.status.setText(`CHAMBER I COMPLETE · ${this.chamber.fingerprint} · your canonical frame state rewrote collision · ${this.shiftCount} SHIFTs.`);
+      this.status.setText(`CHAMBER I COMPLETE · ${this.chamber.fingerprint} · ${this.shiftCount} SHIFTs · canonical collision rewritten.`);
     }
   }
 
@@ -176,12 +176,12 @@ class ProofScene extends Phaser.Scene {
     if (this.finished) return;
     const next = otherPhase(this.phase);
     if (!isPassable(this.chamber, this.player.x, this.player.y, next)) {
-      this.status.setText("SHIFT refused: the destination phase would materialize collision under your Friend.");
+      this.status.setText("SHIFT refused · destination phase would materialize collision under your Friend.");
       return;
     }
     this.phase = next;
     this.shiftCount++;
-    this.status.setText(`SHIFT → Phase ${next}. World collision now follows canonical frame ${next === "A" ? this.pair.a.index : this.pair.b.index}.`);
+    this.status.setText(`SHIFT → Phase ${next} · collision follows canonical frame ${next === "A" ? this.pair.a.index : this.pair.b.index}.`);
     this.renderDynamic(false);
   }
 
@@ -204,11 +204,11 @@ class ProofScene extends Phaser.Scene {
       const text = this.add.text(x, y, label, { fontFamily: "monospace", fontSize: wide ? "13px" : "18px", color: "#f2f6f8", fontStyle: "bold" }).setOrigin(0.5);
       bg.on("pointerdown", action); text.setInteractive({ useHandCursor: true }).on("pointerdown", action);
     };
-    make(700, 555, "←", () => this.tryMove(-1, 0));
-    make(750, 530, "↑", () => this.tryMove(0, -1));
-    make(750, 580, "↓", () => this.tryMove(0, 1));
-    make(800, 555, "→", () => this.tryMove(1, 0));
-    make(875, 555, "SHIFT", () => this.shift(), true);
+    make(700, 490, "←", () => this.tryMove(-1, 0));
+    make(750, 465, "↑", () => this.tryMove(0, -1));
+    make(750, 515, "↓", () => this.tryMove(0, 1));
+    make(800, 490, "→", () => this.tryMove(1, 0));
+    make(875, 490, "SHIFT", () => this.shift(), true);
   }
 }
 
