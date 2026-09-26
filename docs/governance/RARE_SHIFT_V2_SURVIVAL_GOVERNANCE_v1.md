@@ -1,12 +1,13 @@
 # RARE//SHIFT V2 SURVIVAL GOVERNANCE v1
 
-**Status:** ACTIVE FOR V2 PLANNING — OWNER APPROVED PIVOT  
+**Status:** ACTIVE FOR V2 IMPLEMENTATION PLANNING — OWNER APPROVED PIVOT  
 **Project:** RARE//SHIFT  
 **Genre:** phase-shifting survival action roguelite / bullet-heaven  
 **Engine:** Phaser 4.2.1  
 **SDK:** FriendSDK v0.1.2  
 **Language:** TypeScript  
-**Primary Vibeathon category:** Character Spotlight
+**Primary Vibeathon category:** Character Spotlight  
+**Secondary category relevance:** Token Activity, Economy Potential
 
 ## 1. V2 authority and relationship to V1
 
@@ -16,7 +17,9 @@ The qualified V1/T4 build remains frozen and recoverable as the competition fall
 
 `RARE_SHIFT_VIBEATHON_DESIGN_GOVERNANCE_v1.md` remains authoritative for the frozen V1 build, but its locks on a 2–4 minute three-chamber structure and rejected large-game scope are **SUPERSEDED for V2 planning only** by this document.
 
-The T5 RF Deep Scan economy experiment is **DEFERRED** while gameplay V2 is designed and proven. Its census data may still inform later design. No RF economy implementation is authorized by this governance.
+Three-category economy authority is defined by `RARE_SHIFT_V2_THREE_CATEGORY_GOVERNANCE_v1.md`. The older standalone T5 Deep Scan economy direction is superseded as the primary economy plan; its alternate-pair census remains useful evidence for V2-ECO-2 / Identity Atlas.
+
+Simulated category-economy implementation is authorized only after its preceding gameplay gates. Live RF transfers, approvals, signatures, production burn/reward routing and token contracts remain DEFERRED.
 
 ## 2. Product thesis
 
@@ -232,7 +235,7 @@ Initial V2 does **not** use:
 - AFK reward pressure;
 - gacha power progression;
 - paid revives;
-- paid rerolls;
+- paid combat rerolls;
 - rarity-based NFT stat advantages;
 - escalating permanent stat grind required to clear ordinary content.
 
@@ -250,6 +253,7 @@ Post-MVP community systems may include:
 - build sharing;
 - Friend-family challenges;
 - normalized leaderboards;
+- community Signal Stabilization events;
 - later co-op only after the single-player combat loop is proven.
 
 Competitive community modes must normalize paid/meta advantages.
@@ -258,11 +262,29 @@ Competitive community modes must normalize paid/meta advantages.
 
 Economy follows fun; it does not create fun.
 
-RF implementation remains DEFERRED until the V2 survival loop passes gameplay qualification.
+The complete standard survival run remains free.
 
-Future RF uses should prefer cosmetics, horizontal blueprints, optional challenge access, identity discovery or community events. Direct RF-for-damage or RF-for-competitive-advantage is rejected for the base design.
+After the V2 gameplay loop passes its preceding gates, the simulated Vibeathon economy may implement:
 
-The existing T5 alternate-pair census remains useful research but does not authorize economy code.
+- **SIGNAL CONTRACT** — primary repeatable 1 RF simulated challenge entry;
+- **SIGNAL RECEIPT** — visible simulated spend/burn/reward-funding accounting;
+- **IDENTITY ATLAS / DEEP SCAN** — deterministic alternate canonical-pair discovery after census qualification;
+- **SIGNAL FORGE** — bounded cosmetic-only simulated RF sinks if schedule permits.
+
+Modeled gameplay payments use the officially documented Rare Friends split:
+
+- 50% simulated burn;
+- 50% simulated RF reward funding.
+
+Every preview action must clearly state that the RF activity is simulated and causes no on-chain transaction.
+
+Direct RF-for-damage, HP, XP, weapon slots, protocol slots, paid revive, paid combat reroll, score multiplier or rarity power is rejected.
+
+Signal XP and Evolution Cores remain gameplay resources, not tradeable tokens. RARE//SHIFT does not introduce a second tradeable token.
+
+Live RF spending, token approvals, signatures, production burn/reward routing, real reward settlement and production economy contracts remain DEFERRED.
+
+See `RARE_SHIFT_V2_THREE_CATEGORY_GOVERNANCE_v1.md` for complete category/economy authority.
 
 ## 17. Technical architecture
 
@@ -280,6 +302,10 @@ New V2 systems should remain separable from Phaser where practical:
 - `enemy-core` — enemy archetype state/behavior contracts;
 - `spawn-core` — seeded pacing/spawn tables;
 - `score-core` — deterministic run metrics;
+- `rf-economy-core` — simulated RF balance/payment split after gameplay qualification;
+- `signal-contract-core` — standardized optional challenge configuration;
+- `identity-atlas-core` — deterministic Deep Scan state;
+- `economy-receipt-core` — RF ledger reconciliation;
 - Phaser scene/pools — rendering, collisions, effects and input.
 
 ## 18. Performance
@@ -309,6 +335,7 @@ Before V2 may replace the frozen T4 entry, it must prove at minimum:
 - 960 and narrow-phone browser qualification passes;
 - FriendSDK check/build/test passes;
 - no regression in wallet/identity/error handling;
+- simulated Signal Contract and category ledger pass if V2 is submitted with Token Activity relevance;
 - public preview performance is acceptable.
 
 Until all of those pass, T4 remains the qualified fallback.
@@ -325,8 +352,10 @@ Until all of those pass, T4 remains the qualified fallback.
 - canonical DELTA BURST starting weapon;
 - approximately seven-minute competition run target;
 - T4 preserved as fallback;
-- RF economy implementation deferred;
+- Character Spotlight primary / Token Activity + Economy Potential integrated secondary relevance;
+- simulated Signal Contract/receipt economy after gameplay qualification;
 - no pay-to-win NFT rarity advantage;
+- no second tradeable RARE//SHIFT token;
 - Phaser + FriendSDK architecture retained.
 
 **PROVISIONAL**
@@ -336,11 +365,15 @@ Until all of those pass, T4 remains the qualified fallback.
 - exact SHIFT cooldown;
 - exact phase damage modifiers;
 - exact wave minute markers;
-- persistent post-run progression.
+- persistent post-run progression;
+- exact Signal Contract score formula;
+- exact cosmetic catalog/prices.
 
 **DEFERRED**
 
-- live RF spending;
+- live RF spending/transfers;
+- production burn/reward contracts;
+- real reward settlement;
 - multiplayer/co-op;
 - backend leaderboards;
 - long campaign;
@@ -350,4 +383,4 @@ Until all of those pass, T4 remains the qualified fallback.
 
 ## 21. Owner authority
 
-The Owner remains final authority. No implementation tranche may silently expand scope beyond this governance. Every gameplay system must be reviewed and qualified before the next tranche advances.
+The Owner remains final authority. No implementation tranche may silently expand scope beyond this governance. Every gameplay and category system must be reviewed and qualified before the next tranche advances.
