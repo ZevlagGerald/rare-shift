@@ -1,21 +1,24 @@
 # RARE//SHIFT — T3 CHAMBER III / SYNCHRONIZE Qualification Report
 
-**Status:** AUTOMATED + NINE-FAMILY CORPUS PASS — REAL-HOLDER T3 GATE OPEN  
+**Status:** T3 QUALIFIED — PHYSICAL-PHONE TOUCH GATE OPEN  
 **Qualified implementation commit:** `649a803d54606ed7b8c8bd9b9c52fe17b05eaacc`  
 **Automated qualification report commit:** `5ef4bd6bfa10439ddfd5353d767c270a782bc16c`  
+**Nine-family corpus closeout commit:** `eaece97f2755b49c300f75a933527c07b0645f5f`  
 **Base:** T2 qualified closeout `f767f392b101e23e6afe0d7f037b0444df94409c`  
 **FriendSDK:** v0.1.2  
 **Engine:** Phaser 4.2.1
 
 ## Decision
 
-The bounded T3 implementation passes automated qualification and the canonical nine-family real-Friend corpus for the intended sequence:
+The bounded T3 implementation is qualified for the intended sequence:
 
 `SCAN → CHAMBER I / DISCOVER → CHAMBER II / TIMING → CHAMBER III / SYNCHRONIZE`
 
 T3 introduces one new mechanic only: three ordered canonical SYNC NODES. Their authority sequence is fixed at `B → A → B`, with source coordinates selected deterministically from the selected Friend's real `B_ONLY → A_ONLY → distinct B_ONLY` frame-difference pixels.
 
-The automated gate and live read-only nine-family corpus now both pass. The bounded real-holder Friend `#13699` T3 run is authorized as the final T3 qualification gate. Reconstruction/finale remains out of scope.
+The automated browser gate, canonical nine-family real-Friend corpus, and bounded real-holder Friend `#13699` Chamber III playthrough all pass.
+
+The physical-phone touch run remains a separate pre-submission qualification gate. This report does not authorize reconstruction/finale implementation, economy, contracts, backend systems, selector-threshold changes, or other scope expansion.
 
 ## Mechanics implemented
 
@@ -185,9 +188,42 @@ Every corpus row independently proved:
 
 The corpus includes the Colossus vertical-family case and Hollow's lower-delta qualified pair without any family-specific exception.
 
+## Real-holder Friend #13699 evidence
+
+Owner performed the bounded holder run through the normal FriendSDK wallet/Friend-selection path using real Friend `#13699`.
+
+Observed canonical identity:
+
+- family: `Cellular`;
+- frames: `33 ↔ 34`;
+- T3 sync proof: `2032f2f5`;
+- Node 1 source: `(9,9) B_ONLY`;
+- Node 2 source: `(10,8) A_ONLY`;
+- Node 3 source: `(6,5) B_ONLY`.
+
+Holder evidence proves:
+
+- Chamber II → III transition reproduced sync proof `2032f2f5` and solver minimum `2 SHIFTs`;
+- Node 1 synchronized under Phase B;
+- Node 2 contact under Phase B produced `PHASE MISMATCH · Node 2 requires Phase A.` and did not advance progress;
+- ordered synchronization reached `3/3`;
+- EXIT opened only after `3/3`;
+- final Chamber III completion reproduced sync proof `2032f2f5`;
+- final completion used exactly `2 SHIFTs`;
+- final state remained Phase B / Frame 34;
+- reduced-motion mode remained usable;
+- no wallet address, secret, or holder credential is recorded in this report.
+
+The final holder completion line was:
+
+`CHAMBER III COMPLETE · 2032f2f5 · 3/3 SYNCHRONIZED · 2 SHIFTs.`
+
+Therefore the bounded real-holder T3 gate is PASS.
+
 ## Remaining gates
 
 - T3 canonical nine-family real-Friend corpus: **PASS**;
-- T3 bounded real-holder Friend `#13699` run: **OPEN / AUTHORIZED**;
+- T3 bounded real-holder Friend `#13699` run: **PASS**;
+- T3 status: **QUALIFIED**;
 - physical-phone touch: **OPEN / PRE-SUBMISSION**;
 - reconstruction/finale: **NOT AUTHORIZED**.
