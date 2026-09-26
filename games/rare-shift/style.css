@@ -222,15 +222,70 @@ button, input { font: inherit; }
 }
 .rare-shift-accessibility label { display: inline-flex; gap: 5px; align-items: center; }
 
-@media (max-width: 700px) {
-  .rare-shift-scan { padding: 44px 18px 24px; }
-  .rare-shift-scan-visuals { grid-template-columns: 1fr; max-width: 270px; }
-  .rare-shift-pixel-grid { width: min(100%, 190px); }
-  .rare-shift-scan-readout { grid-template-columns: 1fr 1fr; max-width: 320px; }
-  .rare-shift-scan-readout div:nth-child(2) { border-right: 0; }
-  .rare-shift-scan-readout div:nth-child(-n+2) { border-bottom: 1px solid #323d48; }
+/* FriendSDK preserves the 960:640 game aspect ratio, so a 390px-wide host is only 260px tall. */
+@media (max-width: 560px) {
+  .rare-shift-scan {
+    overflow: hidden;
+    padding: 25px 7px 39px;
+    display: flex;
+    flex-direction: column;
+  }
+  .rare-shift-scan::before { position: absolute; }
+  .rare-shift-kicker, .rare-shift-scan-thesis, .rare-shift-scan-explainer { display: none; }
+  .rare-shift-scan-header { margin: 0 auto 5px; width: 100%; }
+  .rare-shift-scan h1 { font-size: 23px; line-height: 1; letter-spacing: -.055em; }
+  .rare-shift-identity-strip { flex-wrap: nowrap; gap: 3px; margin-top: 5px; font-size: 7px; }
+  .rare-shift-identity-strip > * {
+    min-height: 17px;
+    padding: 2px 4px;
+    white-space: nowrap;
+  }
+  .rare-shift-scan-visuals {
+    width: 100%;
+    max-width: none;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+  }
+  .rare-shift-scan-card { padding: 3px; }
+  .rare-shift-scan-card figcaption {
+    min-height: 9px;
+    margin-bottom: 2px;
+    font-size: 6px;
+    letter-spacing: .02em;
+    white-space: nowrap;
+  }
+  .rare-shift-pixel-grid { width: 70px; max-width: 100%; }
+  .rare-shift-legend { display: none; }
+  .rare-shift-scan-readout {
+    width: 100%;
+    max-width: none;
+    margin: 4px auto 0;
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .rare-shift-scan-readout div {
+    padding: 2px 4px;
+    min-height: 18px;
+    border-right: 1px solid #323d48;
+    border-bottom: 0;
+  }
+  .rare-shift-scan-readout span { font-size: 6px; }
+  .rare-shift-scan-readout strong { font-size: 8px; }
+  .rare-shift-enter {
+    min-width: 170px;
+    min-height: 29px;
+    margin-top: 4px;
+    padding: 3px 12px;
+    font-size: 9px;
+    line-height: 1.05;
+  }
+  .rare-shift-enter span { font-size: 6px; letter-spacing: .1em; }
+  .rare-shift-accessibility {
+    right: 5px;
+    top: 4px;
+    padding: 2px 3px;
+    font-size: 7px;
+  }
   .rare-shift-accessibility span { display: none; }
-  .rare-shift-accessibility { font-size: 9px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
