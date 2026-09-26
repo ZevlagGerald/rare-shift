@@ -9,6 +9,7 @@ on:
       - feature/t2-chamber2-timing
       - feature/t3-chamber3-synchronize
       - feature/t4-reconstruction-finale
+      - feature/t5-rf-deep-scan-economy
     paths:
       - ".github/workflows/t0-browser-qualification.yml"
       - "games/rare-shift/**"
@@ -16,6 +17,7 @@ on:
       - "scripts/t0-5-corpus.mjs"
       - "scripts/t2-corpus.mjs"
       - "scripts/t3-corpus.mjs"
+      - "scripts/t5-alternate-pair-corpus.mjs"
       - "package.json"
       - "tsconfig.core.json"
   workflow_dispatch:
@@ -86,6 +88,7 @@ jobs:
           node --check scripts/t0-5-corpus.mjs
           node --check scripts/t2-corpus.mjs
           node --check scripts/t3-corpus.mjs
+          node --check scripts/t5-alternate-pair-corpus.mjs
 
       - name: Core tests
         run: npm run test:core
