@@ -1,0 +1,12 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #0b0e12; }
+.rare-shift-proof { position: relative; width: 100%; height: 100%; min-height: 0; overflow: hidden; background: #11151b; color: #f2f6f8; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.rare-shift-canvas { width: 100%; height: 100%; min-height: 0; }
+.rare-shift-canvas canvas { display: block; width: 100% !important; height: 100% !important; object-fit: contain; image-rendering: pixelated; }
+.rare-shift-overlay { position: absolute; inset: 0; display: grid; place-content: center; gap: 12px; padding: 32px; text-align: center; background: rgba(11,14,18,.94); z-index: 5; }
+.rare-shift-overlay strong { font-size: clamp(15px, 2.2vw, 22px); }
+.rare-shift-overlay p { max-width: 620px; color: #b6c0ca; }
+.rare-shift-overlay button { justify-self: center; min-width: 120px; min-height: 44px; border: 1px solid #7d8a98; background: #202832; color: #f5f7f9; font: inherit; cursor: pointer; }
+.rare-shift-accessibility { position: absolute; right: 12px; top: 10px; z-index: 3; display: flex; align-items: center; gap: 14px; font-size: 11px; color: #a9b4bf; pointer-events: auto; }
+.rare-shift-accessibility label { display: inline-flex; gap: 5px; align-items: center; }
+@media (max-width: 560px) { .rare-shift-accessibility span { display: none; } .rare-shift-accessibility { font-size: 10px; } }

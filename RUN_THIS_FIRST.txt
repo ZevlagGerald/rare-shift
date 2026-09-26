@@ -1,0 +1,20 @@
+RARE//SHIFT T0 — WINDOWS
+
+Recommended local path:
+E:\Zev-Projects\RARE-SHIFT
+
+1. Extract this bundle there.
+2. Open PowerShell in E:\Zev-Projects\RARE-SHIFT
+3. Run:
+
+Set-ExecutionPolicy -Scope Process Bypass
+.\scripts\bootstrap.ps1
+npm run dev
+
+4. Open the FriendSDK URL in a browser wallet on Robinhood mainnet (4663) with an eligible Generations NFT.
+5. Verify that movement is blocked at Gate A, SHIFT opens it, Gate B then blocks, and the second SHIFT opens Gate B.
+6. After manual proof, run:
+
+.\scripts\qualify.ps1
+
+Do not start final art or economy before the qualification output is reviewed.

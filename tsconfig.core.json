@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "games/rare-shift/src/types.ts",
+    "games/rare-shift/src/phase-core.ts",
+    "games/rare-shift/src/solver.ts"
+  ]
+}

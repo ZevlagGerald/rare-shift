@@ -1,0 +1,8 @@
+{
+  "name": "RARE//SHIFT",
+  "consumable": "Reference Signal",
+  "price": "1000000000000000000",
+  "outcomes": [
+    { "name": "Reference Echo", "chanceBps": 10000, "reward": "1000000000000000000" }
+  ]
+}

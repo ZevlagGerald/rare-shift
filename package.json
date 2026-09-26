@@ -1,0 +1,32 @@
+{
+  "name": "rare-shift-vibeathon",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "test:core": "node --experimental-strip-types --test games/rare-shift/tests/phase-proof.test.ts",
+    "typecheck:core": "tsc -p tsconfig.core.json",
+    "typecheck": "tsc -p games/rare-shift/tsconfig.json --noEmit",
+    "dev": "friendsdk dev ./games/rare-shift",
+    "build": "friendsdk build ./games/rare-shift",
+    "check": "friendsdk check ./games/rare-shift",
+    "test:sdk": "friendsdk test ./games/rare-shift --width 960 --screenshot ./artifacts/rare-shift-smoke.png",
+    "test:browser": "node scripts/browser-check.mjs"
+  },
+  "dependencies": {
+    "@rarefriends/friendsdk": "file:vendor/rarefriends-friendsdk-0.1.2.tgz",
+    "phaser": "4.2.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.30",
+    "@types/react": "19.1.12",
+    "@types/react-dom": "19.1.9",
+    "playwright": "1.63.0",
+    "typescript": "5.8.3"
+  }
+}
