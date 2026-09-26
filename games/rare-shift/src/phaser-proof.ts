@@ -55,7 +55,7 @@ class ProofScene extends Phaser.Scene {
     this.drawPhaseField();
     this.gates = this.add.graphics();
     this.friendContainer = this.add.container(0, 0);
-    this.status = this.add.text(42, 548, "Reach EXIT. Space / SHIFT rewrites collision from the Friend's real animation frames.",
+    this.status = this.add.text(42, 548, "Reach EXIT. Press SPACE to SHIFT phase. Canonical Friend frames rewrite collision.",
       { fontFamily: "monospace", fontSize: "14px", color: "#cbd4dc", wordWrap: { width: 650 } });
     this.phaseText = this.add.text(744, 118, "", { fontFamily: "monospace", fontSize: "18px", color: "#f2f6f8", fontStyle: "bold" });
 
@@ -84,15 +84,15 @@ class ProofScene extends Phaser.Scene {
   private drawPhaseField(): void {
     const field = derivePhaseField(this.pair.a.rows, this.pair.b.rows);
     const g = this.add.graphics();
-    const ox = 748, oy = 170, cell = 10;
-    this.add.text(748, 146, "CANONICAL XOR", { fontFamily: "monospace", fontSize: "12px", color: "#9aa7b5" });
+    const ox = 748, oy = 196, cell = 10;
+    this.add.text(748, 174, "CANONICAL XOR", { fontFamily: "monospace", fontSize: "12px", color: "#9aa7b5" });
     for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
       const state = field[y][x];
       const color = state === "COMMON" ? 0xe8edf2 : state === "A_ONLY" ? 0x4cc9f0 : state === "B_ONLY" ? 0xf72585 : 0x232a33;
       g.fillStyle(color, state === "VOID" ? 0.45 : 1).fillRect(ox + x * cell, oy + y * cell, cell - 1, cell - 1);
     }
-    this.add.text(748, 340, "cyan  A-only\nmagenta  B-only\nwhite  common", { fontFamily: "monospace", fontSize: "11px", color: "#9aa7b5", lineSpacing: 4 });
-    this.add.text(748, 405,
+    this.add.text(748, 366, "cyan  A-only\nmagenta  B-only\nwhite  common", { fontFamily: "monospace", fontSize: "11px", color: "#9aa7b5", lineSpacing: 4 });
+    this.add.text(748, 431,
       `A gate source  (${this.chamber.gateASourcePixel.x},${this.chamber.gateASourcePixel.y})\nB gate source  (${this.chamber.gateBSourcePixel.x},${this.chamber.gateBSourcePixel.y})`,
       { fontFamily: "monospace", fontSize: "11px", color: "#9aa7b5", lineSpacing: 4 });
   }
