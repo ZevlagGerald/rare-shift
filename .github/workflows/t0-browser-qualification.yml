@@ -4,10 +4,12 @@ on:
   push:
     branches:
       - feature/t0-frame-phase-proof
+      - feature/t0-5-real-friend-corpus
     paths:
       - ".github/workflows/t0-browser-qualification.yml"
       - "games/rare-shift/**"
       - "scripts/browser-check.mjs"
+      - "scripts/t0-5-corpus.mjs"
       - "package.json"
       - "tsconfig.core.json"
   workflow_dispatch:
@@ -71,6 +73,9 @@ jobs:
           npm install --no-audit --no-fund
           sha256sum package-lock.json
           npm ls --depth=1
+
+      - name: Corpus reader syntax
+        run: node --check scripts/t0-5-corpus.mjs
 
       - name: Core tests
         run: npm run test:core
