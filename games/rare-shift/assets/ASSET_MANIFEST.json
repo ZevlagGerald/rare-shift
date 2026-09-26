@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "project": "RARE//SHIFT V2",
   "tranche": "V2-ART-00",
-  "status": "IMPLEMENTATION_IN_PROGRESS",
+  "status": "QUALIFIED_PROCEDURAL_BASELINE",
   "policy": {
     "canonicalFriendArtworkMustRemainUnmodified": true,
     "externalAssetDefaultLicense": "CC0 only unless individually reviewed",
@@ -54,7 +54,7 @@
       "authority": "project-native deterministic code",
       "sourcePath": "games/rare-shift/src/v2-art-core.ts",
       "testPath": "games/rare-shift/tests/v2-art.test.ts",
-      "approvalState": "IMPLEMENTED_PENDING_VISUAL_REVIEW"
+      "approvalState": "QUALIFIED_ART00"
     },
     {
       "id": "v2-fx-core",
@@ -67,10 +67,10 @@
       "authority": "project-native bounded effect grammar",
       "sourcePath": "games/rare-shift/src/v2-fx-core.ts",
       "testPath": "games/rare-shift/tests/v2-art.test.ts",
-      "approvalState": "IMPLEMENTED_PENDING_VISUAL_REVIEW"
+      "approvalState": "QUALIFIED_ART00"
     },
     {
-      "id": "v2-art-static-proof",
+      "id": "v2-art-static-motion-proof",
       "covers": [
         "fracture-grid-environment",
         "canonical-friend-presentation-contract",
@@ -87,12 +87,32 @@
         "enemy-hit-fx",
         "enemy-death-fx"
       ],
-      "authority": "project-native deterministic generator",
+      "authority": "project-native deterministic generator + Playwright motion/reduced-motion proof",
       "sourcePath": "scripts/v2-art00-generate.mjs",
+      "browserProofPath": "scripts/v2-art00-browser.mjs",
       "evidencePath": "artifacts/v2-art00-report.json",
-      "approvalState": "IMPLEMENTED_PENDING_CI_AND_VISUAL_REVIEW"
+      "approvalState": "QUALIFIED_ART00"
     }
   ],
+  "qualificationEvidence": {
+    "workflowRunId": 36267612813,
+    "qualifiedHead": "455d9fc7a8f7fc4c0dcac8ebdf956143352a6f35",
+    "artifactId": 10913429379,
+    "artifactDigest": "sha256:b1e044cc1346e6fa3832f1bdf8f3e77f70df5d7f64dd9b6d22e0d617889284ca",
+    "artCoreSha256": "7c4141322ed23ed616e6735d04decd08a9766577e4a1b9d3113cb3291bf87248",
+    "fxCoreSha256": "d66e23c8e6dcbea623d8b6b2516e8e888292588af67e2c1a7d3aaee5a5ccbf99",
+    "proof960SvgSha256": "bd56183315def8f34277f7e1d39073988bb2508a539cf5fbc4de952c31da0bad",
+    "proof390SvgSha256": "fbe18cf713d4a7703105eadf34bb63081e2991d2f2371277b7821ccc8ddd104a",
+    "proofReportSha256": "c150a7bc7e77747c7b95f6329eac1c1c548e2ae4a3ef9cbb38b1b2372f3fec07",
+    "screenshots": {
+      "960Initial": "8bd97e48fe7301061b00926f6997f85bd02a245a4ee4808823e5cbcf8dff8144",
+      "960Motion": "3c79eb5a4a0fe33c6f3e11326e5baed0f31ec4464d6f0fcf63e88b1e239e031d",
+      "960Reduced": "53ee5593e4fad04bb5b808b56bcb02a431802602d139cd58c392a5d01e8f5466",
+      "390Initial": "963bee3071418d934a6e4fb7e277535c0c4d18a3e2d020f025ab1d7f577d6177",
+      "390Motion": "9d4f4d3cc6d11503303fba0cfb52d220e0a2c053926b3c10430464dd30cd01c6",
+      "390Reduced": "ee60b40f24b16f1c67bce845c355c786d96b13e5fdf3689b31be3e86eaad5b4d"
+    }
+  },
   "verifiedSourcePools": [
     {
       "publisher": "Kenney",
@@ -169,10 +189,15 @@
       "state": "CANDIDATE_NOT_IMPORTED"
     }
   ],
+  "limitations": [
+    "ART-00 qualifies the procedural visual grammar and proof boards; it does not claim final combat polish.",
+    "Actual coexistence with a real Friend inside the new V2 combat runtime remains a V2-1 qualification item.",
+    "External SFX files are mapped candidates only and were not imported or auditioned in ART-00.",
+    "Further environment richness may be added only if it preserves the qualified phase grammar and combat readability."
+  ],
   "notes": [
     "No external binary is production-approved until provenance, license evidence, source SHA-256, transformation history, production path and production SHA-256 are recorded.",
-    "Kenney CC0 is the primary external source family. OpenGameArt candidates require per-asset CC0 verification.",
-    "The current production visual kit is procedural-first; third-party files remain candidates only.",
+    "The qualified ART-00 visual kit is procedural-first and intentionally does not bulk-import third-party art.",
     "Canonical Friend presentation continues to use FriendSDK/on-chain rows without redraw or recolor."
   ]
 }
