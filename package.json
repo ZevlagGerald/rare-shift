@@ -15,7 +15,8 @@
     "check": "friendsdk check ./games/rare-shift",
     "test:sdk": "friendsdk test ./games/rare-shift --width 960 --screenshot ./artifacts/rare-shift-smoke.png",
     "test:browser": "node scripts/browser-check.mjs",
-    "corpus:t0-5": "node --experimental-strip-types scripts/t0-5-corpus.mjs"
+    "corpus:t0-5": "node --experimental-strip-types scripts/t0-5-corpus.mjs",
+    "corpus:t2": "node --experimental-strip-types scripts/t2-corpus.mjs"
   },
   "dependencies": {
     "@rarefriends/friendsdk": "file:vendor/rarefriends-friendsdk-0.1.2.tgz",
