@@ -1,6 +1,6 @@
 # RARE//SHIFT — T1 SCAN + CHAMBER I / DISCOVER Protocol
 
-**Status:** ACTIVE — OWNER AUTHORIZED BOUNDED TRANCHE  
+**Status:** IMPLEMENTED — AUTOMATED QUALIFICATION PASS; REAL-WALLET T1 PLAYTHROUGH OPEN  
 **Base:** T0.5 qualified closeout `7cd70bd0d9a43819de613c21abdd8b37c41ed34f`
 
 ## Purpose
@@ -88,6 +88,12 @@ T1 does not pass unless CI proves:
 - contracts/transactions;
 - leaderboard/progression systems.
 
+## Automated closeout
+
+The automated gate passed at implementation commit `5a8cae44bd5538fa9caa25b30e0592db0be79973` in GitHub Actions run `36243095509`. Desktop and narrow evidence screenshots were manually reviewed after CI. Two presentation defects discovered during evidence review—narrow SCAN overflow under the FriendSDK toolbar and Chamber I HUD/diagnostic overlap—were repaired without changing mechanics.
+
+See `T1_SCAN_CHAMBER_I_REPORT.md` for final automated evidence and hashes.
+
 ## Decision gate
 
-After implementation and automated qualification, review screenshots and mechanics before any T2 or Chamber II work. Do not silently advance.
+Automated T1 qualification is complete. The next permitted action is a real holder-wallet T1 playthrough using the already-qualified Friend `#13699`. Chamber II/T2 remains blocked until that holder evidence is reviewed and the Owner explicitly authorizes the next tranche. Do not silently advance.
