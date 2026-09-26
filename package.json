@@ -17,7 +17,8 @@
     "test:browser": "node scripts/browser-check.mjs",
     "corpus:t0-5": "node --experimental-strip-types scripts/t0-5-corpus.mjs",
     "corpus:t2": "node --experimental-strip-types scripts/t2-corpus.mjs",
-    "corpus:t3": "node --experimental-strip-types scripts/t3-corpus.mjs"
+    "corpus:t3": "node --experimental-strip-types scripts/t3-corpus.mjs",
+    "corpus:t5": "node --experimental-strip-types scripts/t5-alternate-pair-corpus.mjs"
   },
   "dependencies": {
     "@rarefriends/friendsdk": "file:vendor/rarefriends-friendsdk-0.1.2.tgz",
