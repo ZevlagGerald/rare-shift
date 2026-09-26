@@ -269,7 +269,20 @@ button, input { font: inherit; }
 .rare-shift-finale-proofchain strong,
 .rare-shift-finale-stats strong { display: block; margin-top: 2px; color: #f0f4f7; font-size: 10px; }
 .rare-shift-finale-note { margin: 8px auto 9px; max-width: 660px; color: #8595a4; font-size: 8px; }
-.rare-shift-run-again { min-width: 180px; min-height: 38px; padding: 7px 18px; border: 1px solid #dce5ed; background: #e8edf2; color: #0c1116; font-weight: 800; cursor: pointer; }
+.rare-shift-run-again {
+  position: absolute;
+  left: 18px;
+  top: 14px;
+  min-width: 126px;
+  min-height: 32px;
+  padding: 5px 12px;
+  border: 1px solid #dce5ed;
+  background: #e8edf2;
+  color: #0c1116;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
 .rare-shift-run-again:disabled { opacity: .45; cursor: not-allowed; }
 
 /* FriendSDK preserves the 960:640 game aspect ratio, so a 390px-wide host is only 260px tall. */
@@ -373,7 +386,14 @@ button, input { font: inherit; }
   .rare-shift-finale-proofchain strong,
   .rare-shift-finale-stats strong { margin-top: 0; font-size: 6px; }
   .rare-shift-finale-note { display: none; }
-  .rare-shift-run-again { min-width: 110px; min-height: 24px; margin-top: 4px; padding: 2px 8px; font-size: 7px; }
+  .rare-shift-run-again {
+    left: 5px;
+    top: 4px;
+    min-width: 72px;
+    min-height: 18px;
+    padding: 1px 5px;
+    font-size: 6px;
+  }
 
   .rare-shift-accessibility {
     right: 5px;
