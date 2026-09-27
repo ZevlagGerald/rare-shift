@@ -1,4 +1,5 @@
 name: RARE SHIFT V2-3B1 bounded apply
+# retry-2 after narrowing the EnemyRuntime patch anchor
 
 on:
   push:
