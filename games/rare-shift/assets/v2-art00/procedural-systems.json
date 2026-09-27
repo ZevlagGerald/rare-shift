@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "systems": {
+    "canonical-friend-presentation": {
+      "authority": "FriendSDK canonical sprite frames",
+      "mutation": "none",
+      "allowedPresentation": ["nearest-neighbor scale", "phase outline", "shadow", "non-destructive hit flash", "surrounding FX"],
+      "forbidden": ["recolor canonical pixels", "redraw silhouette", "stretch", "rotate identity art", "replace with third-party character"]
+    },
+    "delta-burst": {
+      "authority": "SelectedFramePair A_ONLY/B_ONLY rows",
+      "phaseA": "render A_ONLY occupied pixels as normalized local damage field",
+      "phaseB": "render B_ONLY occupied pixels as normalized local damage field",
+      "normalization": "total damage budget independent of occupied-pixel count",
+      "externalCoreShape": false
+    },
+    "shift-transition": {
+      "authority": "canonical Frame A/B + active phase state",
+      "durationMs": 140,
+      "composition": ["outgoing phase outline", "short radial phase ring", "canonical frame swap", "incoming phase settle"],
+      "reducedMotion": "instant canonical frame/state swap plus outline-opacity pulse"
+    },
+    "enemy-spawn-fx": {
+      "durationMs": 220,
+      "composition": ["four cardinal COMMON bars", "one A shard", "one B shard", "enemy materialize"],
+      "hazardLike": false
+    },
+    "enemy-hit-fx": {
+      "durationMs": 70,
+      "composition": ["short COMMON cross spark", "enemy flash"],
+      "hazardLike": false
+    },
+    "enemy-death-fx": {
+      "durationMs": 180,
+      "composition": ["A/B/Common pixel fragments", "rapid fade", "Signal XP release"],
+      "hazardLike": false
+    }
+  }
+}
