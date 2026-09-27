@@ -43,14 +43,10 @@ function qualify(width) {
     await canvas.waitFor({ state: "visible" });
     await canvas.focus();
     const data = name => canvas.getAttribute(`data-${name}`);
-    const route = [
-      "ArrowRight", "ArrowRight", "ArrowRight", "ArrowRight",
-      "ArrowDown", "ArrowDown", "ArrowDown",
-      "ArrowLeft", "ArrowLeft", "ArrowLeft", "ArrowLeft", "ArrowLeft", "ArrowLeft", "ArrowLeft",
-      "ArrowUp", "ArrowUp", "ArrowUp", "ArrowUp", "ArrowUp", "ArrowUp",
-      "ArrowRight", "ArrowRight", "ArrowRight", "ArrowRight", "ArrowRight", "ArrowRight", "ArrowRight",
-      "ArrowDown", "ArrowDown", "ArrowDown",
-    ];
+    // Reuse the already-qualified V2-1 pursuit cadence. A compact four-way
+    // loop plus settle time lets deterministic pursuers enter canonical DELTA
+    // geometry instead of letting the test bot outrun them indefinitely.
+    const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
     let routeIndex = 0;
 
     assert.equal(await data("delta-rank"), "1");
@@ -82,9 +78,6 @@ function qualify(width) {
     while (Date.now() < deadline && !rank5Reached) {
       if (bool(await data("dead"))) throw new Error(`died before DELTA Rank V at level ${await data("level")}; choices=${choices.join("|")}`);
 
-      // If clustered Signal pickups immediately opened the next legitimate draft
-      // after Rank IV, preserve that decision first. The first resumed combat
-      // frame after the cluster clears is where Rank-IV PHASE ECHO is proven.
       if (rank4EchoProofPending && !bool(await data("draft-open"))) await proveRank4Echo();
 
       if (bool(await data("draft-open"))) {
@@ -99,18 +92,11 @@ function qualify(width) {
         expectedDraftLevel += 1;
 
         let desired = "";
-        // If the next draft opened immediately after Rank IV, do not consume
-        // DELTA V before PHASE ECHO can be observed in resumed combat. Pick one
-        // legal non-DELTA decision, then prove the echo before later taking V.
         if (rank === 4 && rank4EchoProofPending) {
           if (hp <= 55 && ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
           else desired = ids.find(id => id !== "DELTA_RANK") ?? "";
           assert.ok(desired, `Rank-IV echo proof requires a legal non-DELTA bridge choice: ${ids.join(",")}`);
         } else if (rank === 1 && ids.includes("DELTA_RANK")) desired = "DELTA_RANK";
-        // The natural proof must behave like a survivable player route. Once
-        // DELTA II has been earned, critical HP takes priority over optional
-        // acquisitions or later ranks. If repair is not offered, ORBIT is the
-        // legitimate close-defense fallback before greedily ranking DELTA.
         else if (hp <= 55 && ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
         else if (!acquiredEcho && ids.includes("ECHO_MINE")) desired = "ECHO_MINE";
         else if (!acquiredSignal && ids.includes("SIGNAL_ARC")) desired = "SIGNAL_ARC";
@@ -126,10 +112,6 @@ function qualify(width) {
         await clickDraft(canvas, index, count);
         await page.waitForTimeout(220);
 
-        // A clustered pickup left active by the integrity repair may legitimately
-        // open the next level's draft on the first resumed update. That is valid
-        // only when it is exactly the next sequential level; staying on the same
-        // level or jumping farther remains a hard failure.
         if (bool(await data("draft-open"))) {
           assert.equal(Number(await data("level")), expectedDraftLevel,
             `immediate reopened draft must be exactly L${expectedDraftLevel}`);
@@ -167,14 +149,12 @@ function qualify(width) {
       }
 
       if (rank5Reached) break;
-      await canvas.press(route[routeIndex++ % route.length], { delay: 360 });
-      await page.waitForTimeout(80);
-      // Reuse the qualified survival-route discipline: SHIFT is tactical and
-      // periodic, not spammed after every movement input. Rank-IV PHASE ECHO
-      // still has its own explicit SHIFT proof above.
-      if (!bool(await data("draft-open")) && routeIndex % 5 === 0) {
+      await canvas.press(route[routeIndex % route.length], { delay: 460 });
+      routeIndex += 1;
+      await page.waitForTimeout(1400);
+      if (!bool(await data("draft-open")) && routeIndex % 2 === 0) {
         await shift(canvas, width);
-        await page.waitForTimeout(95);
+        await page.waitForTimeout(120);
       }
     }
 
@@ -215,11 +195,12 @@ function qualify(width) {
             `post-Rank-V immediate draft must be exactly L${expectedDraftLevel}`);
         }
       } else {
-        await canvas.press(route[routeIndex++ % route.length], { delay: 340 });
-        await page.waitForTimeout(70);
-        if (!bool(await data("draft-open")) && routeIndex % 5 === 0) {
+        await canvas.press(route[routeIndex % route.length], { delay: 460 });
+        routeIndex += 1;
+        await page.waitForTimeout(1400);
+        if (!bool(await data("draft-open")) && routeIndex % 2 === 0) {
           await shift(canvas, width);
-          await page.waitForTimeout(95);
+          await page.waitForTimeout(120);
         }
       }
     }
