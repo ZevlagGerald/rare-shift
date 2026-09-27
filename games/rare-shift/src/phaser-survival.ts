@@ -44,6 +44,7 @@ import type { FrameRows, Phase, SelectedFramePair } from "./types.ts";
 import { buildFractureGrid, V2_ART_SPRITES, V2_PALETTE } from "./v2-art-core.ts";
 import { effectDuration } from "./v2-fx-core.ts";
 import { acquireVectorTarget, VECTOR_RANK_I } from "./vector-core.ts";
+import { advanceSignalArcCooldown, planSignalArc, SIGNAL_ARC_RANK_I, type SignalArcHop } from "./signal-arc-core.ts";
 
 export interface PhaserSurvivalController {
   destroy(): void;
@@ -119,6 +120,7 @@ class SurvivalScene extends Phaser.Scene {
   private echoMines: EchoMineRuntime[] = [];
   private vectorReticle!: Phaser.GameObjects.Graphics;
   private orbitNode!: Phaser.GameObjects.Graphics;
+  private signalFx!: Phaser.GameObjects.Graphics;
   private burst!: Phaser.GameObjects.Graphics;
   private background!: Phaser.GameObjects.Graphics;
 
@@ -156,6 +158,17 @@ class SurvivalScene extends Phaser.Scene {
   private echoHits = 0;
   private echoReplacements = 0;
   private echoExpiries = 0;
+
+  private signalOwned = false;
+  private signalAccumulator = 0;
+  private signalCasts = 0;
+  private signalHits = 0;
+  private signalMultiTargetCasts = 0;
+  private signalShiftGraphInvalidations = 0;
+  private signalLastCastPhase: Phase | null = null;
+  private signalLastChainIds: number[] = [];
+  private signalLastChainKinds: V2EnemyKind[] = [];
+  private signalLastChainDamage: number[] = [];
 
   private weaponSlotsUsed = 1;
   private elapsedActiveMs = 0;
@@ -209,6 +222,7 @@ class SurvivalScene extends Phaser.Scene {
     this.burst = this.add.graphics().setDepth(24).setVisible(false);
     this.vectorReticle = this.add.graphics().setDepth(27).setVisible(false);
     this.orbitNode = this.add.graphics().setDepth(28).setVisible(false);
+    this.signalFx = this.add.graphics().setDepth(29).setVisible(false);
     this.buildPools();
     this.buildHud();
     this.installKeyboard();
@@ -254,6 +268,9 @@ class SurvivalScene extends Phaser.Scene {
 
     if (this.echoOwned) this.updateEcho(dt);
     else this.hideEchoViews();
+
+    if (this.signalOwned) this.updateSignalArc(dt);
+    else this.signalFx.clear().setVisible(false);
 
     this.updateEnemies(dt / 1000);
     this.updatePickups(dt / 1000);
@@ -364,7 +381,7 @@ class SurvivalScene extends Phaser.Scene {
     this.xpBar.clear().fillStyle(0x202832, 1).fillRect(310, 48, 240, 8);
     this.xpBar.fillStyle(0x7ee787, 1).fillRect(310, 48, 240 * this.xp / xpThreshold(this.level), 8);
     this.hudText.setText(`HP ${Math.max(0, this.hp)}/${V21_PLAYER_MAX_HP}   LV ${this.level}   XP ${this.xp}/${xpThreshold(this.level)}`);
-    this.buildText.setText(`K ${this.kills} · Δ ${romanRank(this.deltaRank)} · V ${this.vectorOwned ? "I" : "--"} · O ${this.orbitOwned ? "I" : "--"} · E ${this.echoOwned ? "I" : "--"}`);
+    this.buildText.setText(`K ${this.kills} · Δ ${romanRank(this.deltaRank)} · V ${this.vectorOwned ? "I" : "--"} · O ${this.orbitOwned ? "I" : "--"} · E ${this.echoOwned ? "I" : "--"} · S ${this.signalOwned ? "I" : "--"}`);
     this.phaseText.setColor(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB).setText(`PHASE ${this.phase}\nFRAME ${this.phase === "A" ? this.pair.a.index : this.pair.b.index}`);
     if (this.shiftButton) this.shiftButton.setStrokeStyle(2, hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB));
   }
@@ -621,6 +638,50 @@ class SurvivalScene extends Phaser.Scene {
     this.time.delayedCall(this.reduced ? 55 : 110, () => fx.destroy());
   }
 
+  private updateSignalArc(dtMs: number): void {
+    this.signalAccumulator = advanceSignalArcCooldown(this.signalAccumulator, dtMs);
+    if (this.signalAccumulator < SIGNAL_ARC_RANK_I.cooldownMs) return;
+    const path = planSignalArc(this.enemies, this.phase, this.friend.x, this.friend.y);
+    if (path.length === 0) return;
+    this.fireSignalArc(path);
+    this.signalAccumulator = 0;
+  }
+
+  private fireSignalArc(path: readonly SignalArcHop[]): void {
+    const castPhase = this.phase;
+    this.signalCasts += 1;
+    if (path.length >= 2) this.signalMultiTargetCasts += 1;
+    this.signalLastCastPhase = castPhase;
+    this.signalLastChainIds = path.map(hop => hop.id);
+    this.signalLastChainKinds = path.map(hop => hop.kind);
+    this.signalLastChainDamage = path.map(hop => hop.damage);
+    this.paintSignalArc(path, castPhase);
+    for (const hop of path) {
+      const enemy = this.enemies.find(item => item.active && item.id === hop.id);
+      if (!enemy || !isEnemyCorporeal(enemy.kind, castPhase)) continue;
+      enemy.hp -= hop.damage;
+      this.signalHits += 1;
+      if (enemy.hp <= 0) this.killEnemy(enemy);
+    }
+  }
+
+  private paintSignalArc(path: readonly SignalArcHop[], castPhase: Phase): void {
+    this.signalFx.clear().setVisible(true);
+    const tone = hex(castPhase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB);
+    this.signalFx.lineStyle(2, tone, this.reduced ? 0.68 : 0.9);
+    let fromX = this.friend.x;
+    let fromY = this.friend.y;
+    for (const hop of path) {
+      this.signalFx.lineBetween(fromX, fromY, hop.x, hop.y);
+      if (hop.kind === "TRACE") {
+        this.signalFx.fillStyle(hex(V2_PALETTE.common), 0.82).fillRect(hop.x - 3, hop.y - 3, 6, 6);
+      }
+      fromX = hop.x;
+      fromY = hop.y;
+    }
+    this.time.delayedCall(this.reduced ? 55 : 105, () => this.signalFx.clear().setVisible(false));
+  }
+
   private killEnemy(enemy: EnemyRuntime): void {
     const deathX = enemy.x, deathY = enemy.y;
     const deathTone = enemy.kind === "TRACE" ? hex(V2_PALETTE.common) : enemy.kind === "SPLIT_A" ? hex(V2_PALETTE.phaseA) : hex(V2_PALETTE.phaseB);
@@ -669,6 +730,8 @@ class SurvivalScene extends Phaser.Scene {
       orbitOwned: this.orbitOwned,
       echoEnabled: this.level >= 3,
       echoOwned: this.echoOwned,
+      signalEnabled: this.level >= 4,
+      signalOwned: this.signalOwned,
       weaponSlotsUsed: this.weaponSlotsUsed,
       weaponSlotCap: 4,
     };
@@ -691,15 +754,15 @@ class SurvivalScene extends Phaser.Scene {
 
   private makeDraftCard(x: number, choice: V21DraftChoice, index: number): Phaser.GameObjects.Container {
     const container = this.add.container(x, 320).setScrollFactor(0).setDepth(200);
-    const isDelta = choice.id === "DELTA_RANK", isVector = choice.id === "VECTOR_NEEDLE", isOrbit = choice.id === "ORBIT_NODES", isEcho = choice.id === "ECHO_MINE";
-    const isPhaseWeapon = isDelta || isVector || isOrbit || isEcho;
+    const isDelta = choice.id === "DELTA_RANK", isVector = choice.id === "VECTOR_NEEDLE", isOrbit = choice.id === "ORBIT_NODES", isEcho = choice.id === "ECHO_MINE", isSignal = choice.id === "SIGNAL_ARC";
+    const isPhaseWeapon = isDelta || isVector || isOrbit || isEcho || isSignal;
     const border = isPhaseWeapon ? hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB) : 0x657383;
     const bg = this.add.rectangle(0, 0, 220, 230, 0x11151b, 0.99).setStrokeStyle(isPhaseWeapon ? 3 : 2, border).setInteractive({ useHandCursor: true });
     const tag = this.add.text(0, -91, `${index + 1} // ${choice.category}`, { fontFamily: "monospace", fontSize: "11px", color: "#8b98a7" }).setOrigin(0.5);
     const nextRank = Math.min(5, this.deltaRank + 1);
     const titleText = isDelta ? `${choice.name} ${romanRank(nextRank)}` : choice.name;
     const title = this.add.text(0, -54, titleText, { fontFamily: "monospace", fontSize: "17px", color: V2_PALETTE.common, fontStyle: "bold", align: "center", wordWrap: { width: 190 } }).setOrigin(0.5);
-    const detailText = isDelta ? `RANK ${romanRank(this.deltaRank)} → ${romanRank(nextRank)}` : (isVector || isOrbit || isEcho) ? "ACQUIRE · RANK I" : "RUN UTILITY";
+    const detailText = isDelta ? `RANK ${romanRank(this.deltaRank)} → ${romanRank(nextRank)}` : (isVector || isOrbit || isEcho || isSignal) ? "ACQUIRE · RANK I" : "RUN UTILITY";
     const detail = this.add.text(0, -27, detailText, { fontFamily: "monospace", fontSize: "9px", color: isPhaseWeapon ? (this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB) : "#748392", letterSpacing: 1 }).setOrigin(0.5);
     const desc = this.add.text(0, 61, choice.description, { fontFamily: "monospace", fontSize: "11px", color: "#bac5d0", align: "center", wordWrap: { width: 178 } }).setOrigin(0.5);
     container.add([bg, tag, title, detail]);
@@ -718,6 +781,11 @@ class SurvivalScene extends Phaser.Scene {
       glyph.strokeCircle(0, 3, 25); glyph.fillStyle(border, 0.9).fillRect(-6, -3, 12, 12);
       glyph.lineBetween(-31, 3, -19, 3); glyph.lineBetween(19, 3, 31, 3);
       container.add(glyph);
+    } else if (isSignal) {
+      const glyph = this.add.graphics().lineStyle(2, border, 0.82);
+      glyph.lineBetween(-30, 10, -7, -7); glyph.lineBetween(-7, -7, 13, 7); glyph.lineBetween(13, 7, 30, -10);
+      glyph.fillStyle(border, 0.95).fillCircle(-30, 10, 4).fillCircle(-7, -7, 4).fillCircle(13, 7, 4).fillCircle(30, -10, 4);
+      container.add(glyph);
     } else {
       const glyph = this.add.graphics().lineStyle(2, border, 0.62); glyph.strokeRect(-12, -3, 24, 24); glyph.lineBetween(-6, 9, 6, 9); glyph.setPosition(0, -2); container.add(glyph);
     }
@@ -733,6 +801,7 @@ class SurvivalScene extends Phaser.Scene {
     this.vectorOwned = next.vectorOwned === true;
     this.orbitOwned = next.orbitOwned === true;
     this.echoOwned = next.echoOwned === true;
+    this.signalOwned = next.signalOwned === true;
     this.weaponSlotsUsed = next.weaponSlotsUsed ?? this.weaponSlotsUsed;
     if (this.orbitOwned) this.syncOrbitNodeView();
     if (!wasEchoOwned && this.echoOwned) this.echoPlacementAccumulator = 0;
@@ -756,6 +825,13 @@ class SurvivalScene extends Phaser.Scene {
       this.orbitReversals += 1;
     }
     const nextPhase: Phase = this.phase === "A" ? "B" : "A";
+    if (this.signalOwned) {
+      this.signalShiftGraphInvalidations += 1;
+      this.signalLastChainIds = [];
+      this.signalLastChainKinds = [];
+      this.signalLastChainDamage = [];
+      this.signalFx.clear().setVisible(false);
+    }
     if (this.echoOwned) this.transitionEchoMinesForShift(nextPhase);
     this.phase = nextPhase; this.shifts += 1; this.paintFriend();
     if (this.orbitOwned) this.syncOrbitNodeView();
@@ -845,6 +921,17 @@ class SurvivalScene extends Phaser.Scene {
     canvas.dataset.echoReplacements = String(this.echoReplacements);
     canvas.dataset.echoExpiries = String(this.echoExpiries);
     canvas.dataset.echoMineStates = activeMines.map(runtime => `${runtime.mine.id}:${runtime.mine.recordedPhase}:${runtime.mine.state}`).join("|");
+    canvas.dataset.signalOwned = this.signalOwned ? "true" : "false";
+    canvas.dataset.signalProfile = "rank1-phase-chain";
+    canvas.dataset.signalCasts = String(this.signalCasts);
+    canvas.dataset.signalHits = String(this.signalHits);
+    canvas.dataset.signalMultiTargetCasts = String(this.signalMultiTargetCasts);
+    canvas.dataset.signalLastCastPhase = this.signalLastCastPhase ?? "";
+    canvas.dataset.signalLastChainIds = this.signalLastChainIds.join(",");
+    canvas.dataset.signalLastChainKinds = this.signalLastChainKinds.join(",");
+    canvas.dataset.signalLastChainDamage = this.signalLastChainDamage.join(",");
+    canvas.dataset.signalShiftGraphInvalidations = String(this.signalShiftGraphInvalidations);
+    canvas.dataset.signalCooldownReady = this.signalAccumulator >= SIGNAL_ARC_RANK_I.cooldownMs ? "true" : "false";
   }
 }
 
