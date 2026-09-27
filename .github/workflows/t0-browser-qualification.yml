@@ -10,6 +10,7 @@ on:
       - feature/t3-chamber3-synchronize
       - feature/t4-reconstruction-finale
       - feature/v2-art00-visual-normalization
+      - feature/v2-1-combat-sandbox
     paths:
       - ".github/workflows/t0-browser-qualification.yml"
       - "games/rare-shift/**"
@@ -94,6 +95,9 @@ jobs:
 
       - name: Core tests
         run: npm run test:core
+
+      - name: V2 combat deterministic contracts
+        run: npm run test:v2-combat
 
       - name: V2 ART 00 invariants and static/motion proof
         shell: bash
