@@ -53,14 +53,17 @@ function qualify(width) {
     const moveUntilDraft = async (minimumLevel, deadlineMs, label) => {
       const deadline = Date.now() + deadlineMs;
       while (Date.now() < deadline) {
-        if (bool(await data("dead"))) throw new Error(`died before ${label}`);
+        if (bool(await data("dead"))) throw new Error(`died before ${label}; level=${await data("level")} hp=${await data("hp")} kills=${await data("kills")}`);
         if (bool(await data("draft-open")) && Number(await data("level")) >= minimumLevel) return;
         if (!bool(await data("draft-open"))) {
-          await canvas.press(route[routeIndex++ % route.length], { delay: minimumLevel >= 5 ? 260 : 330 });
-          await page.waitForTimeout(minimumLevel >= 5 ? 520 : 700);
-          if (routeIndex % 7 === 0 && !bool(await data("draft-open"))) {
+          // Keep moving for most of each cycle rather than standing still between
+          // key presses. This remains ordinary player input and materially lowers
+          // avoidable contact deaths in the longer Rank-V qualification route.
+          await canvas.press(route[routeIndex++ % route.length], { delay: minimumLevel >= 5 ? 520 : 460 });
+          await page.waitForTimeout(120);
+          if (routeIndex % 6 === 0 && !bool(await data("draft-open"))) {
             await shift(canvas, width);
-            await page.waitForTimeout(110);
+            await page.waitForTimeout(90);
           }
         }
       }
@@ -68,12 +71,12 @@ function qualify(width) {
     };
 
     const choose = async (id, minimumLevel, label) => {
-      await moveUntilDraft(minimumLevel, minimumLevel >= 5 ? 95_000 : 75_000, label);
+      await moveUntilDraft(minimumLevel, minimumLevel >= 5 ? 110_000 : 80_000, label);
       const ids = list(await data("draft-ids"));
       const index = ids.indexOf(id);
       assert.ok(index >= 0, `${id} must be offered at ${label}: ${ids.join(",")}`);
       await clickDraft(canvas, index, ids.length);
-      await page.waitForTimeout(240);
+      await page.waitForTimeout(220);
       assert.equal(await data("draft-open"), "false", `${label} must resume combat`);
     };
 
@@ -82,28 +85,33 @@ function qualify(width) {
     assert.equal(await data("delta-world-scale"), "8");
     assert.equal(await data("delta-damage"), "12");
 
-    // Preserve the qualified onboarding surface while making DELTA rank cards
-    // naturally available at every subsequent level.
+    // Natural viable build route: establish three qualified Rank-I support
+    // families first, filling DELTA + ORBIT + ECHO + SIGNAL, then invest Levels
+    // 5-8 into DELTA II-V. No XP, HP, enemy, phase, or clock state is injected.
     await choose("ORBIT_NODES", 2, "Level 2 ORBIT support acquisition");
     assert.equal(await data("orbit-owned"), "true");
 
-    await choose("DELTA_RANK", 3, "DELTA Rank II");
+    await choose("ECHO_MINE", 3, "Level 3 ECHO support acquisition");
+    assert.equal(await data("echo-owned"), "true");
+
+    await choose("SIGNAL_ARC", 4, "Level 4 SIGNAL support acquisition");
+    assert.equal(await data("signal-owned"), "true");
+    assert.equal(await data("weapon-slots-used"), "4");
+
+    await choose("DELTA_RANK", 5, "DELTA Rank II");
     assert.equal(await data("delta-rank"), "2");
     assert.equal(await data("delta-cooldown-ms"), "720");
     assert.equal(await data("delta-world-scale"), "8");
     assert.equal(await data("delta-damage"), "12");
 
-    await choose("ECHO_MINE", 4, "Level 4 ECHO support acquisition");
-    assert.equal(await data("echo-owned"), "true");
-
-    await choose("DELTA_RANK", 5, "DELTA Rank III");
+    await choose("DELTA_RANK", 6, "DELTA Rank III");
     assert.equal(await data("delta-rank"), "3");
     assert.equal(await data("delta-cooldown-ms"), "720");
     assert.equal(await data("delta-world-scale"), "9.5");
     assert.equal(await data("delta-damage"), "12");
     await page.locator(".rf-game-frame").screenshot({ path: resolve(`artifacts/rare-shift-v2-3b1-delta-rank3-${width}.png`) });
 
-    await choose("DELTA_RANK", 6, "DELTA Rank IV");
+    await choose("DELTA_RANK", 7, "DELTA Rank IV");
     assert.equal(await data("delta-rank"), "4");
     assert.equal(await data("delta-stagger-ms"), "0");
 
@@ -120,9 +128,9 @@ function qualify(width) {
     await page.waitForTimeout(220);
     assert.equal(Number(await data("delta-echo-scheduled")), scheduledAfterFirst, "SHIFT inside 650ms rider rearm must not create another echo");
 
-    // Let active combat time clear the rider rearm without injecting clock state.
-    await canvas.press("ArrowRight", { delay: 420 });
-    await page.waitForTimeout(420);
+    // Clear the independent rider rearm with ordinary active-time movement.
+    await canvas.press("ArrowRight", { delay: 520 });
+    await page.waitForTimeout(180);
     if (!bool(await data("draft-open")) && !bool(await data("dead"))) {
       const beforeRearmed = Number(await data("delta-echo-scheduled"));
       await shift(canvas, width);
@@ -130,7 +138,7 @@ function qualify(width) {
       assert.equal(Number(await data("delta-echo-scheduled")), beforeRearmed + 1, "rearmed Rank IV SHIFT must schedule another bounded echo");
     }
 
-    await choose("DELTA_RANK", 7, "DELTA Rank V");
+    await choose("DELTA_RANK", 8, "DELTA Rank V");
     assert.equal(await data("delta-rank"), "5");
     assert.equal(await data("delta-cooldown-ms"), "720");
     assert.equal(await data("delta-world-scale"), "9.5");
@@ -138,15 +146,13 @@ function qualify(width) {
     assert.equal(await data("delta-stagger-ms"), "90");
 
     const pulsesBefore = Number(await data("delta-primary-pulses"));
-    const rankVDeadline = Date.now() + 18_000;
+    const rankVDeadline = Date.now() + 20_000;
     while (Date.now() < rankVDeadline && !bool(await data("dead"))) {
       if (Number(await data("delta-primary-pulses")) > pulsesBefore && Number(await data("delta-staggers")) > 0) break;
       if (!bool(await data("draft-open"))) {
-        await canvas.press(route[routeIndex++ % route.length], { delay: 240 });
-        await page.waitForTimeout(400);
+        await canvas.press(route[routeIndex++ % route.length], { delay: 480 });
+        await page.waitForTimeout(120);
       } else {
-        // Higher-level drafts are outside this bounded proof; choose a real card
-        // only to keep natural combat running, never by state injection.
         const count = Number(await data("draft-count"));
         assert.ok(count >= 1 && count <= 3);
         await clickDraft(canvas, 0, count);
@@ -167,7 +173,7 @@ for (const width of [960, 390]) {
   await testGame(gameDirectory, {
     width,
     height: width === 960 ? 800 : 844,
-    timeout: 420_000,
+    timeout: 480_000,
     screenshot: resolve(`artifacts/rare-shift-v2-3b1-host-${width}.png`),
     check: qualify(width),
   });
