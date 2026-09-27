@@ -1,6 +1,17 @@
 import Phaser from "phaser";
 import { applyV21Draft, buildV21Draft, type V21BuildState, type V21DraftChoice, type V21DraftId } from "./draft-core.ts";
 import {
+  canPlaceEchoMine,
+  createEchoMine,
+  echoBlastTargetIds,
+  echoTriggerCandidateIds,
+  ECHO_RANK_I,
+  isEchoMineExpired,
+  selectEchoReplacementId,
+  transitionEchoMineForPhase,
+  type EchoMineCore,
+} from "./echo-core.ts";
+import {
   buildDeltaProfile,
   deltaHitsTarget,
   enemyBaseHp,
@@ -73,6 +84,12 @@ interface VectorProjectileRuntime {
   view: Phaser.GameObjects.Rectangle;
 }
 
+interface EchoMineRuntime {
+  active: boolean;
+  mine: EchoMineCore | null;
+  view: Phaser.GameObjects.Graphics;
+}
+
 const VIEW_W = 960;
 const VIEW_H = 640;
 const PLAYER_SPEED = 220;
@@ -99,6 +116,7 @@ class SurvivalScene extends Phaser.Scene {
   private enemies: EnemyRuntime[] = [];
   private pickups: PickupRuntime[] = [];
   private vectorProjectiles: VectorProjectileRuntime[] = [];
+  private echoMines: EchoMineRuntime[] = [];
   private vectorReticle!: Phaser.GameObjects.Graphics;
   private orbitNode!: Phaser.GameObjects.Graphics;
   private burst!: Phaser.GameObjects.Graphics;
@@ -127,6 +145,17 @@ class SurvivalScene extends Phaser.Scene {
   private orbitReversals = 0;
   private orbitLastShiftAnchor: number | null = null;
   private readonly orbitLastHitAt = new Map<number, number>();
+
+  private echoOwned = false;
+  private echoPlacementAccumulator = 0;
+  private echoNextId = 0;
+  private echoPlacements = 0;
+  private echoArmedTransitions = 0;
+  private echoReturns = 0;
+  private echoTriggers = 0;
+  private echoHits = 0;
+  private echoReplacements = 0;
+  private echoExpiries = 0;
 
   private weaponSlotsUsed = 1;
   private elapsedActiveMs = 0;
@@ -223,6 +252,9 @@ class SurvivalScene extends Phaser.Scene {
     if (this.orbitOwned) this.updateOrbit(dt);
     else this.orbitNode.setVisible(false);
 
+    if (this.echoOwned) this.updateEcho(dt);
+    else this.hideEchoViews();
+
     this.updateEnemies(dt / 1000);
     this.updatePickups(dt / 1000);
     this.updateHud();
@@ -275,6 +307,10 @@ class SurvivalScene extends Phaser.Scene {
       const view = this.add.rectangle(-500, -500, 18, 4, hex(V2_PALETTE.common), 0.95).setDepth(28).setVisible(false);
       this.vectorProjectiles.push({ active: false, targetId: -1, x: -500, y: -500, view });
     }
+    for (let i = 0; i < ECHO_RANK_I.maxActive; i++) {
+      const view = this.add.graphics().setDepth(23).setVisible(false);
+      this.echoMines.push({ active: false, mine: null, view });
+    }
   }
 
   private paintRows(container: Phaser.GameObjects.Container, rows: FrameRows, color: number, scale: number): void {
@@ -316,7 +352,7 @@ class SurvivalScene extends Phaser.Scene {
     this.hpBar = this.add.graphics().setScrollFactor(0).setDepth(101);
     this.xpBar = this.add.graphics().setScrollFactor(0).setDepth(101);
     this.hudText = this.add.text(40, 18, "", { fontFamily: "monospace", fontSize: "14px", color: V2_PALETTE.common, fontStyle: "bold" }).setScrollFactor(0).setDepth(102);
-    this.buildText = this.add.text(574, 20, "", { fontFamily: "monospace", fontSize: "10px", color: "#9eabb8", fontStyle: "bold" }).setScrollFactor(0).setDepth(102);
+    this.buildText = this.add.text(574, 20, "", { fontFamily: "monospace", fontSize: "9px", color: "#9eabb8", fontStyle: "bold" }).setScrollFactor(0).setDepth(102);
     this.phaseText = this.add.text(790, 16, "", { fontFamily: "monospace", fontSize: "14px", color: V2_PALETTE.phaseB, fontStyle: "bold", align: "right" }).setScrollFactor(0).setDepth(102);
     this.statusText = this.add.text(480, 82, "MOVE · AUTO-FIRE · SPACE / SHIFT", { fontFamily: "monospace", fontSize: "10px", color: "#aeb9c5", backgroundColor: "#0b0e12", padding: { x: 8, y: 4 } }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(110);
     this.updateHud();
@@ -328,7 +364,7 @@ class SurvivalScene extends Phaser.Scene {
     this.xpBar.clear().fillStyle(0x202832, 1).fillRect(310, 48, 240, 8);
     this.xpBar.fillStyle(0x7ee787, 1).fillRect(310, 48, 240 * this.xp / xpThreshold(this.level), 8);
     this.hudText.setText(`HP ${Math.max(0, this.hp)}/${V21_PLAYER_MAX_HP}   LV ${this.level}   XP ${this.xp}/${xpThreshold(this.level)}`);
-    this.buildText.setText(`K ${this.kills} · Δ ${romanRank(this.deltaRank)} · VEC ${this.vectorOwned ? "I" : "--"} · ORB ${this.orbitOwned ? "I" : "--"}`);
+    this.buildText.setText(`K ${this.kills} · Δ ${romanRank(this.deltaRank)} · V ${this.vectorOwned ? "I" : "--"} · O ${this.orbitOwned ? "I" : "--"} · E ${this.echoOwned ? "I" : "--"}`);
     this.phaseText.setColor(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB).setText(`PHASE ${this.phase}\nFRAME ${this.phase === "A" ? this.pair.a.index : this.pair.b.index}`);
     if (this.shiftButton) this.shiftButton.setStrokeStyle(2, hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB));
   }
@@ -482,6 +518,109 @@ class SurvivalScene extends Phaser.Scene {
     this.time.delayedCall(this.reduced ? 45 : 85, () => fx.destroy());
   }
 
+  private updateEcho(dtMs: number): void {
+    for (const runtime of this.echoMines) {
+      if (!runtime.active || !runtime.mine) continue;
+      if (!isEchoMineExpired(runtime.mine, this.elapsedActiveMs)) continue;
+      this.deactivateEchoMine(runtime);
+      this.echoExpiries += 1;
+    }
+
+    this.echoPlacementAccumulator += dtMs;
+    while (this.echoPlacementAccumulator >= ECHO_RANK_I.placementIntervalMs) {
+      this.echoPlacementAccumulator -= ECHO_RANK_I.placementIntervalMs;
+      this.tryPlaceEchoMine();
+    }
+
+    const ordered = this.echoMines
+      .filter((runtime): runtime is EchoMineRuntime & { mine: EchoMineCore } => runtime.active && runtime.mine !== null)
+      .sort((a, b) => a.mine.id - b.mine.id);
+
+    for (const runtime of ordered) {
+      if (!runtime.active || !runtime.mine) continue;
+      this.paintEchoMine(runtime);
+      if (echoTriggerCandidateIds(runtime.mine, this.phase, this.elapsedActiveMs, this.enemies).length === 0) continue;
+      const mine = runtime.mine;
+      const targetIds = echoBlastTargetIds(mine, this.phase, this.enemies);
+      this.deactivateEchoMine(runtime);
+      this.echoTriggers += 1;
+      this.emitEchoBlastFx(mine.x, mine.y, mine.recordedPhase);
+      for (const id of targetIds) {
+        const enemy = this.enemies.find(item => item.active && item.id === id);
+        if (!enemy || !isEnemyCorporeal(enemy.kind, this.phase)) continue;
+        enemy.hp -= ECHO_RANK_I.damage;
+        this.echoHits += 1;
+        if (enemy.hp <= 0) this.killEnemy(enemy);
+      }
+    }
+  }
+
+  private tryPlaceEchoMine(): void {
+    const active = this.echoMines
+      .filter((runtime): runtime is EchoMineRuntime & { mine: EchoMineCore } => runtime.active && runtime.mine !== null)
+      .map(runtime => runtime.mine);
+    const replacementId = selectEchoReplacementId(active);
+    if (!canPlaceEchoMine(this.friend.x, this.friend.y, active, replacementId)) return;
+
+    let slot = this.echoMines.find(runtime => !runtime.active) ?? null;
+    if (replacementId !== null) {
+      const replacement = this.echoMines.find(runtime => runtime.active && runtime.mine?.id === replacementId) ?? null;
+      if (!replacement) return;
+      this.deactivateEchoMine(replacement);
+      this.echoReplacements += 1;
+      slot = replacement;
+    }
+    if (!slot) return;
+
+    slot.active = true;
+    slot.mine = createEchoMine(this.echoNextId++, this.friend.x, this.friend.y, this.phase, this.elapsedActiveMs);
+    this.echoPlacements += 1;
+    this.paintEchoMine(slot);
+  }
+
+  private transitionEchoMinesForShift(nextPhase: Phase): void {
+    for (const runtime of this.echoMines) {
+      if (!runtime.active || !runtime.mine) continue;
+      const previous = runtime.mine;
+      const next = transitionEchoMineForPhase(previous, nextPhase, this.elapsedActiveMs);
+      if (previous.state !== next.state) {
+        if (next.state === "ARMED_AWAY") this.echoArmedTransitions += 1;
+        if (next.state === "RETURN_READY") this.echoReturns += 1;
+      }
+      runtime.mine = next;
+      this.paintEchoMine(runtime);
+    }
+  }
+
+  private paintEchoMine(runtime: EchoMineRuntime): void {
+    if (!runtime.active || !runtime.mine) { runtime.view.clear().setVisible(false); return; }
+    const mine = runtime.mine;
+    const tone = hex(mine.recordedPhase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB);
+    const alpha = mine.state === "DORMANT_HOME" ? 0.48 : mine.state === "ARMED_AWAY" ? 0.24 : 0.92;
+    runtime.view.clear().setVisible(true).setPosition(mine.x, mine.y);
+    runtime.view.lineStyle(mine.state === "RETURN_READY" ? 2 : 1, tone, alpha).strokeCircle(0, 0, mine.state === "RETURN_READY" ? 15 : 11);
+    runtime.view.fillStyle(tone, alpha).fillRect(-5, -5, 10, 10);
+    runtime.view.fillStyle(hex(V2_PALETTE.common), Math.min(0.8, alpha + 0.12)).fillRect(-2, -2, 4, 4);
+  }
+
+  private deactivateEchoMine(runtime: EchoMineRuntime): void {
+    runtime.active = false;
+    runtime.mine = null;
+    runtime.view.clear().setVisible(false).setPosition(-500, -500);
+  }
+
+  private hideEchoViews(): void {
+    for (const runtime of this.echoMines) if (!runtime.active) runtime.view.setVisible(false);
+  }
+
+  private emitEchoBlastFx(x: number, y: number, recordedPhase: Phase): void {
+    const tone = hex(recordedPhase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB);
+    const fx = this.add.graphics().setPosition(x, y).setDepth(29).lineStyle(2, tone, 0.82);
+    fx.strokeCircle(0, 0, ECHO_RANK_I.blastRadius * 0.35);
+    fx.lineBetween(-12, 0, 12, 0); fx.lineBetween(0, -12, 0, 12);
+    this.time.delayedCall(this.reduced ? 55 : 110, () => fx.destroy());
+  }
+
   private killEnemy(enemy: EnemyRuntime): void {
     const deathX = enemy.x, deathY = enemy.y;
     const deathTone = enemy.kind === "TRACE" ? hex(V2_PALETTE.common) : enemy.kind === "SPLIT_A" ? hex(V2_PALETTE.phaseA) : hex(V2_PALETTE.phaseB);
@@ -528,6 +667,8 @@ class SurvivalScene extends Phaser.Scene {
       vectorOwned: this.vectorOwned,
       orbitEnabled: true,
       orbitOwned: this.orbitOwned,
+      echoEnabled: this.level >= 3,
+      echoOwned: this.echoOwned,
       weaponSlotsUsed: this.weaponSlotsUsed,
       weaponSlotCap: 4,
     };
@@ -550,15 +691,15 @@ class SurvivalScene extends Phaser.Scene {
 
   private makeDraftCard(x: number, choice: V21DraftChoice, index: number): Phaser.GameObjects.Container {
     const container = this.add.container(x, 320).setScrollFactor(0).setDepth(200);
-    const isDelta = choice.id === "DELTA_RANK", isVector = choice.id === "VECTOR_NEEDLE", isOrbit = choice.id === "ORBIT_NODES";
-    const isPhaseWeapon = isDelta || isVector || isOrbit;
+    const isDelta = choice.id === "DELTA_RANK", isVector = choice.id === "VECTOR_NEEDLE", isOrbit = choice.id === "ORBIT_NODES", isEcho = choice.id === "ECHO_MINE";
+    const isPhaseWeapon = isDelta || isVector || isOrbit || isEcho;
     const border = isPhaseWeapon ? hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB) : 0x657383;
     const bg = this.add.rectangle(0, 0, 220, 230, 0x11151b, 0.99).setStrokeStyle(isPhaseWeapon ? 3 : 2, border).setInteractive({ useHandCursor: true });
     const tag = this.add.text(0, -91, `${index + 1} // ${choice.category}`, { fontFamily: "monospace", fontSize: "11px", color: "#8b98a7" }).setOrigin(0.5);
     const nextRank = Math.min(5, this.deltaRank + 1);
     const titleText = isDelta ? `${choice.name} ${romanRank(nextRank)}` : choice.name;
     const title = this.add.text(0, -54, titleText, { fontFamily: "monospace", fontSize: "17px", color: V2_PALETTE.common, fontStyle: "bold", align: "center", wordWrap: { width: 190 } }).setOrigin(0.5);
-    const detailText = isDelta ? `RANK ${romanRank(this.deltaRank)} → ${romanRank(nextRank)}` : (isVector || isOrbit) ? "ACQUIRE · RANK I" : "RUN UTILITY";
+    const detailText = isDelta ? `RANK ${romanRank(this.deltaRank)} → ${romanRank(nextRank)}` : (isVector || isOrbit || isEcho) ? "ACQUIRE · RANK I" : "RUN UTILITY";
     const detail = this.add.text(0, -27, detailText, { fontFamily: "monospace", fontSize: "9px", color: isPhaseWeapon ? (this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB) : "#748392", letterSpacing: 1 }).setOrigin(0.5);
     const desc = this.add.text(0, 61, choice.description, { fontFamily: "monospace", fontSize: "11px", color: "#bac5d0", align: "center", wordWrap: { width: 178 } }).setOrigin(0.5);
     container.add([bg, tag, title, detail]);
@@ -572,6 +713,11 @@ class SurvivalScene extends Phaser.Scene {
       const glyph = this.add.graphics().lineStyle(2, border, 0.78);
       glyph.strokeCircle(0, 2, 27); glyph.fillStyle(border, 0.95).fillRect(22, -3, 10, 10); glyph.fillStyle(hex(V2_PALETTE.common), 0.65).fillRect(12, 1, 9, 3);
       container.add(glyph);
+    } else if (isEcho) {
+      const glyph = this.add.graphics().lineStyle(2, border, 0.78);
+      glyph.strokeCircle(0, 3, 25); glyph.fillStyle(border, 0.9).fillRect(-6, -3, 12, 12);
+      glyph.lineBetween(-31, 3, -19, 3); glyph.lineBetween(19, 3, 31, 3);
+      container.add(glyph);
     } else {
       const glyph = this.add.graphics().lineStyle(2, border, 0.62); glyph.strokeRect(-12, -3, 24, 24); glyph.lineBetween(-6, 9, 6, 9); glyph.setPosition(0, -2); container.add(glyph);
     }
@@ -581,12 +727,15 @@ class SurvivalScene extends Phaser.Scene {
   private chooseDraft(index: number): void {
     if (!this.draftOpen) return;
     const choice = this.draftChoices[index]; if (!choice || choice.disabled) return;
+    const wasEchoOwned = this.echoOwned;
     const next = applyV21Draft(this.buildState(), choice.id as V21DraftId);
     this.deltaRank = next.deltaRank; this.hp = next.hp; this.pickupRadius = next.pickupRadius;
     this.vectorOwned = next.vectorOwned === true;
     this.orbitOwned = next.orbitOwned === true;
+    this.echoOwned = next.echoOwned === true;
     this.weaponSlotsUsed = next.weaponSlotsUsed ?? this.weaponSlotsUsed;
     if (this.orbitOwned) this.syncOrbitNodeView();
+    if (!wasEchoOwned && this.echoOwned) this.echoPlacementAccumulator = 0;
     for (const view of this.draftViews) view.destroy(true);
     this.draftViews = []; this.draftChoices = []; this.draftBackdrop?.destroy(); this.draftBackdrop = null; this.draftOpen = false;
     this.setCombatControlsEnabled(true); this.statusText.setDepth(110).setText(`${choice.name} selected // combat resumed.`); this.updateHud(); this.syncTestState();
@@ -606,7 +755,9 @@ class SurvivalScene extends Phaser.Scene {
       this.orbitLastShiftAnchor = this.orbitAngle;
       this.orbitReversals += 1;
     }
-    this.phase = this.phase === "A" ? "B" : "A"; this.shifts += 1; this.paintFriend();
+    const nextPhase: Phase = this.phase === "A" ? "B" : "A";
+    if (this.echoOwned) this.transitionEchoMinesForShift(nextPhase);
+    this.phase = nextPhase; this.shifts += 1; this.paintFriend();
     if (this.orbitOwned) this.syncOrbitNodeView();
     for (const enemy of this.enemies) if (enemy.active) enemy.view.setAlpha(isEnemyCorporeal(enemy.kind, this.phase) ? 1 : 0.22);
     this.updateHud(); this.statusText.setText(`SHIFT → Phase ${this.phase} // threat authority rewritten.`); this.emitShiftFx(); this.syncTestState();
@@ -627,7 +778,8 @@ class SurvivalScene extends Phaser.Scene {
       if (["arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d", " ", "1", "2", "3"].includes(key)) event.preventDefault();
       if (event.repeat && key === " ") return;
       if (key === "w" || key === "arrowup") this.moveUp = true; else if (key === "s" || key === "arrowdown") this.moveDown = true;
-      else if (key === "a" || key === "arrowleft") this.moveLeft = true; else if (key === "d" || key === "arrowright") this.moveRight = true;
+      else if (key === "a" || key === "arrowleft") this.moveLeft = true; else if (key === "d" || key === "arrowright") this.moveRight = false;
+      if (key === "d" || key === "arrowright") this.moveRight = true;
       else if (key === " ") this.shift(); else if (this.draftOpen && /^[1-3]$/u.test(key)) this.chooseDraft(Number(key) - 1);
     });
     this.input.keyboard?.on("keyup", (event: KeyboardEvent) => {
@@ -680,6 +832,20 @@ class SurvivalScene extends Phaser.Scene {
     canvas.dataset.orbitReversals = String(this.orbitReversals);
     canvas.dataset.orbitLastShiftAnchor = this.orbitLastShiftAnchor === null ? "" : this.orbitLastShiftAnchor.toFixed(6);
     canvas.dataset.orbitCooldownEntries = String(this.orbitLastHitAt.size);
+    const activeMines = this.echoMines
+      .filter((runtime): runtime is EchoMineRuntime & { mine: EchoMineCore } => runtime.active && runtime.mine !== null)
+      .sort((a, b) => a.mine.id - b.mine.id);
+    canvas.dataset.echoOwned = this.echoOwned ? "true" : "false";
+    canvas.dataset.echoProfile = "rank1-phase-memory";
+    canvas.dataset.echoActiveMines = String(activeMines.length);
+    canvas.dataset.echoPlacements = String(this.echoPlacements);
+    canvas.dataset.echoArmedTransitions = String(this.echoArmedTransitions);
+    canvas.dataset.echoReturns = String(this.echoReturns);
+    canvas.dataset.echoTriggers = String(this.echoTriggers);
+    canvas.dataset.echoHits = String(this.echoHits);
+    canvas.dataset.echoReplacements = String(this.echoReplacements);
+    canvas.dataset.echoExpiries = String(this.echoExpiries);
+    canvas.dataset.echoMineStates = activeMines.map(runtime => `${runtime.mine.id}:${runtime.mine.recordedPhase}:${runtime.mine.state}`).join("|");
   }
 }
 
