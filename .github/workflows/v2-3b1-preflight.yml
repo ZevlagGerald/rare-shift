@@ -1,0 +1,56 @@
+name: RARE SHIFT V2-3B1 DELTA preflight
+
+on:
+  push:
+    branches:
+      - feature/v2-3b1-delta-rank-runtime
+    paths:
+      - ".github/workflows/v2-3b1-preflight.yml"
+      - "games/rare-shift/src/phase-combat-core.ts"
+      - "games/rare-shift/src/phaser-survival.ts"
+      - "games/rare-shift/tests/v2-combat.test.ts"
+      - "games/rare-shift/tests/v2-3b1-delta.test.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --init
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      FRIENDSDK_ARCHIVE: vendor/rarefriends-friendsdk-0.1.2.tgz
+      FRIENDSDK_SHA256: a6352e187916089b6829c5387fe87f386c5774004f181990e4e3c8ae641cfe83
+      FRIENDSDK_URL: https://github.com/spokesz/friendsdk/releases/download/v0.1.2/rarefriends-friendsdk-0.1.2.tgz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Fetch and verify FriendSDK v0.1.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p vendor
+          curl --fail --location --retry 5 --retry-all-errors --connect-timeout 20 --max-time 180 --output "$FRIENDSDK_ARCHIVE" "$FRIENDSDK_URL"
+          printf '%s  %s\n' "$FRIENDSDK_SHA256" "$FRIENDSDK_ARCHIVE" | sha256sum --check --strict
+      - run: npm install --no-audit --no-fund
+      - name: DELTA Rank II-V deterministic contracts
+        run: node --experimental-strip-types --test games/rare-shift/tests/v2-3b1-delta.test.ts
+      - name: Inherited V2 combat contracts
+        run: npm run test:v2-combat
+      - name: TypeScript
+        shell: bash
+        run: |
+          npm run typecheck:core
+          npm run typecheck
+      - name: FriendSDK check and build
+        shell: bash
+        run: |
+          npm run check
+          npm run build
