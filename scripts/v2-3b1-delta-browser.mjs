@@ -107,10 +107,13 @@ function qualify(width) {
           else desired = ids.find(id => id !== "DELTA_RANK") ?? "";
           assert.ok(desired, `Rank-IV echo proof requires a legal non-DELTA bridge choice: ${ids.join(",")}`);
         } else if (rank === 1 && ids.includes("DELTA_RANK")) desired = "DELTA_RANK";
+        // The natural proof must behave like a survivable player route. Once
+        // DELTA II has been earned, critical HP takes priority over optional
+        // acquisitions or later ranks. This uses only the real draft UI/state.
+        else if (hp <= 55 && ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
         else if (!acquiredEcho && ids.includes("ECHO_MINE")) desired = "ECHO_MINE";
         else if (!acquiredSignal && ids.includes("SIGNAL_ARC")) desired = "SIGNAL_ARC";
         else if (ids.includes("DELTA_RANK")) desired = "DELTA_RANK";
-        else if (hp <= 55 && ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
         else desired = ids[0];
 
         choices.push(`L${level}:${desired}`);
