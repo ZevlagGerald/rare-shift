@@ -9,7 +9,7 @@
   "scripts": {
     "test:core": "node --experimental-strip-types --test games/rare-shift/tests/phase-proof.test.ts games/rare-shift/tests/sync.test.ts games/rare-shift/tests/reconstruction.test.ts",
     "test:v2-art": "node --experimental-strip-types --test games/rare-shift/tests/v2-art.test.ts",
-    "test:v2-combat": "node --experimental-strip-types --test games/rare-shift/tests/v2-combat.test.ts games/rare-shift/tests/echo-core.test.ts games/rare-shift/tests/signal-arc.test.ts",
+    "test:v2-combat": "node --experimental-strip-types --test games/rare-shift/tests/v2-combat.test.ts games/rare-shift/tests/echo-core.test.ts games/rare-shift/tests/signal-arc.test.ts games/rare-shift/tests/signal-arc-additional.test.ts",
     "proof:v2-art": "node --experimental-strip-types scripts/v2-art00-generate.mjs",
     "test:v2-art-browser": "node scripts/v2-art00-browser.mjs",
     "test:v2-1-browser": "node --experimental-strip-types scripts/v2-1-browser.mjs",
