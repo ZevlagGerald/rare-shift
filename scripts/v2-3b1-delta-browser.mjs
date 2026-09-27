@@ -167,9 +167,12 @@ function qualify(width) {
       if (rank5Reached) break;
       await canvas.press(route[routeIndex++ % route.length], { delay: 360 });
       await page.waitForTimeout(80);
-      if (!bool(await data("draft-open"))) {
+      // Reuse the qualified survival-route discipline: SHIFT is tactical and
+      // periodic, not spammed after every movement input. Rank-IV PHASE ECHO
+      // still has its own explicit SHIFT proof above.
+      if (!bool(await data("draft-open")) && routeIndex % 5 === 0) {
         await shift(canvas, width);
-        await page.waitForTimeout(70);
+        await page.waitForTimeout(95);
       }
     }
 
@@ -212,9 +215,9 @@ function qualify(width) {
       } else {
         await canvas.press(route[routeIndex++ % route.length], { delay: 340 });
         await page.waitForTimeout(70);
-        if (!bool(await data("draft-open"))) {
+        if (!bool(await data("draft-open")) && routeIndex % 5 === 0) {
           await shift(canvas, width);
-          await page.waitForTimeout(70);
+          await page.waitForTimeout(95);
         }
       }
     }
