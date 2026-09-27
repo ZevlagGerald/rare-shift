@@ -74,7 +74,7 @@ function qualify(width) {
     const vectorIndex = draftIds.indexOf("VECTOR_NEEDLE");
     assert.ok(vectorIndex >= 0, `VECTOR discovery guarantee missing: ${draftIds.join(",")}`);
 
-    await game.locator(".rf-game-frame").screenshot({ path: resolve(`artifacts/rare-shift-v2-2a-vector-draft-${width}.png`) });
+    await page.locator(".rf-game-frame").screenshot({ path: resolve(`artifacts/rare-shift-v2-2a-vector-draft-${width}.png`) });
     await clickDraft(canvas, vectorIndex, draftCount);
     await page.waitForTimeout(250);
     assert.equal(await data("draft-open"), "false");
@@ -111,7 +111,7 @@ function qualify(width) {
     assert.ok(Number(await data("vector-in-flight")) <= 2);
     assert.equal(await data("dead"), "false");
 
-    await game.locator(".rf-game-frame").screenshot({ path: resolve(`artifacts/rare-shift-v2-2a-vector-qualified-${width}.png`) });
+    await page.locator(".rf-game-frame").screenshot({ path: resolve(`artifacts/rare-shift-v2-2a-vector-qualified-${width}.png`) });
     console.log(`RARE_SHIFT_V2_2A_VECTOR_${width}=PASS`);
   };
 }
