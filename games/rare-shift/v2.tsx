@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import type { GameComponentProps } from "@rarefriends/friendsdk/runtime";
 import { createFriendReader, decodeSpriteBitmap } from "@rarefriends/friendsdk/sprites";
 import { derivePhaseField, selectFramePair } from "./src/phase-core.ts";
@@ -16,6 +17,30 @@ interface PreparedV2 {
   familyName: string;
   pair: SelectedFramePair;
 }
+
+interface SurvivalGuide {
+  title: string;
+  body: string;
+  accent: string;
+}
+
+const guideStyle: CSSProperties = {
+  position: "absolute",
+  left: "50%",
+  top: 88,
+  transform: "translateX(-50%)",
+  zIndex: 4,
+  width: "min(560px, calc(100% - 180px))",
+  padding: "7px 12px",
+  border: "1px solid #344050",
+  background: "rgba(11,14,18,.92)",
+  color: "#c4ced7",
+  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+  fontSize: 10,
+  lineHeight: 1.4,
+  textAlign: "center",
+  pointerEvents: "none",
+};
 
 function CanonicalFrame({ rows, label, view }: { rows: FrameRows; label: string; view: string }) {
   return <figure className="rare-shift-scan-card">
@@ -75,6 +100,57 @@ function ScanStage({ prepared, paused, onEnter }: { prepared: PreparedV2; paused
   </div>;
 }
 
+function guideFromCanvas(canvas: HTMLCanvasElement | null): SurvivalGuide | null {
+  if (!canvas) return null;
+  const draftOpen = canvas.dataset.draftOpen === "true";
+  const kills = Number(canvas.dataset.kills ?? "0");
+  const shifts = Number(canvas.dataset.shifts ?? "0");
+  const level = Number(canvas.dataset.level ?? "1");
+  const deltaRank = Number(canvas.dataset.deltaRank ?? "1");
+  const phase = canvas.dataset.phase ?? "B";
+
+  if (draftOpen) return {
+    title: "LEVEL UP",
+    body: "Choose one card. Click/tap a card, or press 1–3. Combat is paused while you choose.",
+    accent: "#e8edf2",
+  };
+  if (kills === 0) return {
+    title: "AUTO-FIRE",
+    body: "Move with WASD / arrows / joystick. Your Friend attacks automatically. Solid enemies can be damaged; faint enemies are ghosted.",
+    accent: "#e8edf2",
+  };
+  if (shifts === 0) return {
+    title: "SHIFT PHASE",
+    body: `You are in Phase ${phase}. Faint split enemies are ghosted and cannot be damaged. Press SPACE or SHIFT to rewrite which phase is solid.`,
+    accent: phase === "A" ? "#4cc9f0" : "#f72585",
+  };
+  if (level < 2) return {
+    title: "COLLECT SIGNAL XP",
+    body: "Defeated enemies release white Signal XP. Move close to collect it. Fill the XP bar to draft an upgrade.",
+    accent: "#7ee787",
+  };
+  if (deltaRank < 2) return {
+    title: "BUILD YOUR RUN",
+    body: "Choose an upgrade. DELTA BURST ranks increase damage and firing cadence while preserving your Friend's canonical attack geometry.",
+    accent: phase === "A" ? "#4cc9f0" : "#f72585",
+  };
+  return null;
+}
+
+function draftIndexFromPointer(canvas: HTMLCanvasElement, event: PointerEvent): number | null {
+  if (canvas.dataset.draftOpen !== "true") return null;
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return null;
+  const x = (event.clientX - rect.left) * 960 / rect.width;
+  const y = (event.clientY - rect.top) * 640 / rect.height;
+  if (y < 205 || y > 435) return null;
+  const centers = [220, 480, 740];
+  for (let index = 0; index < centers.length; index++) {
+    if (Math.abs(x - centers[index]) <= 110) return index;
+  }
+  return null;
+}
+
 export default function RareShiftV2({ friendId, client, paused }: GameComponentProps) {
   const host = useRef<HTMLDivElement>(null);
   const controller = useRef<PhaserSurvivalController | null>(null);
@@ -83,6 +159,7 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(false);
+  const [survivalGuide, setSurvivalGuide] = useState<SurvivalGuide | null>(null);
 
   useEffect(() => {
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -133,15 +210,50 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
     };
   }, [stage, prepared]);
 
+  useEffect(() => {
+    if (stage !== "survival" || !host.current) {
+      setSurvivalGuide(null);
+      return;
+    }
+    const hostNode = host.current;
+    const readGuide = () => setSurvivalGuide(guideFromCanvas(hostNode.querySelector("canvas")));
+    const interval = window.setInterval(readGuide, 120);
+    readGuide();
+
+    const onPointerDown = (event: PointerEvent) => {
+      const canvas = hostNode.querySelector("canvas");
+      if (!(canvas instanceof HTMLCanvasElement)) return;
+      const index = draftIndexFromPointer(canvas, event);
+      if (index === null) return;
+      event.preventDefault();
+      event.stopPropagation();
+      canvas.focus();
+      const key = String(index + 1);
+      const code = `Digit${key}`;
+      window.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true }));
+      window.dispatchEvent(new KeyboardEvent("keyup", { key, code, bubbles: true, cancelable: true }));
+    };
+
+    hostNode.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      window.clearInterval(interval);
+      hostNode.removeEventListener("pointerdown", onPointerDown, true);
+    };
+  }, [stage]);
+
   const canvasVisible = stage === "survival";
   return <section className="rare-shift-proof" aria-label="RARE SHIFT V2" aria-busy={stage === "loading"} data-app-stage={stage}>
     <div ref={host} className="rare-shift-canvas" inert={paused || !canvasVisible || undefined} aria-hidden={!canvasVisible} />
+    {canvasVisible && survivalGuide && <div style={{ ...guideStyle, borderTopColor: survivalGuide.accent }} role="status" aria-live="polite" data-survival-guide={survivalGuide.title}>
+      <strong style={{ color: survivalGuide.accent, letterSpacing: ".08em" }}>{survivalGuide.title}</strong>
+      <span> // {survivalGuide.body}</span>
+    </div>}
     {stage === "scan" && prepared && <ScanStage prepared={prepared} paused={paused} onEnter={() => setStage("survival")} />}
     {(stage === "loading" || stage === "error") && <div className="rare-shift-overlay" role={stage === "error" ? "alert" : "status"}>
       <strong>{stage === "loading" ? "Reading your Friend's 64 canonical frames…" : "RARE//SHIFT could not start"}</strong>
       {stage === "error" && <><p>{error}</p><button type="button" disabled={paused} onClick={() => setRetry(value => value + 1)}>Retry</button></>}
     </div>}
-    <div className={`rare-shift-accessibility rare-shift-accessibility-${stage}`} data-build-note="V2-1A canonical DELTA combat sandbox">
+    <div className={`rare-shift-accessibility rare-shift-accessibility-${stage}`} data-build-note="V2-1B pointer + onboarding repair">
       <label><input type="checkbox" checked={reducedMotion} onChange={event => setReducedMotion(event.target.checked)} /> Reduce motion</label>
     </div>
   </section>;
