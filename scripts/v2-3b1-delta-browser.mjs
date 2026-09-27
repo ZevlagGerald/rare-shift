@@ -47,6 +47,8 @@ function qualify(width) {
     await canvas.waitFor({ state: "visible" });
     await canvas.focus();
     const data = name => canvas.getAttribute(`data-${name}`);
+    // Long cardinal sweeps traverse the 1800x1200 world so naturally dropped
+    // Signal pickups are collected instead of orbiting near spawn.
     const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
     let routeIndex = 0;
 
@@ -56,9 +58,11 @@ function qualify(width) {
         if (bool(await data("dead"))) throw new Error(`died before ${label}; level=${await data("level")} hp=${await data("hp")} kills=${await data("kills")} delta=${await data("delta-rank")}`);
         if (bool(await data("draft-open")) && Number(await data("level")) >= minimumLevel) return;
         if (!bool(await data("draft-open"))) {
-          await canvas.press(route[routeIndex++ % route.length], { delay: minimumLevel >= 5 ? 520 : 460 });
-          await page.waitForTimeout(120);
-          if (routeIndex % 6 === 0 && !bool(await data("draft-open"))) {
+          const key = route[routeIndex++ % route.length];
+          const sweepMs = minimumLevel >= 5 ? 1250 : 850;
+          await canvas.press(key, { delay: sweepMs });
+          await page.waitForTimeout(80);
+          if (routeIndex % 3 === 0 && !bool(await data("draft-open"))) {
             await shift(canvas, width);
             await page.waitForTimeout(90);
           }
@@ -88,8 +92,6 @@ function qualify(width) {
         const deltaIndex = ids.indexOf("DELTA_RANK");
 
         // At most one real repair may be taken between consecutive DELTA ranks.
-        // This models a rational survival tradeoff without allowing healing to
-        // starve the specialization objective indefinitely.
         if (!repairUsed && hp <= 50 && repairIndex >= 0) {
           await clickDraft(canvas, repairIndex, ids.length);
           repairUsed = true;
@@ -112,8 +114,6 @@ function qualify(width) {
     assert.equal(await data("delta-world-scale"), "8");
     assert.equal(await data("delta-damage"), "12");
 
-    // Use three continuously useful qualified Rank-I support families before
-    // specializing DELTA. This remains normal production play with no state hooks.
     await choose("ORBIT_NODES", 2, "Level 2 ORBIT support acquisition");
     assert.equal(await data("orbit-owned"), "true");
     await choose("VECTOR_NEEDLE", 3, "Level 3 VECTOR support acquisition");
@@ -149,8 +149,8 @@ function qualify(width) {
     await page.waitForTimeout(220);
     assert.equal(Number(await data("delta-echo-scheduled")), scheduledAfterFirst, "SHIFT inside 650ms rider rearm must not create another echo");
 
-    await canvas.press("ArrowRight", { delay: 520 });
-    await page.waitForTimeout(180);
+    await canvas.press("ArrowRight", { delay: 700 });
+    await page.waitForTimeout(120);
     if (!bool(await data("draft-open")) && !bool(await data("dead"))) {
       const beforeRearmed = Number(await data("delta-echo-scheduled"));
       await shift(canvas, width);
@@ -169,8 +169,8 @@ function qualify(width) {
     while (Date.now() < rankVDeadline && !bool(await data("dead"))) {
       if (Number(await data("delta-primary-pulses")) > pulsesBefore && Number(await data("delta-staggers")) > 0) break;
       if (!bool(await data("draft-open"))) {
-        await canvas.press(route[routeIndex++ % route.length], { delay: 480 });
-        await page.waitForTimeout(120);
+        await canvas.press(route[routeIndex++ % route.length], { delay: 900 });
+        await page.waitForTimeout(80);
       } else {
         const ids = list(await data("draft-ids"));
         const repairIndex = ids.indexOf("FIELD_REPAIR");
