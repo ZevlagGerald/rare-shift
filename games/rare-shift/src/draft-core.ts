@@ -1,6 +1,6 @@
 import { deterministicUnit } from "./survival-core.ts";
 
-export type V21DraftId = "DELTA_RANK" | "VECTOR_NEEDLE" | "ORBIT_NODES" | "FIELD_REPAIR" | "SIGNAL_MAGNET";
+export type V21DraftId = "DELTA_RANK" | "VECTOR_NEEDLE" | "ORBIT_NODES" | "ECHO_MINE" | "FIELD_REPAIR" | "SIGNAL_MAGNET";
 
 export interface V21DraftChoice {
   readonly id: V21DraftId;
@@ -19,6 +19,8 @@ export interface V21BuildState {
   readonly vectorOwned?: boolean;
   readonly orbitEnabled?: boolean;
   readonly orbitOwned?: boolean;
+  readonly echoEnabled?: boolean;
+  readonly echoOwned?: boolean;
   readonly weaponSlotsUsed?: number;
   readonly weaponSlotCap?: number;
 }
@@ -26,11 +28,13 @@ export interface V21BuildState {
 export const V21_DELTA_MAX_RANK = 5;
 export const V21_SIGNAL_MAGNET_MAX_RADIUS = 220;
 export const V22_ACTIVE_WEAPON_SLOT_CAP = 4;
+export const V22C_ECHO_DISCOVERY_LEVEL = 3;
 
 const DEFINITIONS: Readonly<Record<V21DraftId, Omit<V21DraftChoice, "disabled">>> = Object.freeze({
   DELTA_RANK: Object.freeze({ id: "DELTA_RANK", name: "DELTA BURST", category: "WEAPON", description: "Rank up the canonical phase burst: more damage and faster cadence." }),
   VECTOR_NEEDLE: Object.freeze({ id: "VECTOR_NEEDLE", name: "VECTOR NEEDLE", category: "WEAPON", description: "Acquire Rank I precision auto-fire. SHIFT rewrites which corporeal threat it can target." }),
   ORBIT_NODES: Object.freeze({ id: "ORBIT_NODES", name: "ORBIT NODES", category: "WEAPON", description: "Acquire one close-defense node. SHIFT reverses its phase-driven sweep without resetting position." }),
+  ECHO_MINE: Object.freeze({ id: "ECHO_MINE", name: "ECHO MINE", category: "WEAPON", description: "Leave phase-memory mines on your path. Leave their reality, then return to make them live." }),
   FIELD_REPAIR: Object.freeze({ id: "FIELD_REPAIR", name: "FIELD REPAIR", category: "UTILITY", description: "Restore 25 HP immediately. Does not increase maximum HP." }),
   SIGNAL_MAGNET: Object.freeze({ id: "SIGNAL_MAGNET", name: "SIGNAL MAGNET", category: "UTILITY", description: "Increase Signal XP pickup radius for this run." }),
 });
@@ -45,6 +49,7 @@ export function isV21DraftChoiceValid(state: V21BuildState, id: V21DraftId): boo
   if (id === "DELTA_RANK") return state.deltaRank < V21_DELTA_MAX_RANK;
   if (id === "VECTOR_NEEDLE") return state.vectorEnabled === true && state.vectorOwned !== true && weaponSlotAvailable(state);
   if (id === "ORBIT_NODES") return state.orbitEnabled === true && state.orbitOwned !== true && weaponSlotAvailable(state);
+  if (id === "ECHO_MINE") return state.echoEnabled === true && state.echoOwned !== true && weaponSlotAvailable(state);
   if (id === "FIELD_REPAIR") return state.hp < state.maxHp;
   return state.pickupRadius < V21_SIGNAL_MAGNET_MAX_RADIUS;
 }
@@ -62,9 +67,10 @@ export function buildV21Draft(seed: number, level: number, state: V21BuildState)
   const validBase = rotateDeterministically(seed, level, baseIds).filter(id => isV21DraftChoiceValid(state, id));
   const acquisitions: V21DraftId[] = [];
 
-  // V2-2B bounded discovery order. ORBIT is first so the new tranche can be
-  // reached deterministically, while VECTOR remains present/actionable when
-  // legal so the inherited V2-2A browser qualification remains valid.
+  // V2-2C bounded onboarding/discovery order. ECHO starts at level 3 so the
+  // already-qualified level-2 ORBIT/VECTOR/DELTA discovery remains stable.
+  // This is not the final V2-3 weighting model.
+  if (level >= V22C_ECHO_DISCOVERY_LEVEL && isV21DraftChoiceValid(state, "ECHO_MINE")) acquisitions.push("ECHO_MINE");
   if (isV21DraftChoiceValid(state, "ORBIT_NODES")) acquisitions.push("ORBIT_NODES");
   if (isV21DraftChoiceValid(state, "VECTOR_NEEDLE")) acquisitions.push("VECTOR_NEEDLE");
 
@@ -97,6 +103,11 @@ export function applyV21Draft(state: V21BuildState, id: V21DraftId): V21BuildSta
       if (state.orbitOwned === true) throw new Error("ORBIT NODES is already owned.");
       throw new Error("No active weapon slot is available for ORBIT NODES.");
     }
+    if (id === "ECHO_MINE") {
+      if (state.echoEnabled !== true) throw new Error("ECHO MINE is not enabled in this progression step.");
+      if (state.echoOwned === true) throw new Error("ECHO MINE is already owned.");
+      throw new Error("No active weapon slot is available for ECHO MINE.");
+    }
     if (id === "FIELD_REPAIR") throw new Error("FIELD REPAIR requires missing HP.");
     throw new Error("SIGNAL MAGNET is already at its V2-1 pickup-radius cap.");
   }
@@ -113,6 +124,13 @@ export function applyV21Draft(state: V21BuildState, id: V21DraftId): V21BuildSta
     return Object.freeze({
       ...state,
       orbitOwned: true,
+      weaponSlotsUsed: (state.weaponSlotsUsed ?? 1) + 1,
+    });
+  }
+  if (id === "ECHO_MINE") {
+    return Object.freeze({
+      ...state,
+      echoOwned: true,
       weaponSlotsUsed: (state.weaponSlotsUsed ?? 1) + 1,
     });
   }
