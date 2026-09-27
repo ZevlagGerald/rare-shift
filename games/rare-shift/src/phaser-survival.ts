@@ -778,8 +778,7 @@ class SurvivalScene extends Phaser.Scene {
       if (["arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d", " ", "1", "2", "3"].includes(key)) event.preventDefault();
       if (event.repeat && key === " ") return;
       if (key === "w" || key === "arrowup") this.moveUp = true; else if (key === "s" || key === "arrowdown") this.moveDown = true;
-      else if (key === "a" || key === "arrowleft") this.moveLeft = true; else if (key === "d" || key === "arrowright") this.moveRight = false;
-      if (key === "d" || key === "arrowright") this.moveRight = true;
+      else if (key === "a" || key === "arrowleft") this.moveLeft = true; else if (key === "d" || key === "arrowright") this.moveRight = true;
       else if (key === " ") this.shift(); else if (this.draftOpen && /^[1-3]$/u.test(key)) this.chooseDraft(Number(key) - 1);
     });
     this.input.keyboard?.on("keyup", (event: KeyboardEvent) => {
