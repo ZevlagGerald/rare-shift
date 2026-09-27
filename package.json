@@ -11,6 +11,7 @@
     "test:v2-art": "node --experimental-strip-types --test games/rare-shift/tests/v2-art.test.ts",
     "test:v2-combat": "node --experimental-strip-types --test games/rare-shift/tests/v2-combat.test.ts games/rare-shift/tests/echo-core.test.ts games/rare-shift/tests/signal-arc.test.ts games/rare-shift/tests/signal-arc-additional.test.ts",
     "test:v2-2e-cross": "node --experimental-strip-types --test games/rare-shift/tests/v2-2e-cross-weapon.test.ts",
+    "test:v2-2e-pointer": "node --experimental-strip-types --test games/rare-shift/tests/draft-pointer-core.test.ts",
     "proof:v2-art": "node --experimental-strip-types scripts/v2-art00-generate.mjs",
     "test:v2-art-browser": "node scripts/v2-art00-browser.mjs",
     "test:v2-1-browser": "node --experimental-strip-types scripts/v2-1-browser.mjs",
