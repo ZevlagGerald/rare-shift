@@ -8,6 +8,14 @@ import {
   isEnemyCorporeal,
 } from "../src/phase-combat-core.ts";
 import {
+  advanceOrbitAngle,
+  isOrbitContactLegal,
+  normalizeOrbitAngle,
+  orbitDirectionForPhase,
+  orbitNodePosition,
+  ORBIT_RANK_I,
+} from "../src/orbit-core.ts";
+import {
   addSignalXp,
   buildSpawnSpec,
   spawnKind,
@@ -21,6 +29,11 @@ function rows(active: readonly [number, number][]): FrameRows {
   const grid = Array.from({ length: 16 }, () => Array.from({ length: 16 }, () => "."));
   for (const [x, y] of active) grid[y][x] = "#";
   return Object.freeze(grid.map(row => row.join("")));
+}
+
+function circularDistance(a: number, b: number): number {
+  const raw = Math.abs(normalizeOrbitAngle(a) - normalizeOrbitAngle(b));
+  return Math.min(raw, Math.PI * 2 - raw);
 }
 
 test("phase threats obey COMMON/A/B authority", () => {
@@ -199,4 +212,82 @@ test("VECTOR acquisition is rejected when disabled or weapon slots are full", ()
   const full = { ...disabled, vectorEnabled: true, vectorOwned: false, weaponSlotsUsed: 4, weaponSlotCap: 4 };
   assert.equal(isV21DraftChoiceValid(full, "VECTOR_NEEDLE"), false);
   assert.throws(() => applyV21Draft(full, "VECTOR_NEEDLE"), /No active weapon slot/u);
+});
+
+test("ORBIT Rank-I profile is exact and bounded", () => {
+  assert.deepEqual(ORBIT_RANK_I, {
+    damage: 8,
+    radius: 72,
+    angularSpeed: 2.4,
+    contactRadius: 26,
+    contactIntervalMs: 700,
+    nodeCount: 1,
+  });
+});
+
+test("ORBIT phase directions are opposite and reversal preserves angular position", () => {
+  assert.equal(orbitDirectionForPhase("A"), 1);
+  assert.equal(orbitDirectionForPhase("B"), -1);
+  const start = 1.234;
+  const afterA = advanceOrbitAngle(start, "A", 425);
+  const returned = advanceOrbitAngle(afterA, "B", 425);
+  assert.ok(circularDistance(start, returned) < 1e-10, `${start} -> ${afterA} -> ${returned}`);
+  assert.throws(() => advanceOrbitAngle(start, "A", -1), /non-negative/u);
+});
+
+test("ORBIT node position is deterministic and remains on the locked radius", () => {
+  const point = orbitNodePosition(100, 200, Math.PI / 2);
+  assert.ok(Math.abs(point.x - 100) < 1e-10);
+  assert.ok(Math.abs(point.y - 272) < 1e-10);
+  assert.ok(Math.abs(Math.hypot(point.x - 100, point.y - 200) - ORBIT_RANK_I.radius) < 1e-10);
+  assert.deepEqual(orbitNodePosition(100, 200, Math.PI / 2), point);
+});
+
+test("ORBIT contact legality follows corporeal phase and per-target cooldown", () => {
+  const trace = { id: 1, kind: "TRACE" as const, active: true, x: 10, y: 0 };
+  const a = { id: 2, kind: "SPLIT_A" as const, active: true, x: 10, y: 0 };
+  const b = { id: 3, kind: "SPLIT_B" as const, active: true, x: 10, y: 0 };
+  assert.equal(isOrbitContactLegal(trace, "A", 0, 0, null, 1000), true);
+  assert.equal(isOrbitContactLegal(trace, "B", 0, 0, null, 1000), true);
+  assert.equal(isOrbitContactLegal(a, "A", 0, 0, null, 1000), true);
+  assert.equal(isOrbitContactLegal(a, "B", 0, 0, null, 1000), false);
+  assert.equal(isOrbitContactLegal(b, "A", 0, 0, null, 1000), false);
+  assert.equal(isOrbitContactLegal(b, "B", 0, 0, null, 1000), true);
+  assert.equal(isOrbitContactLegal({ ...trace, active: false }, "A", 0, 0, null, 1000), false);
+  assert.equal(isOrbitContactLegal({ ...trace, x: 27 }, "A", 0, 0, null, 1000), false);
+  assert.equal(isOrbitContactLegal(trace, "A", 0, 0, 400, 1000), false);
+  assert.equal(isOrbitContactLegal(trace, "A", 0, 0, 300, 1000), true);
+  assert.equal(isOrbitContactLegal(trace, "B", 0, 0, 400, 1000), false, "SHIFT must not reset the same target cooldown");
+});
+
+test("V2-2B discovery exposes ORBIT, preserves VECTOR, and consumes one slot", () => {
+  const state = {
+    deltaRank: 1,
+    hp: 55,
+    maxHp: 100,
+    pickupRadius: 76,
+    vectorEnabled: true,
+    vectorOwned: false,
+    orbitEnabled: true,
+    orbitOwned: false,
+    weaponSlotsUsed: 1,
+    weaponSlotCap: 4,
+  };
+  const draft = buildV21Draft(13699, 2, state);
+  assert.deepEqual(draft.map(choice => choice.id), ["ORBIT_NODES", "VECTOR_NEEDLE", "DELTA_RANK"]);
+  assert.ok(draft.every(choice => !choice.disabled && isV21DraftChoiceValid(state, choice.id)));
+  const acquired = applyV21Draft(state, "ORBIT_NODES");
+  assert.equal(acquired.orbitOwned, true);
+  assert.equal(acquired.weaponSlotsUsed, 2);
+  assert.equal(buildV21Draft(13699, 3, acquired).some(choice => choice.id === "ORBIT_NODES"), false);
+  assert.throws(() => applyV21Draft(acquired, "ORBIT_NODES"), /already owned/u);
+});
+
+test("ORBIT acquisition is rejected when disabled or active weapon slots are full", () => {
+  const disabled = { deltaRank: 1, hp: 50, maxHp: 100, pickupRadius: 76 };
+  assert.equal(isV21DraftChoiceValid(disabled, "ORBIT_NODES"), false);
+  assert.throws(() => applyV21Draft(disabled, "ORBIT_NODES"), /not enabled/u);
+  const full = { ...disabled, orbitEnabled: true, orbitOwned: false, weaponSlotsUsed: 4, weaponSlotCap: 4 };
+  assert.equal(isV21DraftChoiceValid(full, "ORBIT_NODES"), false);
+  assert.throws(() => applyV21Draft(full, "ORBIT_NODES"), /No active weapon slot/u);
 });
