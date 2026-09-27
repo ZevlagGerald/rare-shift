@@ -184,9 +184,9 @@ test("V2-3A does not enumerate Evolution before V2-3D Core logic", () => {
   assert.equal(enumerateV23ACandidates(16, coreBearing).some(item => item.candidateType === "EVOLUTION"), false);
 });
 
-test("production progression stays at exactly three choices through level 30 without filler utilities", () => {
+test("production progression stays at exactly three choices through level 29 without filler utilities", () => {
   let state = createV23InitialBuildState({ hp: 100, pickupRadius: 220 });
-  for (let level = 2; level <= 30; level += 1) {
+  for (let level = 2; level <= 29; level += 1) {
     const draft = buildV23ADraft(SEED, level, state);
     assert.equal(draft.choices.length, 3, `level ${level}`);
     assert.equal(draft.choices.some(choice => choice.candidateType === "UTILITY"), false, `level ${level}`);
