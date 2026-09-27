@@ -62,10 +62,10 @@ function qualify(width) {
     assert.equal(await data("delta-world-scale"), "8");
 
     let acquiredSignal = false;
-    let acquiredOrbit = false;
     let acquiredEcho = false;
     let provedRank4Echo = false;
     let rank5Reached = false;
+    let expectedDraftLevel = 2;
     const choices = [];
 
     const deadline = Date.now() + 360_000;
@@ -80,18 +80,22 @@ function qualify(width) {
         const level = Number(await data("level"));
         const hp = Number(await data("hp"));
 
+        // Progression-integrity regression: every visible draft must correspond
+        // to exactly the next earned level. The first one must be Level 2; a
+        // clustered pickup frame may not skip directly to Level 3 or later.
+        assert.equal(level, expectedDraftLevel, `draft level sequence skipped: expected L${expectedDraftLevel}, got L${level}`);
+        expectedDraftLevel += 1;
+
         let desired = "";
-        // Natural bounded survival route. DELTA II is taken at level 2, then the
-        // already-qualified ECHO -> SIGNAL onboarding order is preserved before
-        // ORBIT completes the 4/4 build. From there, real FIELD REPAIR may be
-        // selected when needed and all remaining DELTA ranks are prioritized.
-        if (hp <= 55 && ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
-        else if (rank === 1 && ids.includes("DELTA_RANK")) desired = "DELTA_RANK";
+        // DELTA-specific natural route. V2-2E separately proves the real 4/4
+        // build, so this proof preserves ECHO and SIGNAL onboarding but spends
+        // later legal decisions on DELTA itself: II -> ECHO -> SIGNAL -> III ->
+        // IV -> V. No XP, HP, enemy, rank or phase state is injected.
+        if (rank === 1 && ids.includes("DELTA_RANK")) desired = "DELTA_RANK";
         else if (!acquiredEcho && ids.includes("ECHO_MINE")) desired = "ECHO_MINE";
         else if (!acquiredSignal && ids.includes("SIGNAL_ARC")) desired = "SIGNAL_ARC";
-        else if (!acquiredOrbit && ids.includes("ORBIT_NODES")) desired = "ORBIT_NODES";
         else if (ids.includes("DELTA_RANK")) desired = "DELTA_RANK";
-        else if (ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
+        else if (hp <= 55 && ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
         else desired = ids[0];
 
         choices.push(`L${level}:${desired}`);
@@ -104,13 +108,13 @@ function qualify(width) {
         assert.equal(await data("draft-open"), "false");
 
         if (desired === "SIGNAL_ARC") acquiredSignal = true;
-        if (desired === "ORBIT_NODES") acquiredOrbit = true;
         if (desired === "ECHO_MINE") acquiredEcho = true;
 
         const afterRank = Number(await data("delta-rank"));
         if (desired === "DELTA_RANK") {
           assert.equal(afterRank, beforeRank + 1);
           if (afterRank === 2) {
+            assert.equal(level, 2, "DELTA II must be earned from the Level-2 draft");
             assert.equal(await data("delta-damage"), "12");
             assert.equal(await data("delta-cooldown-ms"), "720");
             assert.equal(await data("delta-world-scale"), "8");
@@ -154,6 +158,7 @@ function qualify(width) {
         kills: Number(await data("kills")),
         deltaRank: Number(await data("delta-rank")),
         weaponSlotsUsed: Number(await data("weapon-slots-used")),
+        expectedDraftLevel,
         choices,
       })}`);
     }
@@ -161,9 +166,9 @@ function qualify(width) {
     assert.equal(provedRank4Echo, true, "Rank IV echo must be proven before Rank V");
     assert.equal(await data("delta-rank"), "5");
     assert.equal(await data("delta-damage"), "14");
-    assert.equal(acquiredOrbit, true, "natural qualification must include ORBIT close defense");
     assert.equal(acquiredSignal, true, "natural qualification must include SIGNAL wave clear");
     assert.equal(acquiredEcho, true, "natural qualification must include ECHO route control");
+    assert.ok(expectedDraftLevel >= 8, "draft sequence must prove Level 2 through Level 7 without skipping");
 
     const staggerBefore = Number(await data("delta-staggers"));
     const staggerDeadline = Date.now() + 32_000;
@@ -172,6 +177,9 @@ function qualify(width) {
       if (bool(await data("draft-open"))) {
         const ids = list(await data("draft-ids"));
         const count = Number(await data("draft-count"));
+        const level = Number(await data("level"));
+        assert.equal(level, expectedDraftLevel, `post-Rank-V draft level sequence skipped: expected L${expectedDraftLevel}, got L${level}`);
+        expectedDraftLevel += 1;
         const heal = ids.indexOf("FIELD_REPAIR");
         await clickDraft(canvas, heal >= 0 ? heal : 0, count);
         await page.waitForTimeout(160);
@@ -192,6 +200,7 @@ function qualify(width) {
     assert.ok(Number(await data("delta-echo-fires")) >= 1);
 
     await page.locator(".rf-game-frame").screenshot({ path: resolve(`artifacts/rare-shift-v2-3b1-delta-${width}.png`) });
+    console.log(`RARE_SHIFT_V2_3B1_PICKUP_LEVEL_INTEGRITY_${width}=PASS`);
     console.log(`RARE_SHIFT_V2_3B1_DELTA_${width}=PASS`);
     if (width === 390) {
       assert.equal(await reduceMotion.isChecked(), true);
