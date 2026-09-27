@@ -45,26 +45,30 @@ function qualify(width) {
     assert.equal(ids.length, 3, "first draft should expose the qualified three-card surface before the adapter cardinality probe");
     const expectedFirst = ids[0];
 
-    // UI-regression probe only. We alter only the adapter's cardinality metadata, then
-    // dispatch pointerdown on the React host DIV rather than the Phaser canvas. This
-    // isolates the outer pointer adapter and prevents Phaser's real three-card hitboxes
-    // from consuming the synthetic one-card probe.
-    await canvas.evaluate(node => { node.dataset.draftCount = "1"; });
+    // UI-regression probe only. The running scene republishes data-draft-count every
+    // animation frame, so cardinality override + host pointer dispatch must occur in
+    // the same browser task. Targeting the React host DIV isolates the outer adapter
+    // from Phaser's real three-card hitboxes.
     const box = await canvas.boundingBox();
     assert.ok(box, "canvas must have a bounding box");
     const clientX = box.x + box.width * 480 / 960;
     const clientY = box.y + box.height * 320 / 640;
     const host = game.locator(".rare-shift-canvas");
-    await host.dispatchEvent("pointerdown", {
-      clientX,
-      clientY,
-      pointerId: 71,
-      pointerType: "mouse",
-      button: 0,
-      buttons: 1,
-      bubbles: true,
-      cancelable: true,
-    });
+    await host.evaluate((hostNode, point) => {
+      const gameCanvas = hostNode.querySelector("canvas");
+      if (!(gameCanvas instanceof HTMLCanvasElement)) throw new Error("pointer probe could not find game canvas");
+      gameCanvas.dataset.draftCount = "1";
+      hostNode.dispatchEvent(new PointerEvent("pointerdown", {
+        clientX: point.clientX,
+        clientY: point.clientY,
+        pointerId: 71,
+        pointerType: "mouse",
+        button: 0,
+        buttons: 1,
+        bubbles: true,
+        cancelable: true,
+      }));
+    }, { clientX, clientY });
     await page.waitForTimeout(250);
 
     assert.equal(await data("draft-open"), "false", "centered one-card adapter event must choose index zero and resume combat");
