@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "pixelGrid": 16,
+  "rendering": {
+    "imageRendering": "pixelated",
+    "shapeRendering": "crispEdges",
+    "baseScale": 2,
+    "outlineLogicalPixels": 1
+  },
+  "palette": {
+    "background": "#0b0e12",
+    "surface": "#11151b",
+    "surfaceRaised": "#202832",
+    "common": "#e8edf2",
+    "phaseA": "#4cc9f0",
+    "phaseB": "#f72585",
+    "warning": "#f2c94c",
+    "damage": "#ff5964",
+    "muted": "#7b8794"
+  },
+  "phaseGrammar": {
+    "A": "angular, forward-cut, broken-edge marks",
+    "B": "offset, mirrored, stepped-flow marks",
+    "COMMON": "closed stable blocks and symmetric braces",
+    "VOID": "low-contrast sparse grid only"
+  },
+  "motion": {
+    "shiftMs": 140,
+    "hitFlashMs": 70,
+    "spawnMs": 220,
+    "deathMs": 180,
+    "reducedMotion": "replace displacement/scale bursts with opacity and outline state changes"
+  }
+}
