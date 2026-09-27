@@ -4,7 +4,7 @@ import type { V2EnemyKind } from "./phase-combat-core.ts";
 export const V21_WORLD_WIDTH = 1800 as const;
 export const V21_WORLD_HEIGHT = 1200 as const;
 export const V21_PLAYER_MAX_HP: number = 100;
-export const V21_CONTACT_INVULN_MS = 650 as const;
+export const V21_CONTACT_INVULN_MS = 900 as const;
 export const V21_SPAWN_INTERVAL_MS = 700 as const;
 export const V21_MAX_ACTIVE_ENEMIES = 48 as const;
 
