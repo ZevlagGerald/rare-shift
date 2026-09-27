@@ -47,24 +47,23 @@ function qualify(width) {
     await canvas.waitFor({ state: "visible" });
     await canvas.focus();
     const data = name => canvas.getAttribute(`data-${name}`);
-    // Long cardinal sweeps traverse the 1800x1200 world so naturally dropped
-    // Signal pickups are collected instead of orbiting near spawn.
     const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
     let routeIndex = 0;
 
+    // Reuse the movement cadence already proven by the V2-2D/E browser gates.
+    // This route naturally collects enough local Signal without dangerous long
+    // arena sweeps and previously reached DELTA IV in this exact tranche.
     const moveUntilDraft = async (minimumLevel, deadlineMs, label) => {
       const deadline = Date.now() + deadlineMs;
       while (Date.now() < deadline) {
         if (bool(await data("dead"))) throw new Error(`died before ${label}; level=${await data("level")} hp=${await data("hp")} kills=${await data("kills")} delta=${await data("delta-rank")}`);
         if (bool(await data("draft-open")) && Number(await data("level")) >= minimumLevel) return;
         if (!bool(await data("draft-open"))) {
-          const key = route[routeIndex++ % route.length];
-          const sweepMs = minimumLevel >= 5 ? 1250 : 850;
-          await canvas.press(key, { delay: sweepMs });
-          await page.waitForTimeout(80);
-          if (routeIndex % 3 === 0 && !bool(await data("draft-open"))) {
+          await canvas.press(route[routeIndex++ % route.length], { delay: minimumLevel >= 4 ? 300 : 390 });
+          await page.waitForTimeout(minimumLevel >= 4 ? 650 : 900);
+          if (routeIndex % 5 === 0 && !bool(await data("draft-open"))) {
             await shift(canvas, width);
-            await page.waitForTimeout(90);
+            await page.waitForTimeout(95);
           }
         }
       }
@@ -72,7 +71,7 @@ function qualify(width) {
     };
 
     const choose = async (id, minimumLevel, label) => {
-      await moveUntilDraft(minimumLevel, minimumLevel >= 5 ? 120_000 : 80_000, label);
+      await moveUntilDraft(minimumLevel, minimumLevel >= 5 ? 110_000 : 80_000, label);
       const ids = list(await data("draft-ids"));
       const index = ids.indexOf(id);
       assert.ok(index >= 0, `${id} must be offered at ${label}: ${ids.join(",")}`);
@@ -85,13 +84,14 @@ function qualify(width) {
       let nextLevel = Number(await data("level")) + 1;
       let repairUsed = false;
       while (Number(await data("delta-rank")) < targetRank) {
-        await moveUntilDraft(nextLevel, 135_000, label);
+        await moveUntilDraft(nextLevel, 120_000, label);
         const ids = list(await data("draft-ids"));
         const hp = Number(await data("hp"));
         const repairIndex = ids.indexOf("FIELD_REPAIR");
         const deltaIndex = ids.indexOf("DELTA_RANK");
 
-        // At most one real repair may be taken between consecutive DELTA ranks.
+        // Permit one genuine survival choice between consecutive rank upgrades,
+        // but never allow repeated repairs to starve the rank objective.
         if (!repairUsed && hp <= 50 && repairIndex >= 0) {
           await clickDraft(canvas, repairIndex, ids.length);
           repairUsed = true;
@@ -114,10 +114,12 @@ function qualify(width) {
     assert.equal(await data("delta-world-scale"), "8");
     assert.equal(await data("delta-damage"), "12");
 
+    // This exact support trio previously reached Level 7 / DELTA IV without any
+    // repair policy. ORBIT and ECHO also keep kills/pickups near the player's path.
     await choose("ORBIT_NODES", 2, "Level 2 ORBIT support acquisition");
     assert.equal(await data("orbit-owned"), "true");
-    await choose("VECTOR_NEEDLE", 3, "Level 3 VECTOR support acquisition");
-    assert.equal(await data("vector-owned"), "true");
+    await choose("ECHO_MINE", 3, "Level 3 ECHO support acquisition");
+    assert.equal(await data("echo-owned"), "true");
     await choose("SIGNAL_ARC", 4, "Level 4 SIGNAL support acquisition");
     assert.equal(await data("signal-owned"), "true");
     assert.equal(await data("weapon-slots-used"), "4");
@@ -149,8 +151,8 @@ function qualify(width) {
     await page.waitForTimeout(220);
     assert.equal(Number(await data("delta-echo-scheduled")), scheduledAfterFirst, "SHIFT inside 650ms rider rearm must not create another echo");
 
-    await canvas.press("ArrowRight", { delay: 700 });
-    await page.waitForTimeout(120);
+    await canvas.press("ArrowRight", { delay: 520 });
+    await page.waitForTimeout(180);
     if (!bool(await data("draft-open")) && !bool(await data("dead"))) {
       const beforeRearmed = Number(await data("delta-echo-scheduled"));
       await shift(canvas, width);
@@ -169,8 +171,8 @@ function qualify(width) {
     while (Date.now() < rankVDeadline && !bool(await data("dead"))) {
       if (Number(await data("delta-primary-pulses")) > pulsesBefore && Number(await data("delta-staggers")) > 0) break;
       if (!bool(await data("draft-open"))) {
-        await canvas.press(route[routeIndex++ % route.length], { delay: 900 });
-        await page.waitForTimeout(80);
+        await canvas.press(route[routeIndex++ % route.length], { delay: 300 });
+        await page.waitForTimeout(650);
       } else {
         const ids = list(await data("draft-ids"));
         const repairIndex = ids.indexOf("FIELD_REPAIR");
