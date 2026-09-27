@@ -53,11 +53,12 @@ function qualify(width) {
 
     let acquiredSignal = false;
     let acquiredOrbit = false;
+    let acquiredEcho = false;
     let provedRank4Echo = false;
     let rank5Reached = false;
     const choices = [];
 
-    const deadline = Date.now() + 300_000;
+    const deadline = Date.now() + 330_000;
     while (Date.now() < deadline && !rank5Reached) {
       if (bool(await data("dead"))) throw new Error(`died before DELTA Rank V at level ${await data("level")}; choices=${choices.join("|")}`);
 
@@ -67,21 +68,24 @@ function qualify(width) {
         assert.equal(ids.length, count);
         const rank = Number(await data("delta-rank"));
         const level = Number(await data("level"));
+        const hp = Number(await data("hp"));
 
         let desired = "";
-        // DELTA-specific natural route. Rank II is taken at the level-2 learning
-        // surface, ORBIT provides close defense, SIGNAL provides wave clear, and
-        // all later legal DELTA cards are taken immediately. The inherited V2-2E
-        // suite separately proves a real 4/4 build, so this proof must not delay
-        // DELTA qualification merely to fill the fourth slot.
-        if (rank === 1 && ids.includes("DELTA_RANK")) desired = "DELTA_RANK";
+        // Natural bounded survival route: take DELTA II on the level-2 learning
+        // surface, establish three complementary Rank-I families, then prioritize
+        // every later DELTA rank. A genuinely offered FIELD REPAIR may be taken
+        // when HP is already low; no HP/XP/enemy state is injected by this proof.
+        if (hp <= 55 && ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
+        else if (rank === 1 && ids.includes("DELTA_RANK")) desired = "DELTA_RANK";
         else if (!acquiredOrbit && ids.includes("ORBIT_NODES")) desired = "ORBIT_NODES";
         else if (!acquiredSignal && ids.includes("SIGNAL_ARC")) desired = "SIGNAL_ARC";
+        else if (!acquiredEcho && ids.includes("ECHO_MINE")) desired = "ECHO_MINE";
         else if (ids.includes("DELTA_RANK")) desired = "DELTA_RANK";
+        else if (ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
         else desired = ids[0];
 
         choices.push(`L${level}:${desired}`);
-        console.log(`V2_3B1_DRAFT_${width}=L${level}:${ids.join(",")}=>${desired}`);
+        console.log(`V2_3B1_DRAFT_${width}=L${level}:HP${hp}:${ids.join(",")}=>${desired}`);
         const index = ids.indexOf(desired);
         assert.ok(index >= 0, `desired ${desired} missing from ${ids.join(",")}`);
         const beforeRank = rank;
@@ -91,6 +95,7 @@ function qualify(width) {
 
         if (desired === "SIGNAL_ARC") acquiredSignal = true;
         if (desired === "ORBIT_NODES") acquiredOrbit = true;
+        if (desired === "ECHO_MINE") acquiredEcho = true;
 
         const afterRank = Number(await data("delta-rank"));
         if (desired === "DELTA_RANK") {
@@ -124,11 +129,11 @@ function qualify(width) {
       }
 
       if (rank5Reached) break;
-      await canvas.press(route[routeIndex++ % route.length], { delay: 620 });
-      await page.waitForTimeout(90);
-      if (routeIndex % 4 === 0 && !bool(await data("draft-open"))) {
+      await canvas.press(route[routeIndex++ % route.length], { delay: 430 });
+      await page.waitForTimeout(80);
+      if (routeIndex % 3 === 0 && !bool(await data("draft-open"))) {
         await shift(canvas, width);
-        await page.waitForTimeout(90);
+        await page.waitForTimeout(80);
       }
     }
 
@@ -148,6 +153,7 @@ function qualify(width) {
     assert.equal(await data("delta-damage"), "14");
     assert.equal(acquiredOrbit, true, "natural qualification must include ORBIT close defense");
     assert.equal(acquiredSignal, true, "natural qualification must include SIGNAL wave clear");
+    assert.equal(acquiredEcho, true, "natural qualification must include ECHO route control");
 
     const staggerBefore = Number(await data("delta-staggers"));
     const staggerDeadline = Date.now() + 32_000;
@@ -160,8 +166,12 @@ function qualify(width) {
         await clickDraft(canvas, heal >= 0 ? heal : 0, count);
         await page.waitForTimeout(160);
       } else {
-        await canvas.press(route[routeIndex++ % route.length], { delay: 560 });
+        await canvas.press(route[routeIndex++ % route.length], { delay: 420 });
         await page.waitForTimeout(80);
+        if (routeIndex % 3 === 0 && !bool(await data("draft-open"))) {
+          await shift(canvas, width);
+          await page.waitForTimeout(80);
+        }
       }
     }
     assert.ok(Number(await data("delta-staggers")) > staggerBefore, "Rank V matching-phase primary pulse must produce bounded normal-enemy stagger");
@@ -184,7 +194,7 @@ for (const width of [960, 390]) {
   await testGame(gameDirectory, {
     width,
     height: width === 960 ? 800 : 844,
-    timeout: 360_000,
+    timeout: 390_000,
     screenshot: resolve(`artifacts/rare-shift-v2-3b1-host-${width}.png`),
     check: qualify(width),
   });
