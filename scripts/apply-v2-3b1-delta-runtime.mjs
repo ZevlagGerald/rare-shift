@@ -15,8 +15,8 @@ source = replaceOnce(source,
 `  buildDeltaEchoProfile,\n  buildDeltaProfile,\n  canScheduleDeltaPhaseEcho,\n  DELTA_PHASE_ECHO_DELAY_MS,\n  DELTA_PHASE_ECHO_REARM_MS,\n  deltaCooldownForRank,\n  deltaHitsTarget,\n  enemyBaseHp,\n  enemyContactDamage,\n  enemyMoveSpeed,\n  isDeltaEchoTargetLegal,\n  isEnemyCorporeal,\n  migrateCooldownAccumulator,\n  type DeltaProfile,\n  type V2EnemyKind,\n} from "./phase-combat-core.ts";`, "DELTA imports");
 
 source = replaceOnce(source,
-`  y: number;\n  view: Phaser.GameObjects.Container;\n}`,
-`  y: number;\n  staggerUntilMs: number;\n  view: Phaser.GameObjects.Container;\n}`, "enemy stagger state");
+`interface EnemyRuntime {\n  id: number;\n  active: boolean;\n  kind: V2EnemyKind;\n  hp: number;\n  x: number;\n  y: number;\n  view: Phaser.GameObjects.Container;\n}`,
+`interface EnemyRuntime {\n  id: number;\n  active: boolean;\n  kind: V2EnemyKind;\n  hp: number;\n  x: number;\n  y: number;\n  staggerUntilMs: number;\n  view: Phaser.GameObjects.Container;\n}`, "enemy stagger state");
 
 source = replaceOnce(source,
 `  private signalFx!: Phaser.GameObjects.Graphics;\n  private burst!: Phaser.GameObjects.Graphics;`,
