@@ -67,7 +67,10 @@ export function buildDeltaProfile(a: FrameRows, b: FrameRows, phase: Phase, rank
     points: Object.freeze(points),
     damage: deltaDamageForRank(rank),
     cooldownMs: deltaCooldownForRank(rank),
-    hitRadius: rank >= 4 ? 8 : 7,
+    // Runtime enemies are approximately 32px sprites. This radius represents the
+    // target body around its center; it does not expand or alter canonical DELTA
+    // point placement. Higher ranks receive only a small bounded coverage gain.
+    hitRadius: rank >= 4 ? 20 : 18,
   });
 }
 
