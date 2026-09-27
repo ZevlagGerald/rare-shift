@@ -34,6 +34,22 @@ async function screenshot(page, width, name) {
   await page.locator(".rf-game-frame").screenshot({ path: resolve(`artifacts/rare-shift-v2-1-${name}-${width}.png`) });
 }
 
+async function combatSnapshot(data) {
+  return {
+    hp: Number(await data("hp")),
+    level: Number(await data("level")),
+    xp: Number(await data("xp")),
+    kills: Number(await data("kills")),
+    shifts: Number(await data("shifts")),
+    deltaRank: Number(await data("delta-rank")),
+    activeEnemies: Number(await data("active-enemies")),
+    phase: await data("phase"),
+    draftOpen: await data("draft-open"),
+    qualified: await data("qualified"),
+    dead: await data("dead"),
+  };
+}
+
 function qualifyV21(width) {
   return async function completeV21({ page, game, friendId }) {
     const root = game.locator(".rare-shift-proof");
@@ -84,17 +100,19 @@ function qualifyV21(width) {
     assert.notEqual(await data("phase"), initialPhase);
     assert.ok(Number(await data("shifts")) >= 1);
 
-    // Kite in a deterministic rectangle. Auto-fire and enemy convergence produce
-    // natural kills; no internal test mutation is used.
+    // V2-1 must prove real combat rather than a hidden state mutation. Move in short
+    // bursts, then deliberately hold position so enemies enter the canonical DELTA
+    // field and nearby Signal XP can magnetize into the Friend.
     const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
     let routeIndex = 0;
     let draftCaptured = false;
-    const deadline = Date.now() + 48_000;
+    const deadline = Date.now() + 58_000;
 
     while (Date.now() < deadline) {
-      if ((await data("dead")) === "true") throw new Error("V2-1 browser route died before qualification.");
+      const before = await combatSnapshot(data);
+      if (before.dead) throw new Error(`V2-1 browser route died before qualification: ${JSON.stringify(before)}`);
 
-      if ((await data("draft-open")) === "true") {
+      if (before.draftOpen === "true") {
         assert.equal(await data("draft-count"), "3");
         await screenshot(page, width, "draft");
         draftCaptured = true;
@@ -102,27 +120,43 @@ function qualifyV21(width) {
         const level = Number(await data("level"));
         const key = deltaChoiceKey(seed, level);
         await canvas.press(key);
-        await canvas.waitFor({ state: "visible" });
+        await page.waitForTimeout(150);
         assert.equal(await data("draft-open"), "false");
         assert.ok(Number(await data("delta-rank")) >= 2);
       }
 
       if ((await data("qualified")) === "true") break;
 
-      await canvas.press(route[routeIndex % route.length], { delay: 720 });
+      // Short reposition, then 1.4 s combat hold. The hold is intentional: this is
+      // still natural play and gives auto-fire/pickup attraction time to operate.
+      await canvas.press(route[routeIndex % route.length], { delay: 460 });
       routeIndex += 1;
-      if (routeIndex % 3 === 0 && (await data("draft-open")) !== "true") await canvas.press("Space");
+      await page.waitForTimeout(1400);
+
+      // Alternate phases often enough to exercise A/B authority and prevent a
+      // permanently ghosted split population from starving the kill/XP loop.
+      if (routeIndex % 2 === 0 && (await data("draft-open")) !== "true") {
+        await canvas.press("Space");
+        await page.waitForTimeout(120);
+      }
+
+      if (routeIndex % 5 === 0) {
+        console.log(`V2_1_STATE_${width}=${JSON.stringify(await combatSnapshot(data))}`);
+      }
     }
 
-    assert.equal(draftCaptured, true, "expected an actual level-up draft");
-    assert.equal(await data("qualified"), "true");
-    assert.equal(await data("dead"), "false");
-    assert.ok(Number(await data("kills")) >= 3);
-    assert.ok(Number(await data("shifts")) >= 1);
-    assert.ok(Number(await data("level")) >= 2);
-    assert.ok(Number(await data("delta-rank")) >= 2);
-    assert.ok(Number(await data("hp")) > 0);
-    assert.ok(Number(await data("active-enemies")) <= 48);
+    const finalState = await combatSnapshot(data);
+    console.log(`V2_1_FINAL_STATE_${width}=${JSON.stringify(finalState)}`);
+
+    assert.equal(draftCaptured, true, `expected an actual level-up draft; final=${JSON.stringify(finalState)}`);
+    assert.equal(finalState.qualified, "true");
+    assert.equal(finalState.dead, "false");
+    assert.ok(finalState.kills >= 3);
+    assert.ok(finalState.shifts >= 1);
+    assert.ok(finalState.level >= 2);
+    assert.ok(finalState.deltaRank >= 2);
+    assert.ok(finalState.hp > 0);
+    assert.ok(finalState.activeEnemies <= 48);
 
     await screenshot(page, width, "qualified");
 
@@ -143,7 +177,7 @@ for (const width of [960, 390]) {
   await testGame(gameDirectory, {
     width,
     height: width === 960 ? 800 : 844,
-    timeout: 75_000,
+    timeout: 80_000,
     screenshot: resolve(`artifacts/rare-shift-v2-1-host-${width}.png`),
     check: qualifyV21(width),
   });
