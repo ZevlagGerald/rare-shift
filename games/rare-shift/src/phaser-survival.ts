@@ -771,14 +771,16 @@ class SurvivalScene extends Phaser.Scene {
         const speed = Math.max(180, 460 - distance);
         pickup.x += dx / distance * speed * dt; pickup.y += dy / distance * speed * dt; pickup.view.setPosition(pickup.x, pickup.y);
       }
-      if (distance < 24) this.collectPickup(pickup);
+      if (distance < 24 && this.collectPickup(pickup)) break;
     }
   }
 
-  private collectPickup(pickup: PickupRuntime): void {
+  private collectPickup(pickup: PickupRuntime): boolean {
     pickup.active = false; pickup.view.setVisible(false);
     const progress = addSignalXp(this.level, this.xp, 1); this.level = progress.level; this.xp = progress.xp;
-    if (progress.levelsGained > 0) this.openDraft();
+    if (progress.levelsGained <= 0) return false;
+    this.openDraft();
+    return this.draftOpen;
   }
 
   private buildState(): V21BuildState {
