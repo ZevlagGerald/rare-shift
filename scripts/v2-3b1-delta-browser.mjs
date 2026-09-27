@@ -43,7 +43,17 @@ function qualify(width) {
     await canvas.waitFor({ state: "visible" });
     await canvas.focus();
     const data = name => canvas.getAttribute(`data-${name}`);
-    const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
+    // Wide perimeter route instead of a tiny four-step square around spawn. This
+    // remains ordinary keyboard movement but avoids making the qualification bot
+    // repeatedly turn back into the same local swarm.
+    const route = [
+      "ArrowRight", "ArrowRight", "ArrowRight", "ArrowRight",
+      "ArrowDown", "ArrowDown", "ArrowDown",
+      "ArrowLeft", "ArrowLeft", "ArrowLeft", "ArrowLeft", "ArrowLeft", "ArrowLeft", "ArrowLeft",
+      "ArrowUp", "ArrowUp", "ArrowUp", "ArrowUp", "ArrowUp", "ArrowUp",
+      "ArrowRight", "ArrowRight", "ArrowRight", "ArrowRight", "ArrowRight", "ArrowRight", "ArrowRight",
+      "ArrowDown", "ArrowDown", "ArrowDown",
+    ];
     let routeIndex = 0;
 
     assert.equal(await data("delta-rank"), "1");
