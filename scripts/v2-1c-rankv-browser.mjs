@@ -38,6 +38,8 @@ async function clickDraftChoice(canvas, index, count) {
 
 async function snapshot(data) {
   return {
+    x: Number(await data("x")),
+    y: Number(await data("y")),
     hp: Number(await data("hp")),
     level: Number(await data("level")),
     xp: Number(await data("xp")),
@@ -59,6 +61,33 @@ async function screenshot(page, name) {
   });
 }
 
+const POST_RANK_CORNERS = Object.freeze([
+  Object.freeze({ x: 1350, y: 850 }),
+  Object.freeze({ x: 450, y: 850 }),
+  Object.freeze({ x: 450, y: 350 }),
+  Object.freeze({ x: 1350, y: 350 }),
+]);
+
+function nearestCornerIndex(state) {
+  let bestIndex = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < POST_RANK_CORNERS.length; index += 1) {
+    const corner = POST_RANK_CORNERS[index];
+    const distance = Math.hypot(state.x - corner.x, state.y - corner.y);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  }
+  return bestIndex;
+}
+
+function directionToward(state, corner) {
+  if (Math.abs(state.x - corner.x) > 70) return state.x < corner.x ? "ArrowRight" : "ArrowLeft";
+  if (Math.abs(state.y - corner.y) > 70) return state.y < corner.y ? "ArrowDown" : "ArrowUp";
+  return null;
+}
+
 async function qualifyRankV({ page, game }) {
   const scan = game.locator('[data-stage="scan"]');
   await scan.waitFor({ state: "visible" });
@@ -74,12 +103,14 @@ async function qualifyRankV({ page, game }) {
   assert.equal(await data("level"), "1");
   assert.equal(await data("dead"), "false");
 
-  // Preserve the short-slice movement pattern already demonstrated to produce
-  // genuine kills/XP. Once Rank V is reached, increase movement duty-cycle so
-  // the qualifier can survive long enough to observe the next real level-up
-  // without changing gameplay state or granting test-only health.
-  const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
+  // Before Rank V, preserve the already-qualified compact route so the test
+  // naturally earns kills and Signal XP. After Rank V, move around a larger
+  // bounded rectangle in the actual world so the endurance extension does not
+  // repeatedly cross the densest center cluster while waiting for level 6.
+  const preRankRoute = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
   let routeIndex = 0;
+  let postRankCornerIndex = 0;
+  let postRankCornerInitialized = false;
   let deltaSelections = 0;
   let rankVReached = false;
   let postRankVDraftObserved = false;
@@ -112,6 +143,9 @@ async function qualifyRankV({ page, game }) {
 
         if (afterRank === 5) {
           rankVReached = true;
+          const reached = await snapshot(data);
+          postRankCornerIndex = nearestCornerIndex(reached);
+          postRankCornerInitialized = true;
           await screenshot(page, "rank-v-reached");
           console.log("RARE_SHIFT_V2_1C_NATURAL_RANK_V=PASS");
         }
@@ -127,8 +161,8 @@ async function qualifyRankV({ page, game }) {
 
         // Four preceding DELTA upgrades already prove the real pointer path.
         // Use the runtime's supported 1-3 keyboard path for the final postfix
-        // selection so this assertion exercises chooseDraft() without relying
-        // on scaled-canvas pointer-coordinate precision for a reduced card set.
+        // selection so this assertion exercises the same chooseDraft() handler
+        // without scaled-canvas coordinate sensitivity on a reduced card set.
         const selectedId = ids.includes("FIELD_REPAIR") ? "FIELD_REPAIR" : ids[0];
         const selectedIndex = ids.indexOf(selectedId);
         const hpBefore = before.hp;
@@ -154,15 +188,34 @@ async function qualifyRankV({ page, game }) {
       }
     }
 
-    const moveDelay = rankVReached ? 650 : 520;
-    const settleDelay = rankVReached ? 180 : 520;
-    await canvas.press(route[routeIndex % route.length], { delay: moveDelay });
-    routeIndex += 1;
-    await page.waitForTimeout(settleDelay);
-
-    if (routeIndex % 2 === 0 && !datasetBoolean(await data("draft-open"))) {
-      await canvas.press("Space");
-      await page.waitForTimeout(80);
+    if (!rankVReached) {
+      await canvas.press(preRankRoute[routeIndex % preRankRoute.length], { delay: 520 });
+      routeIndex += 1;
+      await page.waitForTimeout(520);
+      if (routeIndex % 2 === 0 && !datasetBoolean(await data("draft-open"))) {
+        await canvas.press("Space");
+        await page.waitForTimeout(80);
+      }
+    } else {
+      if (!postRankCornerInitialized) {
+        postRankCornerIndex = nearestCornerIndex(before);
+        postRankCornerInitialized = true;
+      }
+      let corner = POST_RANK_CORNERS[postRankCornerIndex];
+      let direction = directionToward(before, corner);
+      if (!direction) {
+        postRankCornerIndex = (postRankCornerIndex + 1) % POST_RANK_CORNERS.length;
+        corner = POST_RANK_CORNERS[postRankCornerIndex];
+        direction = directionToward(before, corner);
+      }
+      assert.ok(direction, "post-Rank-V perimeter route must produce a direction");
+      await canvas.press(direction, { delay: 760 });
+      routeIndex += 1;
+      await page.waitForTimeout(30);
+      if (!datasetBoolean(await data("draft-open"))) {
+        await canvas.press("Space");
+        await page.waitForTimeout(50);
+      }
     }
 
     if (routeIndex % 8 === 0) {
