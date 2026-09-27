@@ -5,6 +5,7 @@ import type { CSSProperties } from "react";
 import type { GameComponentProps } from "@rarefriends/friendsdk/runtime";
 import { createFriendReader, decodeSpriteBitmap } from "@rarefriends/friendsdk/sprites";
 import { derivePhaseField, selectFramePair } from "./src/phase-core.ts";
+import { draftIndexForPoint } from "./src/draft-pointer-core.ts";
 import { mountPhaserSurvival, type PhaserSurvivalController } from "./src/phaser-survival.ts";
 import type { FrameCandidate, FrameRows, PixelClass, SelectedFramePair } from "./src/types.ts";
 import "./style.css";
@@ -141,14 +142,10 @@ function draftIndexFromPointer(canvas: HTMLCanvasElement, event: PointerEvent): 
   if (canvas.dataset.draftOpen !== "true") return null;
   const rect = canvas.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0) return null;
+  const count = Number(canvas.dataset.draftCount ?? "0");
   const x = (event.clientX - rect.left) * 960 / rect.width;
   const y = (event.clientY - rect.top) * 640 / rect.height;
-  if (y < 205 || y > 435) return null;
-  const centers = [220, 480, 740];
-  for (let index = 0; index < centers.length; index++) {
-    if (Math.abs(x - centers[index]) <= 110) return index;
-  }
-  return null;
+  return draftIndexForPoint(x, y, count);
 }
 
 export default function RareShiftV2({ friendId, client, paused }: GameComponentProps) {
