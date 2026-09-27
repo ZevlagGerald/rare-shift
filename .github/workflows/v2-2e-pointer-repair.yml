@@ -117,11 +117,11 @@ jobs:
       - name: V2-2D Signal Arc regression browser proof
         run: npm run test:v2-2d-browser
 
-      - name: V2-2E integrated cross-weapon browser proof
-        run: npm run test:v2-2e-browser
-
       - name: One-card pointer browser regression
         run: npm run test:v2-2e-pointer-browser
+
+      - name: V2-2E integrated cross-weapon browser proof
+        run: npm run test:v2-2e-browser
 
       - name: Upload repair evidence
         uses: actions/upload-artifact@v4
