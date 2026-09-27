@@ -53,7 +53,14 @@ function qualify(width) {
     await canvas.waitFor({ state: "visible" });
     await canvas.focus();
     const data = name => canvas.getAttribute(`data-${name}`);
-    const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
+    const route = [
+      "ArrowRight", "ArrowRight", "ArrowRight", "ArrowRight",
+      "ArrowDown", "ArrowDown", "ArrowDown",
+      "ArrowLeft", "ArrowLeft", "ArrowLeft", "ArrowLeft", "ArrowLeft", "ArrowLeft", "ArrowLeft",
+      "ArrowUp", "ArrowUp", "ArrowUp", "ArrowUp", "ArrowUp", "ArrowUp",
+      "ArrowRight", "ArrowRight", "ArrowRight", "ArrowRight", "ArrowRight", "ArrowRight", "ArrowRight",
+      "ArrowDown", "ArrowDown", "ArrowDown",
+    ];
     let routeIndex = 0;
 
     assert.equal(await data("stage"), "v2-survival");
@@ -79,6 +86,25 @@ function qualify(width) {
       }
       assert.equal(await data("draft-open"), "true", `expected ${label}`);
       assert.ok(Number(await data("level")) >= minimumLevel, `${label} must be level ${minimumLevel}+`);
+    };
+
+    const resolvePostBuildDrafts = async label => {
+      let resolved = 0;
+      while (bool(await data("draft-open")) && resolved < 8) {
+        const ids = list(await data("draft-ids"));
+        const count = Number(await data("draft-count"));
+        assert.equal(ids.length, count, `${label} draft ids/count must agree`);
+        assert.ok(count >= 1 && count <= 3, `${label} draft count must remain bounded`);
+        let index = ids.indexOf("FIELD_REPAIR");
+        if (index < 0) index = ids.indexOf("SIGNAL_MAGNET");
+        if (index < 0) index = ids.indexOf("DELTA_RANK");
+        if (index < 0) index = 0;
+        console.log(`V2_2E_SURVIVAL_DRAFT_${width}=L${await data("level")}:${ids.join(",")}=>${ids[index]}`);
+        await clickDraft(canvas, index, count);
+        await page.waitForTimeout(180);
+        resolved += 1;
+      }
+      assert.equal(await data("draft-open"), "false", `${label} must resume combat after bounded legal draft resolution`);
     };
 
     // Representative closeout path: DELTA + ORBIT + ECHO + SIGNAL ARC.
@@ -114,7 +140,7 @@ function qualify(width) {
     assert.equal(await data("echo-owned"), "true");
     assert.equal(await data("signal-owned"), "true");
     assert.equal(await data("vector-owned"), "false");
-    assert.equal(await data("draft-open"), "false");
+    if (bool(await data("draft-open"))) await resolvePostBuildDrafts("post-build");
     assert.equal(await data("controls-dimmed"), "false");
     assert.equal(await data("dead"), "false");
 
@@ -133,6 +159,10 @@ function qualify(width) {
     const integratedDeadline = Date.now() + 30_000;
     let cycles = 0;
     while (Date.now() < integratedDeadline) {
+      if (bool(await data("draft-open"))) {
+        await resolvePostBuildDrafts("integrated-observation");
+        continue;
+      }
       if (bool(await data("dead"))) throw new Error("died during V2-2E integrated four-weapon observation");
       assert.equal(Number(await data("weapon-slots-used")), 4, "weapon capacity must remain exactly 4/4");
       assert.ok(Number(await data("active-enemies")) <= 48, "enemy pool must remain hard-capped");
@@ -140,8 +170,6 @@ function qualify(width) {
       assert.ok(Number(await data("vector-in-flight")) <= 2, "VECTOR pool evidence must remain within global cap even when unowned");
       assert.ok(list(await data("signal-last-chain-ids")).length <= 3, "SIGNAL ARC chain must remain hard-capped");
 
-      // SHIFT intentionally clears the last-chain snapshot. Do not close the
-      // integrated proof until a real post-SHIFT ARC cast has repopulated it.
       const integrated =
         Number(await data("orbit-hits")) > orbitHitsBefore
         && Number(await data("echo-placements")) > echoPlacementsBefore
@@ -160,11 +188,14 @@ function qualify(width) {
       if (cycles % 4 === 0 && !bool(await data("draft-open"))) {
         await shift(canvas, width);
         await page.waitForTimeout(320);
-        await shift(canvas, width);
-        await page.waitForTimeout(320);
+        if (!bool(await data("draft-open"))) {
+          await shift(canvas, width);
+          await page.waitForTimeout(320);
+        }
       }
     }
 
+    if (bool(await data("draft-open"))) await resolvePostBuildDrafts("final-integrated");
     assert.ok(Number(await data("orbit-hits")) > orbitHitsBefore, "ORBIT must continue real contact activity under 4/4 load");
     assert.ok(Number(await data("echo-placements")) > echoPlacementsBefore, "ECHO must continue placing mines under 4/4 load");
     assert.ok(Number(await data("echo-armed-transitions")) > echoArmedBefore, "ECHO must still arm when leaving its recorded phase");
