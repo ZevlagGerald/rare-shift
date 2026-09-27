@@ -53,7 +53,7 @@ function qualify(width) {
     const moveUntilDraft = async (minimumLevel, deadlineMs, label) => {
       const deadline = Date.now() + deadlineMs;
       while (Date.now() < deadline) {
-        if (bool(await data("dead"))) throw new Error(`died before ${label}; level=${await data("level")} hp=${await data("hp")} kills=${await data("kills")}`);
+        if (bool(await data("dead"))) throw new Error(`died before ${label}; level=${await data("level")} hp=${await data("hp")} kills=${await data("kills")} delta=${await data("delta-rank")}`);
         if (bool(await data("draft-open")) && Number(await data("level")) >= minimumLevel) return;
         if (!bool(await data("draft-open"))) {
           await canvas.press(route[routeIndex++ % route.length], { delay: minimumLevel >= 5 ? 520 : 460 });
@@ -64,7 +64,7 @@ function qualify(width) {
           }
         }
       }
-      throw new Error(`timeout before ${label}; level=${await data("level")} hp=${await data("hp")} kills=${await data("kills")}`);
+      throw new Error(`timeout before ${label}; level=${await data("level")} hp=${await data("hp")} kills=${await data("kills")} delta=${await data("delta-rank")}`);
     };
 
     const choose = async (id, minimumLevel, label) => {
@@ -77,9 +77,9 @@ function qualify(width) {
       assert.equal(await data("draft-open"), "false", `${label} must resume combat`);
     };
 
-    const investDeltaWithNaturalRepairs = async (targetRank, label) => {
+    const investDelta = async (targetRank, label) => {
       let nextLevel = Number(await data("level")) + 1;
-      let repairCount = 0;
+      let repairUsed = false;
       while (Number(await data("delta-rank")) < targetRank) {
         await moveUntilDraft(nextLevel, 135_000, label);
         const ids = list(await data("draft-ids"));
@@ -87,11 +87,12 @@ function qualify(width) {
         const repairIndex = ids.indexOf("FIELD_REPAIR");
         const deltaIndex = ids.indexOf("DELTA_RANK");
 
-        // This is a genuine player decision, not a test grant. Preserve enough HP
-        // for the longer pre-V2-4 run whenever the real draft offers FIELD REPAIR.
-        if (hp <= 70 && repairIndex >= 0) {
+        // At most one real repair may be taken between consecutive DELTA ranks.
+        // This models a rational survival tradeoff without allowing healing to
+        // starve the specialization objective indefinitely.
+        if (!repairUsed && hp <= 50 && repairIndex >= 0) {
           await clickDraft(canvas, repairIndex, ids.length);
-          repairCount += 1;
+          repairUsed = true;
           await page.waitForTimeout(220);
           assert.ok(Number(await data("hp")) > hp, `${label} repair must actually restore HP`);
           nextLevel = Number(await data("level")) + 1;
@@ -103,7 +104,6 @@ function qualify(width) {
         await page.waitForTimeout(220);
         assert.equal(await data("draft-open"), "false");
       }
-      console.log(`V2_3B1_${label.replaceAll(" ", "_").toUpperCase()}_REPAIRS=${repairCount}`);
       assert.equal(Number(await data("delta-rank")), targetRank);
     };
 
@@ -112,27 +112,28 @@ function qualify(width) {
     assert.equal(await data("delta-world-scale"), "8");
     assert.equal(await data("delta-damage"), "12");
 
-    // Establish a viable natural four-slot build before specializing DELTA.
+    // Use three continuously useful qualified Rank-I support families before
+    // specializing DELTA. This remains normal production play with no state hooks.
     await choose("ORBIT_NODES", 2, "Level 2 ORBIT support acquisition");
     assert.equal(await data("orbit-owned"), "true");
-    await choose("ECHO_MINE", 3, "Level 3 ECHO support acquisition");
-    assert.equal(await data("echo-owned"), "true");
+    await choose("VECTOR_NEEDLE", 3, "Level 3 VECTOR support acquisition");
+    assert.equal(await data("vector-owned"), "true");
     await choose("SIGNAL_ARC", 4, "Level 4 SIGNAL support acquisition");
     assert.equal(await data("signal-owned"), "true");
     assert.equal(await data("weapon-slots-used"), "4");
 
-    await investDeltaWithNaturalRepairs(2, "DELTA Rank II");
+    await investDelta(2, "DELTA Rank II");
     assert.equal(await data("delta-cooldown-ms"), "720");
     assert.equal(await data("delta-world-scale"), "8");
     assert.equal(await data("delta-damage"), "12");
 
-    await investDeltaWithNaturalRepairs(3, "DELTA Rank III");
+    await investDelta(3, "DELTA Rank III");
     assert.equal(await data("delta-cooldown-ms"), "720");
     assert.equal(await data("delta-world-scale"), "9.5");
     assert.equal(await data("delta-damage"), "12");
     await page.locator(".rf-game-frame").screenshot({ path: resolve(`artifacts/rare-shift-v2-3b1-delta-rank3-${width}.png`) });
 
-    await investDeltaWithNaturalRepairs(4, "DELTA Rank IV");
+    await investDelta(4, "DELTA Rank IV");
     assert.equal(await data("delta-stagger-ms"), "0");
 
     const scheduledBefore = Number(await data("delta-echo-scheduled"));
@@ -157,7 +158,7 @@ function qualify(width) {
       assert.equal(Number(await data("delta-echo-scheduled")), beforeRearmed + 1, "rearmed Rank IV SHIFT must schedule another bounded echo");
     }
 
-    await investDeltaWithNaturalRepairs(5, "DELTA Rank V");
+    await investDelta(5, "DELTA Rank V");
     assert.equal(await data("delta-cooldown-ms"), "720");
     assert.equal(await data("delta-world-scale"), "9.5");
     assert.equal(await data("delta-damage"), "14");
@@ -173,7 +174,7 @@ function qualify(width) {
       } else {
         const ids = list(await data("draft-ids"));
         const repairIndex = ids.indexOf("FIELD_REPAIR");
-        const choiceIndex = Number(await data("hp")) <= 70 && repairIndex >= 0 ? repairIndex : 0;
+        const choiceIndex = Number(await data("hp")) <= 50 && repairIndex >= 0 ? repairIndex : 0;
         await clickDraft(canvas, choiceIndex, ids.length);
         await page.waitForTimeout(180);
       }
