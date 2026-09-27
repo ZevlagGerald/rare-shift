@@ -12,12 +12,18 @@ import {
   type EchoMineCore,
 } from "./echo-core.ts";
 import {
+  buildDeltaEchoProfile,
   buildDeltaProfile,
+  canScheduleDeltaEcho,
+  deltaEchoHitsTarget,
   deltaHitsTarget,
   enemyBaseHp,
   enemyContactDamage,
   enemyMoveSpeed,
+  isDeltaEchoTargetEligible,
   isEnemyCorporeal,
+  migrateDeltaCooldownAccumulator,
+  type DeltaEchoProfile,
   type V2EnemyKind,
 } from "./phase-combat-core.ts";
 import {
@@ -67,6 +73,7 @@ interface EnemyRuntime {
   hp: number;
   x: number;
   y: number;
+  staggerUntilMs: number;
   view: Phaser.GameObjects.Container;
 }
 
@@ -91,10 +98,15 @@ interface EchoMineRuntime {
   view: Phaser.GameObjects.Graphics;
 }
 
+interface PendingDeltaEchoRuntime {
+  readonly phase: Phase;
+  readonly scheduledAtMs: number;
+  readonly profile: DeltaEchoProfile;
+}
+
 const VIEW_W = 960;
 const VIEW_H = 640;
 const PLAYER_SPEED = 220;
-const DELTA_PIXEL_SCALE = 8;
 const PICKUP_POOL_SIZE = 64;
 
 function hex(value: string): number { return Number.parseInt(value.slice(1), 16); }
@@ -130,6 +142,13 @@ class SurvivalScene extends Phaser.Scene {
   private kills = 0;
   private shifts = 0;
   private deltaRank = 1;
+  private deltaPrimaryPulses = 0;
+  private deltaEchoPending: PendingDeltaEchoRuntime | null = null;
+  private deltaEchoLastScheduledAt: number | null = null;
+  private deltaEchoSchedules = 0;
+  private deltaEchoFires = 0;
+  private deltaEchoHits = 0;
+  private deltaStaggers = 0;
   private pickupRadius = 76;
 
   private vectorOwned = false;
@@ -249,6 +268,7 @@ class SurvivalScene extends Phaser.Scene {
       this.attackAccumulator %= profile.cooldownMs;
       this.fireDelta(profile);
     }
+    this.updatePendingDeltaEcho();
 
     if (this.vectorOwned) {
       this.vectorAccumulator = Math.min(VECTOR_RANK_I.cooldownMs, this.vectorAccumulator + dt);
@@ -312,7 +332,7 @@ class SurvivalScene extends Phaser.Scene {
   private buildPools(): void {
     for (let i = 0; i < V21_MAX_ACTIVE_ENEMIES; i++) {
       const view = this.add.container(-500, -500).setDepth(20).setVisible(false);
-      this.enemies.push({ id: -1, active: false, kind: "TRACE", hp: 0, x: -500, y: -500, view });
+      this.enemies.push({ id: -1, active: false, kind: "TRACE", hp: 0, x: -500, y: -500, staggerUntilMs: 0, view });
     }
     for (let i = 0; i < PICKUP_POOL_SIZE; i++) {
       const view = this.add.container(-500, -500).setDepth(15).setVisible(false);
@@ -390,7 +410,7 @@ class SurvivalScene extends Phaser.Scene {
     const slot = this.enemies.find(enemy => !enemy.active);
     if (!slot) return;
     const spec = buildSpawnSpec(this.seed, this.spawnIndex++, this.elapsedActiveMs, { x: this.friend.x, y: this.friend.y });
-    slot.id = spec.id; slot.active = true; slot.kind = spec.kind; slot.hp = enemyBaseHp(spec.kind); slot.x = spec.position.x; slot.y = spec.position.y;
+    slot.id = spec.id; slot.active = true; slot.kind = spec.kind; slot.hp = enemyBaseHp(spec.kind); slot.x = spec.position.x; slot.y = spec.position.y; slot.staggerUntilMs = 0;
     slot.view.setPosition(slot.x, slot.y).setVisible(true);
     this.paintEnemy(slot.view, spec.kind);
     slot.view.setAlpha(isEnemyCorporeal(spec.kind, this.phase) ? 1 : 0.24);
@@ -400,8 +420,11 @@ class SurvivalScene extends Phaser.Scene {
     for (const enemy of this.enemies) {
       if (!enemy.active) continue;
       const dx = this.friend.x - enemy.x, dy = this.friend.y - enemy.y, distance = Math.max(0.001, Math.hypot(dx, dy));
-      const speed = enemyMoveSpeed(enemy.kind);
-      enemy.x += dx / distance * speed * dt; enemy.y += dy / distance * speed * dt; enemy.view.setPosition(enemy.x, enemy.y);
+      if (this.elapsedActiveMs >= enemy.staggerUntilMs) {
+        const speed = enemyMoveSpeed(enemy.kind);
+        enemy.x += dx / distance * speed * dt; enemy.y += dy / distance * speed * dt;
+      }
+      enemy.view.setPosition(enemy.x, enemy.y);
       const corporeal = isEnemyCorporeal(enemy.kind, this.phase);
       enemy.view.setAlpha(corporeal ? 1 : 0.22);
       if (corporeal && distance < 32 && this.elapsedActiveMs - this.lastContactAt >= V21_CONTACT_INVULN_MS) {
@@ -413,20 +436,60 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private fireDelta(profile: ReturnType<typeof buildDeltaProfile>): void {
+    this.deltaPrimaryPulses += 1;
     this.tweens.killTweensOf(this.burst);
     this.burst.clear().setVisible(true).setPosition(this.friend.x, this.friend.y).setScale(this.reduced ? 1 : 0.72).setAlpha(1);
     const tone = this.phase === "A" ? hex(V2_PALETTE.phaseA) : hex(V2_PALETTE.phaseB);
     this.burst.fillStyle(hex(V2_PALETTE.common), this.reduced ? 0.16 : 0.22);
-    for (const point of profile.points) this.burst.fillRect(point.x * DELTA_PIXEL_SCALE - 6, point.y * DELTA_PIXEL_SCALE - 6, 12, 12);
+    for (const point of profile.points) this.burst.fillRect(point.x * profile.worldScale - 6, point.y * profile.worldScale - 6, 12, 12);
     this.burst.fillStyle(tone, this.reduced ? 0.62 : 0.96);
-    for (const point of profile.points) this.burst.fillRect(point.x * DELTA_PIXEL_SCALE - 4, point.y * DELTA_PIXEL_SCALE - 4, 8, 8);
+    for (const point of profile.points) this.burst.fillRect(point.x * profile.worldScale - 4, point.y * profile.worldScale - 4, 8, 8);
     const duration = effectDuration("DELTA_BURST", this.reduced);
     if (this.reduced) this.time.delayedCall(duration, () => this.burst.setVisible(false));
     else this.tweens.add({ targets: this.burst, scaleX: 1.08, scaleY: 1.08, alpha: 0, duration, ease: "Quad.Out", onComplete: () => this.burst.setVisible(false).setAlpha(1).setScale(1) });
     for (const enemy of this.enemies) {
       if (!enemy.active || !isEnemyCorporeal(enemy.kind, this.phase)) continue;
-      if (!deltaHitsTarget(profile, enemy.x - this.friend.x, enemy.y - this.friend.y, DELTA_PIXEL_SCALE)) continue;
+      if (!deltaHitsTarget(profile, enemy.x - this.friend.x, enemy.y - this.friend.y)) continue;
       enemy.hp -= profile.damage; enemy.view.setAlpha(0.55);
+      if (profile.staggerMs > 0) {
+        enemy.staggerUntilMs = Math.max(enemy.staggerUntilMs, this.elapsedActiveMs + profile.staggerMs);
+        this.deltaStaggers += 1;
+      }
+      this.time.delayedCall(effectDuration("ENEMY_HIT", this.reduced), () => { if (enemy.active) enemy.view.setAlpha(isEnemyCorporeal(enemy.kind, this.phase) ? 1 : 0.22); });
+      if (enemy.hp <= 0) this.killEnemy(enemy);
+    }
+  }
+
+  private scheduleDeltaEcho(previousPhase: Phase): void {
+    if (!canScheduleDeltaEcho(this.deltaRank, this.deltaEchoLastScheduledAt, this.elapsedActiveMs)) return;
+    const profile = buildDeltaEchoProfile(this.pair.a.rows, this.pair.b.rows, previousPhase);
+    this.deltaEchoPending = { phase: previousPhase, scheduledAtMs: this.elapsedActiveMs + profile.delayMs, profile };
+    this.deltaEchoLastScheduledAt = this.elapsedActiveMs;
+    this.deltaEchoSchedules += 1;
+  }
+
+  private updatePendingDeltaEcho(): void {
+    const pending = this.deltaEchoPending;
+    if (!pending || this.elapsedActiveMs < pending.scheduledAtMs) return;
+    this.deltaEchoPending = null;
+    this.fireDeltaEcho(pending);
+  }
+
+  private fireDeltaEcho(pending: PendingDeltaEchoRuntime): void {
+    this.deltaEchoFires += 1;
+    const originX = this.friend.x, originY = this.friend.y;
+    const tone = hex(pending.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB);
+    const fx = this.add.graphics().setPosition(originX, originY).setDepth(25);
+    fx.fillStyle(tone, this.reduced ? 0.18 : 0.34);
+    for (const point of pending.profile.points) fx.fillRect(point.x * pending.profile.worldScale - 3, point.y * pending.profile.worldScale - 3, 6, 6);
+    this.time.delayedCall(this.reduced ? 55 : 110, () => fx.destroy());
+
+    for (const enemy of this.enemies) {
+      if (!enemy.active || !isDeltaEchoTargetEligible(enemy.kind, pending.phase, this.phase)) continue;
+      if (!deltaEchoHitsTarget(pending.profile, enemy.x - originX, enemy.y - originY)) continue;
+      enemy.hp -= pending.profile.damage;
+      this.deltaEchoHits += 1;
+      enemy.view.setAlpha(0.42);
       this.time.delayedCall(effectDuration("ENEMY_HIT", this.reduced), () => { if (enemy.active) enemy.view.setAlpha(isEnemyCorporeal(enemy.kind, this.phase) ? 1 : 0.22); });
       if (enemy.hp <= 0) this.killEnemy(enemy);
     }
@@ -764,11 +827,13 @@ class SurvivalScene extends Phaser.Scene {
     const title = this.add.text(0, -54, titleText, { fontFamily: "monospace", fontSize: "17px", color: V2_PALETTE.common, fontStyle: "bold", align: "center", wordWrap: { width: 190 } }).setOrigin(0.5);
     const detailText = isDelta ? `RANK ${romanRank(this.deltaRank)} → ${romanRank(nextRank)}` : (isVector || isOrbit || isEcho || isSignal) ? "ACQUIRE · RANK I" : "RUN UTILITY";
     const detail = this.add.text(0, -27, detailText, { fontFamily: "monospace", fontSize: "9px", color: isPhaseWeapon ? (this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB) : "#748392", letterSpacing: 1 }).setOrigin(0.5);
-    const desc = this.add.text(0, 61, choice.description, { fontFamily: "monospace", fontSize: "11px", color: "#bac5d0", align: "center", wordWrap: { width: 178 } }).setOrigin(0.5);
+    const deltaDescription = nextRank === 2 ? "DENSE SAMPLE · cadence tightens to 720ms." : nextRank === 3 ? "FIELD SCALE · canonical mask expands in world-space." : nextRank === 4 ? "PHASE ECHO · SHIFT leaves one bounded previous-phase echo." : "LOCKED IDENTITY · matching-phase pulse gains bounded stagger.";
+    const desc = this.add.text(0, 61, isDelta ? deltaDescription : choice.description, { fontFamily: "monospace", fontSize: "11px", color: "#bac5d0", align: "center", wordWrap: { width: 178 } }).setOrigin(0.5);
     container.add([bg, tag, title, detail]);
     if (isDelta) {
       const preview = this.add.graphics(), profile = buildDeltaProfile(this.pair.a.rows, this.pair.b.rows, this.phase, nextRank);
-      preview.fillStyle(border, 0.82); for (const point of profile.points) preview.fillRect(point.x * 1.35 - 1.5, point.y * 1.35 - 1.5, 3, 3);
+      const previewScale = 1.35 * profile.worldScale / 8;
+      preview.fillStyle(border, 0.82); for (const point of profile.points) preview.fillRect(point.x * previewScale - 1.5, point.y * previewScale - 1.5, 3, 3);
       preview.setPosition(0, 9); container.add(preview);
     } else if (isVector) {
       const glyph = this.add.graphics().lineStyle(3, border, 0.82); glyph.lineBetween(-28, 8, 28, -8); glyph.strokeCircle(25, -7, 5); glyph.setPosition(0, 2); container.add(glyph);
@@ -796,8 +861,11 @@ class SurvivalScene extends Phaser.Scene {
     if (!this.draftOpen) return;
     const choice = this.draftChoices[index]; if (!choice || choice.disabled) return;
     const wasEchoOwned = this.echoOwned;
+    const oldDeltaRank = this.deltaRank;
     const next = applyV21Draft(this.buildState(), choice.id as V21DraftId);
-    this.deltaRank = next.deltaRank; this.hp = next.hp; this.pickupRadius = next.pickupRadius;
+    this.deltaRank = next.deltaRank;
+    if (this.deltaRank !== oldDeltaRank) this.attackAccumulator = migrateDeltaCooldownAccumulator(this.attackAccumulator, oldDeltaRank, this.deltaRank);
+    this.hp = next.hp; this.pickupRadius = next.pickupRadius;
     this.vectorOwned = next.vectorOwned === true;
     this.orbitOwned = next.orbitOwned === true;
     this.echoOwned = next.echoOwned === true;
@@ -833,6 +901,7 @@ class SurvivalScene extends Phaser.Scene {
       this.signalFx.clear().setVisible(false);
     }
     if (this.echoOwned) this.transitionEchoMinesForShift(nextPhase);
+    this.scheduleDeltaEcho(this.phase);
     this.phase = nextPhase; this.shifts += 1; this.paintFriend();
     if (this.orbitOwned) this.syncOrbitNodeView();
     for (const enemy of this.enemies) if (enemy.active) enemy.view.setAlpha(isEnemyCorporeal(enemy.kind, this.phase) ? 1 : 0.22);
@@ -894,6 +963,17 @@ class SurvivalScene extends Phaser.Scene {
     canvas.dataset.draftCount = String(this.draftChoices.length); canvas.dataset.draftIds = this.draftChoices.map(choice => choice.id).join(",");
     canvas.dataset.activeEnemies = String(this.enemies.filter(enemy => enemy.active).length); canvas.dataset.qualified = this.qualified ? "true" : "false"; canvas.dataset.dead = this.dead ? "true" : "false";
     canvas.dataset.seed = String(this.seed); canvas.dataset.controlsDimmed = this.draftOpen ? "true" : "false"; canvas.dataset.deltaFx = "canonical-exclusive";
+    const deltaProfile = buildDeltaProfile(this.pair.a.rows, this.pair.b.rows, this.phase, this.deltaRank);
+    canvas.dataset.deltaDamage = String(deltaProfile.damage);
+    canvas.dataset.deltaCooldownMs = String(deltaProfile.cooldownMs);
+    canvas.dataset.deltaWorldScale = String(deltaProfile.worldScale);
+    canvas.dataset.deltaPrimaryPulses = String(this.deltaPrimaryPulses);
+    canvas.dataset.deltaEchoPending = this.deltaEchoPending ? "true" : "false";
+    canvas.dataset.deltaEchoSchedules = String(this.deltaEchoSchedules);
+    canvas.dataset.deltaEchoFires = String(this.deltaEchoFires);
+    canvas.dataset.deltaEchoHits = String(this.deltaEchoHits);
+    canvas.dataset.deltaStaggers = String(this.deltaStaggers);
+    canvas.dataset.deltaStaggeredEnemies = String(this.enemies.filter(enemy => enemy.active && enemy.staggerUntilMs > this.elapsedActiveMs).length);
     canvas.dataset.weaponSlotsUsed = String(this.weaponSlotsUsed);
     canvas.dataset.vectorOwned = this.vectorOwned ? "true" : "false"; canvas.dataset.vectorTargetId = this.vectorTargetId === null ? "" : String(this.vectorTargetId);
     canvas.dataset.vectorTargetKind = this.vectorTargetKind ?? ""; canvas.dataset.vectorShots = String(this.vectorShots); canvas.dataset.vectorHits = String(this.vectorHits);
