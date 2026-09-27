@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="240" viewBox="0 0 960 240" shape-rendering="crispEdges">
+  <rect width="960" height="240" fill="#0b0e12"/>
+  <g font-family="monospace" fill="#e8edf2">
+    <text x="24" y="24" font-size="14">HUD PRIMITIVES</text>
+  </g>
+  <g id="hp" transform="translate(24 42)">
+    <rect width="280" height="28" fill="#11151b" stroke="#e8edf2" stroke-width="2"/>
+    <rect x="4" y="4" width="198" height="20" fill="#ff5964"/>
+    <path d="M0 0h24v4H8v20h16v4H0z" fill="#e8edf2" opacity=".22"/>
+    <text x="10" y="19" font-family="monospace" font-size="12" fill="#0b0e12">HP 71%</text>
+  </g>
+  <g id="xp" transform="translate(24 82)">
+    <rect width="280" height="18" fill="#11151b" stroke="#202832" stroke-width="2"/>
+    <rect x="3" y="3" width="150" height="12" fill="#4cc9f0"/>
+    <rect x="153" y="3" width="52" height="12" fill="#f72585" opacity=".55"/>
+  </g>
+  <g id="phase" transform="translate(332 42)">
+    <rect width="150" height="58" fill="#11151b" stroke="#202832" stroke-width="2"/>
+    <path d="M12 12h36v6H30v8H18v18H12z" fill="#4cc9f0"/>
+    <text x="60" y="35" font-family="monospace" font-size="16" fill="#e8edf2">PHASE A</text>
+  </g>
+  <g id="shift" transform="translate(510 36)">
+    <rect width="164" height="72" rx="8" fill="#11151b" stroke="#e8edf2" stroke-width="2"/>
+    <path d="M14 18h28l-8-8 6-6 18 18-18 18-6-6 8-8H14z" fill="#4cc9f0"/>
+    <path d="M150 54h-28l8 8-6 6-18-18 18-18 6 6-8 8h28z" fill="#f72585"/>
+    <text x="66" y="31" font-family="monospace" font-size="12" fill="#e8edf2">SPACE</text>
+    <text x="66" y="50" font-family="monospace" font-size="14" fill="#e8edf2">SHIFT</text>
+  </g>
+  <g transform="translate(24 132)">
+    <g id="card1">
+      <rect width="280" height="88" fill="#11151b" stroke="#4cc9f0" stroke-width="2"/>
+      <rect x="8" y="8" width="48" height="48" fill="#202832" stroke="#4cc9f0"/>
+      <path d="M20 44l12-24 12 24-12-8z" fill="#4cc9f0"/>
+      <text x="68" y="26" font-family="monospace" font-size="14" fill="#e8edf2">DELTA BURST II</text>
+      <text x="68" y="46" font-family="monospace" font-size="11" fill="#7b8794">signature weapon</text>
+      <text x="68" y="66" font-family="monospace" font-size="11" fill="#e8edf2">pulse size + cadence</text>
+    </g>
+    <g transform="translate(304 0)">
+      <rect width="280" height="88" fill="#11151b" stroke="#e8edf2" stroke-width="2"/>
+      <rect x="8" y="8" width="48" height="48" fill="#202832" stroke="#e8edf2"/>
+      <circle cx="32" cy="32" r="13" fill="none" stroke="#e8edf2" stroke-width="4"/>
+      <text x="68" y="26" font-family="monospace" font-size="14" fill="#e8edf2">COMMON CORE</text>
+      <text x="68" y="46" font-family="monospace" font-size="11" fill="#7b8794">protocol</text>
+      <text x="68" y="66" font-family="monospace" font-size="11" fill="#e8edf2">stability after SHIFT</text>
+    </g>
+    <g transform="translate(608 0)">
+      <rect width="280" height="88" fill="#11151b" stroke="#f72585" stroke-width="2"/>
+      <rect x="8" y="8" width="48" height="48" fill="#202832" stroke="#f72585"/>
+      <path d="M16 32h32M32 16v32M22 22l20 20M42 22L22 42" stroke="#f72585" stroke-width="3"/>
+      <text x="68" y="26" font-family="monospace" font-size="14" fill="#e8edf2">VECTOR NEEDLE</text>
+      <text x="68" y="46" font-family="monospace" font-size="11" fill="#7b8794">new weapon</text>
+      <text x="68" y="66" font-family="monospace" font-size="11" fill="#e8edf2">fast target pressure</text>
+    </g>
+  </g>
+</svg>
