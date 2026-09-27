@@ -10,6 +10,13 @@ import {
   type V2EnemyKind,
 } from "./phase-combat-core.ts";
 import {
+  advanceOrbitAngle,
+  isOrbitContactLegal,
+  orbitDirectionForPhase,
+  orbitNodePosition,
+  ORBIT_RANK_I,
+} from "./orbit-core.ts";
+import {
   addSignalXp,
   buildSpawnSpec,
   clampPlayerPosition,
@@ -93,6 +100,7 @@ class SurvivalScene extends Phaser.Scene {
   private pickups: PickupRuntime[] = [];
   private vectorProjectiles: VectorProjectileRuntime[] = [];
   private vectorReticle!: Phaser.GameObjects.Graphics;
+  private orbitNode!: Phaser.GameObjects.Graphics;
   private burst!: Phaser.GameObjects.Graphics;
   private background!: Phaser.GameObjects.Graphics;
 
@@ -103,6 +111,7 @@ class SurvivalScene extends Phaser.Scene {
   private shifts = 0;
   private deltaRank = 1;
   private pickupRadius = 76;
+
   private vectorOwned = false;
   private vectorAccumulator = 0;
   private vectorTargetId: number | null = null;
@@ -111,6 +120,14 @@ class SurvivalScene extends Phaser.Scene {
   private vectorHits = 0;
   private vectorAcquisitions = 0;
   private vectorShiftInvalidations = 0;
+
+  private orbitOwned = false;
+  private orbitAngle = 0;
+  private orbitHits = 0;
+  private orbitReversals = 0;
+  private orbitLastShiftAnchor: number | null = null;
+  private readonly orbitLastHitAt = new Map<number, number>();
+
   private weaponSlotsUsed = 1;
   private elapsedActiveMs = 0;
   private spawnAccumulator = 0;
@@ -162,6 +179,7 @@ class SurvivalScene extends Phaser.Scene {
     this.cameras.main.startFollow(this.friend, true, 0.12, 0.12);
     this.burst = this.add.graphics().setDepth(24).setVisible(false);
     this.vectorReticle = this.add.graphics().setDepth(27).setVisible(false);
+    this.orbitNode = this.add.graphics().setDepth(28).setVisible(false);
     this.buildPools();
     this.buildHud();
     this.installKeyboard();
@@ -201,6 +219,9 @@ class SurvivalScene extends Phaser.Scene {
       }
       this.updateVectorProjectiles(dt / 1000);
     }
+
+    if (this.orbitOwned) this.updateOrbit(dt);
+    else this.orbitNode.setVisible(false);
 
     this.updateEnemies(dt / 1000);
     this.updatePickups(dt / 1000);
@@ -295,7 +316,7 @@ class SurvivalScene extends Phaser.Scene {
     this.hpBar = this.add.graphics().setScrollFactor(0).setDepth(101);
     this.xpBar = this.add.graphics().setScrollFactor(0).setDepth(101);
     this.hudText = this.add.text(40, 18, "", { fontFamily: "monospace", fontSize: "14px", color: V2_PALETTE.common, fontStyle: "bold" }).setScrollFactor(0).setDepth(102);
-    this.buildText = this.add.text(574, 20, "", { fontFamily: "monospace", fontSize: "11px", color: "#9eabb8", fontStyle: "bold" }).setScrollFactor(0).setDepth(102);
+    this.buildText = this.add.text(574, 20, "", { fontFamily: "monospace", fontSize: "10px", color: "#9eabb8", fontStyle: "bold" }).setScrollFactor(0).setDepth(102);
     this.phaseText = this.add.text(790, 16, "", { fontFamily: "monospace", fontSize: "14px", color: V2_PALETTE.phaseB, fontStyle: "bold", align: "right" }).setScrollFactor(0).setDepth(102);
     this.statusText = this.add.text(480, 82, "MOVE · AUTO-FIRE · SPACE / SHIFT", { fontFamily: "monospace", fontSize: "10px", color: "#aeb9c5", backgroundColor: "#0b0e12", padding: { x: 8, y: 4 } }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(110);
     this.updateHud();
@@ -307,7 +328,7 @@ class SurvivalScene extends Phaser.Scene {
     this.xpBar.clear().fillStyle(0x202832, 1).fillRect(310, 48, 240, 8);
     this.xpBar.fillStyle(0x7ee787, 1).fillRect(310, 48, 240 * this.xp / xpThreshold(this.level), 8);
     this.hudText.setText(`HP ${Math.max(0, this.hp)}/${V21_PLAYER_MAX_HP}   LV ${this.level}   XP ${this.xp}/${xpThreshold(this.level)}`);
-    this.buildText.setText(`K ${this.kills} · Δ ${romanRank(this.deltaRank)} · VEC ${this.vectorOwned ? "I" : "--"}`);
+    this.buildText.setText(`K ${this.kills} · Δ ${romanRank(this.deltaRank)} · VEC ${this.vectorOwned ? "I" : "--"} · ORB ${this.orbitOwned ? "I" : "--"}`);
     this.phaseText.setColor(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB).setText(`PHASE ${this.phase}\nFRAME ${this.phase === "A" ? this.pair.a.index : this.pair.b.index}`);
     if (this.shiftButton) this.shiftButton.setStrokeStyle(2, hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB));
   }
@@ -427,9 +448,44 @@ class SurvivalScene extends Phaser.Scene {
     this.time.delayedCall(this.reduced ? 45 : 90, () => fx.destroy());
   }
 
+  private updateOrbit(dtMs: number): void {
+    this.orbitAngle = advanceOrbitAngle(this.orbitAngle, this.phase, dtMs);
+    const point = this.syncOrbitNodeView();
+    for (const enemy of this.enemies) {
+      if (!enemy.active) continue;
+      const lastHitAt = this.orbitLastHitAt.get(enemy.id) ?? null;
+      if (!isOrbitContactLegal(enemy, this.phase, point.x, point.y, lastHitAt, this.elapsedActiveMs)) continue;
+      this.orbitLastHitAt.set(enemy.id, this.elapsedActiveMs);
+      enemy.hp -= ORBIT_RANK_I.damage;
+      this.orbitHits += 1;
+      this.emitOrbitHitFx(enemy.x, enemy.y);
+      if (enemy.hp <= 0) this.killEnemy(enemy);
+    }
+  }
+
+  private syncOrbitNodeView(): { x: number; y: number } {
+    const point = orbitNodePosition(this.friend.x, this.friend.y, this.orbitAngle);
+    if (!this.orbitOwned) { this.orbitNode.setVisible(false); return point; }
+    const direction = orbitDirectionForPhase(this.phase);
+    const tone = hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB);
+    this.orbitNode.clear().setVisible(true).setPosition(point.x, point.y).setRotation(this.orbitAngle + direction * Math.PI / 2);
+    this.orbitNode.lineStyle(1, tone, 0.68).strokeCircle(0, 0, 11);
+    this.orbitNode.fillStyle(tone, 0.95).fillRect(-5, -5, 10, 10);
+    this.orbitNode.fillStyle(hex(V2_PALETTE.common), 0.72).fillRect(-18, -2, 12, 4);
+    return point;
+  }
+
+  private emitOrbitHitFx(x: number, y: number): void {
+    const tone = hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB);
+    const fx = this.add.graphics().setPosition(x, y).setDepth(29).lineStyle(2, tone, 0.78);
+    fx.strokeCircle(0, 0, 9);
+    this.time.delayedCall(this.reduced ? 45 : 85, () => fx.destroy());
+  }
+
   private killEnemy(enemy: EnemyRuntime): void {
     const deathX = enemy.x, deathY = enemy.y;
     const deathTone = enemy.kind === "TRACE" ? hex(V2_PALETTE.common) : enemy.kind === "SPLIT_A" ? hex(V2_PALETTE.phaseA) : hex(V2_PALETTE.phaseB);
+    this.orbitLastHitAt.delete(enemy.id);
     enemy.active = false; enemy.view.setVisible(false); this.kills += 1; this.emitDeathFx(deathX, deathY, deathTone);
     if (this.vectorTargetId === enemy.id) { this.vectorTargetId = null; this.vectorTargetKind = null; this.vectorReticle.setVisible(false); }
     const pickup = this.pickups.find(item => !item.active);
@@ -464,8 +520,16 @@ class SurvivalScene extends Phaser.Scene {
 
   private buildState(): V21BuildState {
     return {
-      deltaRank: this.deltaRank, hp: this.hp, maxHp: V21_PLAYER_MAX_HP, pickupRadius: this.pickupRadius,
-      vectorEnabled: true, vectorOwned: this.vectorOwned, weaponSlotsUsed: this.weaponSlotsUsed, weaponSlotCap: 4,
+      deltaRank: this.deltaRank,
+      hp: this.hp,
+      maxHp: V21_PLAYER_MAX_HP,
+      pickupRadius: this.pickupRadius,
+      vectorEnabled: true,
+      vectorOwned: this.vectorOwned,
+      orbitEnabled: true,
+      orbitOwned: this.orbitOwned,
+      weaponSlotsUsed: this.weaponSlotsUsed,
+      weaponSlotCap: 4,
     };
   }
 
@@ -486,15 +550,16 @@ class SurvivalScene extends Phaser.Scene {
 
   private makeDraftCard(x: number, choice: V21DraftChoice, index: number): Phaser.GameObjects.Container {
     const container = this.add.container(x, 320).setScrollFactor(0).setDepth(200);
-    const isDelta = choice.id === "DELTA_RANK", isVector = choice.id === "VECTOR_NEEDLE";
-    const border = (isDelta || isVector) ? hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB) : 0x657383;
-    const bg = this.add.rectangle(0, 0, 220, 230, 0x11151b, 0.99).setStrokeStyle((isDelta || isVector) ? 3 : 2, border).setInteractive({ useHandCursor: true });
+    const isDelta = choice.id === "DELTA_RANK", isVector = choice.id === "VECTOR_NEEDLE", isOrbit = choice.id === "ORBIT_NODES";
+    const isPhaseWeapon = isDelta || isVector || isOrbit;
+    const border = isPhaseWeapon ? hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB) : 0x657383;
+    const bg = this.add.rectangle(0, 0, 220, 230, 0x11151b, 0.99).setStrokeStyle(isPhaseWeapon ? 3 : 2, border).setInteractive({ useHandCursor: true });
     const tag = this.add.text(0, -91, `${index + 1} // ${choice.category}`, { fontFamily: "monospace", fontSize: "11px", color: "#8b98a7" }).setOrigin(0.5);
     const nextRank = Math.min(5, this.deltaRank + 1);
     const titleText = isDelta ? `${choice.name} ${romanRank(nextRank)}` : choice.name;
     const title = this.add.text(0, -54, titleText, { fontFamily: "monospace", fontSize: "17px", color: V2_PALETTE.common, fontStyle: "bold", align: "center", wordWrap: { width: 190 } }).setOrigin(0.5);
-    const detailText = isDelta ? `RANK ${romanRank(this.deltaRank)} → ${romanRank(nextRank)}` : isVector ? "ACQUIRE · RANK I" : "RUN UTILITY";
-    const detail = this.add.text(0, -27, detailText, { fontFamily: "monospace", fontSize: "9px", color: (isDelta || isVector) ? (this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB) : "#748392", letterSpacing: 1 }).setOrigin(0.5);
+    const detailText = isDelta ? `RANK ${romanRank(this.deltaRank)} → ${romanRank(nextRank)}` : (isVector || isOrbit) ? "ACQUIRE · RANK I" : "RUN UTILITY";
+    const detail = this.add.text(0, -27, detailText, { fontFamily: "monospace", fontSize: "9px", color: isPhaseWeapon ? (this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB) : "#748392", letterSpacing: 1 }).setOrigin(0.5);
     const desc = this.add.text(0, 61, choice.description, { fontFamily: "monospace", fontSize: "11px", color: "#bac5d0", align: "center", wordWrap: { width: 178 } }).setOrigin(0.5);
     container.add([bg, tag, title, detail]);
     if (isDelta) {
@@ -503,6 +568,10 @@ class SurvivalScene extends Phaser.Scene {
       preview.setPosition(0, 9); container.add(preview);
     } else if (isVector) {
       const glyph = this.add.graphics().lineStyle(3, border, 0.82); glyph.lineBetween(-28, 8, 28, -8); glyph.strokeCircle(25, -7, 5); glyph.setPosition(0, 2); container.add(glyph);
+    } else if (isOrbit) {
+      const glyph = this.add.graphics().lineStyle(2, border, 0.78);
+      glyph.strokeCircle(0, 2, 27); glyph.fillStyle(border, 0.95).fillRect(22, -3, 10, 10); glyph.fillStyle(hex(V2_PALETTE.common), 0.65).fillRect(12, 1, 9, 3);
+      container.add(glyph);
     } else {
       const glyph = this.add.graphics().lineStyle(2, border, 0.62); glyph.strokeRect(-12, -3, 24, 24); glyph.lineBetween(-6, 9, 6, 9); glyph.setPosition(0, -2); container.add(glyph);
     }
@@ -514,7 +583,10 @@ class SurvivalScene extends Phaser.Scene {
     const choice = this.draftChoices[index]; if (!choice || choice.disabled) return;
     const next = applyV21Draft(this.buildState(), choice.id as V21DraftId);
     this.deltaRank = next.deltaRank; this.hp = next.hp; this.pickupRadius = next.pickupRadius;
-    this.vectorOwned = next.vectorOwned === true; this.weaponSlotsUsed = next.weaponSlotsUsed ?? this.weaponSlotsUsed;
+    this.vectorOwned = next.vectorOwned === true;
+    this.orbitOwned = next.orbitOwned === true;
+    this.weaponSlotsUsed = next.weaponSlotsUsed ?? this.weaponSlotsUsed;
+    if (this.orbitOwned) this.syncOrbitNodeView();
     for (const view of this.draftViews) view.destroy(true);
     this.draftViews = []; this.draftChoices = []; this.draftBackdrop?.destroy(); this.draftBackdrop = null; this.draftOpen = false;
     this.setCombatControlsEnabled(true); this.statusText.setDepth(110).setText(`${choice.name} selected // combat resumed.`); this.updateHud(); this.syncTestState();
@@ -530,13 +602,18 @@ class SurvivalScene extends Phaser.Scene {
   private shift(): void {
     if (this.dead || this.draftOpen) return;
     this.invalidateVectorForShift();
+    if (this.orbitOwned) {
+      this.orbitLastShiftAnchor = this.orbitAngle;
+      this.orbitReversals += 1;
+    }
     this.phase = this.phase === "A" ? "B" : "A"; this.shifts += 1; this.paintFriend();
+    if (this.orbitOwned) this.syncOrbitNodeView();
     for (const enemy of this.enemies) if (enemy.active) enemy.view.setAlpha(isEnemyCorporeal(enemy.kind, this.phase) ? 1 : 0.22);
     this.updateHud(); this.statusText.setText(`SHIFT → Phase ${this.phase} // threat authority rewritten.`); this.emitShiftFx(); this.syncTestState();
   }
 
   private emitShiftFx(): void {
-    const tone = hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB);
+    const tone = hex(this.phase === "A" ? V2_PALETTE.phaseA) : hex(V2_PALETTE.phaseB);
     const fx = this.add.graphics().setPosition(this.friend.x, this.friend.y).setDepth(29);
     fx.lineStyle(2, tone, 0.82).strokeCircle(0, 0, 36); fx.lineStyle(1, hex(V2_PALETTE.common), 0.35).strokeCircle(0, 0, 46);
     const duration = effectDuration("SHIFT_TRANSITION", this.reduced);
@@ -590,10 +667,19 @@ class SurvivalScene extends Phaser.Scene {
     canvas.dataset.draftCount = String(this.draftChoices.length); canvas.dataset.draftIds = this.draftChoices.map(choice => choice.id).join(",");
     canvas.dataset.activeEnemies = String(this.enemies.filter(enemy => enemy.active).length); canvas.dataset.qualified = this.qualified ? "true" : "false"; canvas.dataset.dead = this.dead ? "true" : "false";
     canvas.dataset.seed = String(this.seed); canvas.dataset.controlsDimmed = this.draftOpen ? "true" : "false"; canvas.dataset.deltaFx = "canonical-exclusive";
+    canvas.dataset.weaponSlotsUsed = String(this.weaponSlotsUsed);
     canvas.dataset.vectorOwned = this.vectorOwned ? "true" : "false"; canvas.dataset.vectorTargetId = this.vectorTargetId === null ? "" : String(this.vectorTargetId);
     canvas.dataset.vectorTargetKind = this.vectorTargetKind ?? ""; canvas.dataset.vectorShots = String(this.vectorShots); canvas.dataset.vectorHits = String(this.vectorHits);
     canvas.dataset.vectorAcquisitions = String(this.vectorAcquisitions); canvas.dataset.vectorShiftInvalidations = String(this.vectorShiftInvalidations);
     canvas.dataset.vectorInFlight = String(this.activeVectorProjectileCount()); canvas.dataset.vectorProfile = "rank1-phase-targeted";
+    canvas.dataset.orbitOwned = this.orbitOwned ? "true" : "false";
+    canvas.dataset.orbitProfile = "rank1-phase-reversal";
+    canvas.dataset.orbitAngle = this.orbitAngle.toFixed(6);
+    canvas.dataset.orbitDirection = String(orbitDirectionForPhase(this.phase));
+    canvas.dataset.orbitHits = String(this.orbitHits);
+    canvas.dataset.orbitReversals = String(this.orbitReversals);
+    canvas.dataset.orbitLastShiftAnchor = this.orbitLastShiftAnchor === null ? "" : this.orbitLastShiftAnchor.toFixed(6);
+    canvas.dataset.orbitCooldownEntries = String(this.orbitLastHitAt.size);
   }
 }
 
