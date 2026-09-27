@@ -1,0 +1,41 @@
+name: RARE SHIFT V2-3B1 Apply
+
+on:
+  push:
+    branches:
+      - feature/v2-3b1-delta-ranks
+    paths:
+      - ".github/workflows/v2-3b1-apply.yml"
+      - "scripts/v2-3b1-apply.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Apply bounded V2-3B1 patch
+        run: node scripts/v2-3b1-apply.mjs
+      - name: Remove one-shot applicator
+        run: rm .github/workflows/v2-3b1-apply.yml scripts/v2-3b1-apply.mjs
+      - name: Commit applied runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No changes to commit"
+            exit 1
+          fi
+          git config user.name "Zev"
+          git config user.email "214125688+ZevlagGerald@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(v2-3b1): implement DELTA ranks II-V runtime"
+          git push origin HEAD:feature/v2-3b1-delta-ranks
