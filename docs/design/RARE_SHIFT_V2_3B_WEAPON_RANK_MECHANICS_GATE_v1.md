@@ -11,19 +11,19 @@
 
 ## 1. Purpose
 
-V2-3A established the normalized production progression model. V2-3B defines the actual Rank II–V runtime behavior for all five active weapon families before any live implementation occurs.
+V2-3A established the normalized production progression model. V2-3B defines the actual Rank II–V runtime behavior for all five active weapon families before live implementation.
 
-This gate exists to prevent weapon progression from degenerating into ordinary survivor-style `+damage / +cooldown / +projectile count` scaling.
+This gate prevents weapon progression from degenerating into ordinary survivor-style `+damage / +cooldown / +projectile count` scaling.
 
 The governing rejection test remains:
 
 > If removing the A/B phase system leaves the weapon progression functionally unchanged, the progression is not acceptable for RARE//SHIFT.
 
-V2-3B therefore locks twenty rank transitions as deterministic phase mechanics with explicit numerical caps.
+V2-3B therefore locks twenty rank transitions as deterministic phase mechanics with explicit numerical and abuse caps.
 
 ## 2. Sources reviewed
 
-Repository authority reviewed before this gate:
+Repository authority:
 
 - `RARE_SHIFT_V2_2_WEAPON_MECHANICS_GATE_v1.md`
 - `RARE_SHIFT_V2_3_PROGRESSION_GATE_v1.md`
@@ -52,14 +52,15 @@ These references reinforce existing RARE//SHIFT governance; they do not replace 
 - five weapon families only;
 - Rank I remains the qualified V2-2 foundation;
 - Rank II–V mechanics defined below;
-- each rank changes deterministic gameplay state or geometry;
+- each rank changes deterministic gameplay state, geometry, target selection, timing, or control;
 - active weapon cap remains four including mandatory DELTA;
 - no random critical-hit dependency;
 - no extra active combat buttons;
 - no NFT rarity/generation raw-power ladder;
-- all normal targeting continues to obey corporeal phase authority;
+- all ordinary targeting obeys corporeal phase authority;
 - all cross-phase damage must be explicitly named, bounded ECHO authority;
-- SHIFT never resets a normal weapon cooldown;
+- SHIFT never resets an ordinary weapon cooldown;
+- SHIFT-triggered weapon riders have their own independent rearm caps and may not derive unlimited DPS from rapid toggling;
 - all projectile/node/mine/chain counts are hard-capped;
 - per-target multi-hit behavior is explicitly bounded.
 
@@ -67,7 +68,7 @@ These references reinforce existing RARE//SHIFT governance; they do not replace 
 
 The values below are the **locked initial implementation profile** for V2-3B. They may change only after measured automated/manual qualification demonstrates a concrete balance/readability defect.
 
-A tuning change is not allowed merely because another value “feels stronger” in isolation.
+A tuning change is not allowed merely because another value feels stronger in isolation.
 
 ### NOT AUTHORIZED BY THIS DOCUMENT
 
@@ -83,8 +84,6 @@ A tuning change is not allowed merely because another value “feels stronger”
 
 ## 4. Cross-family balance law
 
-Every family must retain a different primary tactical question:
-
 | Family | Tactical question | Main growth axis |
 |---|---|---|
 | DELTA BURST | Where does my Friend geometry control this phase? | cadence → footprint → phase echo → control |
@@ -93,7 +92,7 @@ Every family must retain a different primary tactical question:
 | ECHO MINE | Where will damage be waiting when I return? | memory capacity → blast space → recall timing → repeated-memory depth |
 | SIGNAL ARC | How does the current corporeal graph route damage? | chain length → decay → COMMON relay → deterministic graph control |
 
-No rank may steal another family's identity:
+Identity boundaries:
 
 - VECTOR never becomes chain lightning;
 - ORBIT never becomes a long-range DPS field;
@@ -103,15 +102,13 @@ No rank may steal another family's identity:
 
 ## 5. Baseline Rank-I anchors
 
-These are inherited and remain authoritative unless V2-3B qualification proves an integration defect.
-
 ### DELTA BURST I — SIGNAL PULSE
 
-- damage per target per pulse: `12`
+- damage/target/pulse: `12`
 - cooldown: `860 ms`
 - canonical pixel world scale: `8.0`
 - target hit radius around each canonical point: `18 px`
-- each target may take DELTA damage at most once per pulse regardless of how many canonical points overlap it.
+- target takes DELTA damage at most once per pulse regardless of point overlap.
 
 ### VECTOR NEEDLE I
 
@@ -121,16 +118,16 @@ These are inherited and remain authoritative unless V2-3B qualification proves a
 - projectile speed: `960 px/s`
 - hit radius: `18 px`
 - max in flight: `2`
-- max targets per projectile: `1`
+- max targets/projectile: `1`
 
 ### ORBIT NODES I
 
 - damage: `8`
-- orbit radius: `72 px`
+- radius: `72 px`
 - angular speed: `2.4 rad/s`
 - contact radius: `26 px`
 - shared per-target contact interval: `700 ms`
-- node count: `1`
+- nodes: `1`
 
 ### ECHO MINE I
 
@@ -138,7 +135,7 @@ These are inherited and remain authoritative unless V2-3B qualification proves a
 - max active: `3`
 - minimum separation: `56 px`
 - lifetime: `9000 ms`
-- post-return readiness delay: `250 ms`
+- return delay: `250 ms`
 - trigger radius: `68 px`
 - blast radius: `84 px`
 - damage: `16`
@@ -155,591 +152,492 @@ These are inherited and remain authoritative unless V2-3B qualification proves a
 
 DELTA remains the Character Spotlight identity center.
 
-### Rank II — DENSE SAMPLE
-
-Mechanical change:
-
-- pulse cadence increases while geometry and per-hit authority stay unchanged.
-
-Profile:
+### II — DENSE SAMPLE
 
 - damage: `12`
 - cooldown: `720 ms`
 - canonical scale: `8.0`
 - hit radius: `18 px`
 
-Hard rules:
+Rules:
 
 - no queued/backlogged pulses;
-- at most one DELTA pulse may resolve for each completed cooldown interval;
-- pause/draft time may not accumulate hidden extra shots.
+- pause/draft time never accumulates hidden extra shots.
 
-Rationale:
-
-This is the one DELTA rank intentionally dominated by cadence. It creates a clear early power increase while preserving Friend-shape normalization.
-
-### Rank III — FIELD SCALE
-
-Mechanical change:
-
-- active-phase Friend geometry occupies more world space.
-
-Profile:
+### III — FIELD SCALE
 
 - damage: `12`
 - cooldown: `720 ms`
 - canonical pixel world scale: `9.5`
 - hit radius: `18 px`
 
-Hard rules:
+Rules:
 
-- source 16×16 canonical rows are never resampled into a different mask;
-- world placement scales the exact points only;
-- per-target damage remains one hit per pulse;
+- exact canonical 16×16 point membership is preserved;
+- only world placement scales;
+- per-target damage stays one hit/pulse;
 - lit-pixel count never modifies damage.
 
-### Rank IV — PHASE ECHO
+### IV — PHASE ECHO
 
-Mechanical change:
+Every accepted SHIFT may schedule one previous-phase canonical echo.
 
-- every accepted SHIFT schedules exactly one previous-phase canonical echo.
-
-Primary profile remains Rank III.
+Primary profile stays Rank III.
 
 Echo profile:
 
-- delay after accepted SHIFT: `140 ms`
-- canonical world scale: `9.5`
-- echo damage: `4`
+- delay: `140 ms`
+- world scale: `9.5`
+- damage: `4`
 - hit radius: `18 px`
 - max pending echoes: `1`
+- independent echo rearm: `650 ms`
 - stagger/control: `0`
 
 Authority:
 
-- the echo uses the canonical mask of the phase just left;
-- it may damage only A/B-aligned enemies belonging to that previous phase that are now ghosted;
-- COMMON enemies are excluded from PHASE ECHO damage;
-- enemies corporeal in the new phase are excluded from the previous-phase echo;
-- each eligible target may be damaged once by that echo;
-- a new accepted SHIFT replaces an unresolved pending echo instead of stacking echoes;
-- SHIFT does not reset the normal DELTA cooldown.
+- uses canonical geometry of the phase just left;
+- damages only A/B-aligned enemies belonging to that previous phase that are now ghosted;
+- COMMON is excluded;
+- enemies corporeal in the new phase are excluded;
+- each eligible target is hit at most once;
+- accepted SHIFT inside the `650 ms` echo-rearm window performs the phase change normally but creates no additional echo;
+- a new eligible SHIFT replaces an unresolved pending echo rather than stacking;
+- SHIFT never resets DELTA cooldown.
 
-This is explicitly low ECHO authority, not ordinary ghost targeting.
+This is explicit low ECHO authority, not generic ghost targeting.
 
-### Rank V — LOCKED IDENTITY
+### V — LOCKED IDENTITY
 
-Mechanical change:
+Primary profile:
 
-- matching-phase primary DELTA gains bounded identity control.
-
-Profile:
-
-- primary damage: `14`
+- damage: `14`
 - cooldown: `720 ms`
-- canonical world scale: `9.5`
-- primary hit radius: `18 px`
-- PHASE ECHO remains `4` damage;
+- canonical scale: `9.5`
+- hit radius: `18 px`
+- PHASE ECHO remains `4`
 - normal-enemy stagger: `90 ms`
-- future elite resistance hook: `45 ms` maximum before V2-4 tuning;
-- future boss resistance hook: `0 ms` default unless V2-4 explicitly authorizes a bounded boss response.
+- future elite resistance hook: max `45 ms` before V2-4 tuning
+- future boss resistance hook: default `0 ms` unless V2-4 explicitly authorizes a bounded response.
 
-Hard rules:
+Rules:
 
-- stagger comes only from the matching-phase primary pulse, never PHASE ECHO;
-- one target receives at most one stagger event per primary pulse;
-- geometry density does not multiply stagger strength/duration.
+- stagger only comes from matching-phase primary DELTA;
+- echo never staggers;
+- one target gets at most one stagger event per primary pulse;
+- geometry density never multiplies control.
 
 ## 7. VECTOR NEEDLE Rank II–V
 
 VECTOR remains precision/elite-boss pressure.
 
-### Rank II — CLEAN LINE
-
-Mechanical change:
-
-- a projectile may continue through its acquired target to exactly one additional legal corporeal target when line geometry permits.
+### II — CLEAN LINE
 
 Profile:
 
 - cooldown: `760 ms`
-- acquisition range / total travel budget: `560 px`
+- acquisition/total travel budget: `560 px`
 - speed: `960 px/s`
 - max in flight: `2`
-- max targets per normal projectile: `2`
-- hit damage: `10 / 7`
-- line-corridor radius for secondary eligibility: `20 px`
+- max normal hits/projectile: `2`
+- damage: `10 / 7`
+- secondary line-corridor radius: `20 px`
 
-Secondary-target algorithm:
+Algorithm:
 
-1. acquire the Rank-I primary target normally;
-2. form a ray from player origin through the primary target;
-3. consider only active, corporeal, unvisited targets beyond the primary target;
-4. target center must be within `20 px` of the ray and within the original `560 px` total travel budget;
+1. acquire Rank-I primary target;
+2. form a ray from player origin through primary;
+3. consider only active, corporeal, unvisited targets beyond primary;
+4. candidate center must be within `20 px` of the ray and inside the original `560 px` total travel budget;
 5. choose smallest positive along-ray distance, then lower stable spawn ID.
 
-No retargeting or curved chain behavior is permitted.
+No retargeting/curved chaining.
 
-### Rank III — PRIORITY TRACE
+### III — PRIORITY TRACE
 
-Mechanical change:
+- priority distance band: `120 px` beyond nearest legal target distance.
 
-- acquisition can prefer a meaningful higher-priority corporeal threat without ignoring nearby danger.
-
-Profile:
-
-- priority distance band: `120 px` beyond the nearest legal target distance;
-- all Rank-II projectile limits remain unchanged.
-
-Deterministic acquisition:
+Algorithm:
 
 1. find nearest legal target distance `D`;
-2. candidate priority set is all legal targets with distance `<= min(560, D + 120)`;
-3. choose highest `priorityTier`;
-4. tie-break by nearest distance;
-5. final tie-break by lower stable spawn ID.
+2. consider legal targets with distance `<= min(560, D + 120)`;
+3. highest `priorityTier` wins;
+4. then nearest distance;
+5. then lower stable spawn ID.
 
-Current V2-3B default priority tiers:
+Current default tiers:
 
 - `TRACE = 1`
 - `SPLIT_A = 0`
 - `SPLIT_B = 0`
 
-V2-4 may assign higher explicit tiers to BEACON/ANCHOR/ELITE/BOSS without changing this acquisition algorithm.
+V2-4 may assign higher explicit tiers to future high-value roles without changing the algorithm.
 
-### Rank IV — PHASE TRANSFER
+### IV — PHASE TRANSFER
 
-Mechanical change:
+Accepted SHIFT arms one stronger first valid post-SHIFT launch.
 
-- an accepted SHIFT arms one stronger line-through opportunity for the first subsequent valid VECTOR launch.
+- normal shot: max `2` targets, `10 / 7`
+- transfer shot: max `3` targets, `10 / 7 / 5`
+- stored transfer charges: max `1`
+- repeated SHIFT does not stack;
+- no valid target means charge remains armed;
+- valid launch consumes charge even if later target validity changes;
+- SHIFT never resets cooldown.
 
-Transfer profile:
+The third target follows the same straight-line corridor. It is not refraction/chain behavior.
 
-- normal projectile remains max `2` targets at `10 / 7`;
-- first valid post-SHIFT launch: max `3` targets at `10 / 7 / 5`;
-- arm count: max `1`;
-- repeated SHIFT does not stack charges;
-- if no valid target exists, the transfer remains armed until one valid launch occurs;
-- firing consumes the transfer even if later projectile travel is invalidated by target death/phase change;
-- SHIFT never resets VECTOR cooldown.
-
-The third target uses the same line-corridor authority; it is not a chain/refraction.
-
-### Rank V — VECTOR LOCK
-
-Mechanical change:
-
-- sustained valid focus on one high-value corporeal primary target builds deterministic lock strength.
+### V — VECTOR LOCK
 
 Lock eligibility:
 
 - primary target `priorityTier >= 1`;
-- target remains corporeal;
-- target remains active;
-- target remains inside `560 px` acquisition range.
+- active, corporeal, and inside `560 px`.
 
 Profile:
 
-- lock stacks: `0..3`
-- primary damage sequence on repeated valid hits: `10, 12, 14, 16`
-- secondary/tertiary penetration damage remains `7 / 5`;
-- cooldown remains `760 ms`;
-- max in flight remains `2`.
+- stacks: `0..3`
+- repeated-primary damage: `10, 12, 14, 16`
+- penetration damage remains `7 / 5`
+- cooldown: `760 ms`
+- max in flight: `2`.
 
 Target rule:
 
-- an existing lock target receives preference only among candidates tied for the highest available priority tier inside the Rank-III priority band;
-- a genuinely higher-priority candidate may take over;
-- lock resets immediately on target death, inactivity, phase loss, range break, or change of primary target.
+- current lock gets preference only among candidates tied for highest available priority tier inside the Rank-III band;
+- a genuinely higher-priority target may take over;
+- lock resets on death, inactivity, phase loss, range break, or primary-target change.
 
-No random crit chance or hidden accuracy roll is permitted.
+No random crit or hidden accuracy roll.
 
 ## 8. ORBIT NODES Rank II–V
 
-ORBIT remains close defense/control, not long-range DPS.
+ORBIT remains close defense/control.
 
-### Rank II — SECOND NODE
-
-Mechanical change:
-
-- node count becomes `2` with exact `180°` angular spacing.
-
-Profile:
+### II — SECOND NODE
 
 - damage: `8`
 - radius: `72 px`
 - angular speed: `2.4 rad/s`
 - contact radius: `26 px`
-- node count: `2`
-- shared per-target contact interval across all nodes: `700 ms`
+- nodes: `2`, exactly `180°` apart
+- shared per-target contact interval across all nodes: `700 ms`.
 
-The shared per-target interval is critical: adding a node increases coverage, not unrestricted same-target DPS.
+Adding a node increases coverage, not unrestricted same-target DPS.
 
-### Rank III — STABLE ORBIT
-
-Mechanical change:
-
-- larger, slightly faster defensive coverage without adding another node.
-
-Profile:
+### III — STABLE ORBIT
 
 - damage: `8`
 - radius: `80 px`
 - angular speed: `2.55 rad/s`
 - contact radius: `30 px`
-- node count: `2`
-- shared per-target interval: `700 ms`
+- nodes: `2`
+- shared per-target interval: `700 ms`.
 
-SHIFT preserves angular continuity and simply reverses direction.
+SHIFT preserves angular position and reverses direction only.
 
-### Rank IV — PHASE SHEAR
+### IV — PHASE SHEAR
 
-Mechanical change:
+Accepted SHIFT reversal can create one bounded sweep event.
 
-- accepted SHIFT reversal performs one short bounded sweep in the new rotation direction.
-
-Shear profile:
-
-- extra sweep arc per node: `60°` (`π/3`)
+- extra sweep arc/node: `60°` (`π/3`)
 - sweep duration: `160 ms`
 - shear contact radius: `30 px`
 - shear damage: `6`
-- max shear hits per target per accepted SHIFT: `1` across all nodes
-- no knockback at V2-3B Rank IV
+- max shear hits/target/SHIFT: `1` across all nodes
+- independent shear rearm: `650 ms`
+- knockback: none at V2-3B Rank IV.
 
-Hard rules:
+Rules:
 
-- PHASE SHEAR is a single event generated by accepted SHIFT, never a per-frame effect;
-- shear targets must be corporeal in the post-SHIFT phase;
-- regular per-target ORBIT cooldowns are not reset;
-- shear uses a separate one-hit-per-shift ledger and cannot recursively create contacts.
+- one discrete event, never a per-frame damage source;
+- targets must be corporeal post-SHIFT;
+- regular ORBIT hit cooldowns are not reset;
+- shear has a separate one-hit-per-SHIFT ledger;
+- accepted SHIFT inside the `650 ms` shear-rearm window reverses ORBIT normally but emits no new PHASE SHEAR.
 
-### Rank V — SYNCHRONIZED RING
-
-Mechanical change:
-
-- node count becomes `3` with exact `120°` spacing, improving defensive continuity.
-
-Profile:
+### V — SYNCHRONIZED RING
 
 - damage: `8`
 - radius: `80 px`
 - angular speed: `2.55 rad/s`
 - contact radius: `30 px`
-- node count: `3`
+- nodes: `3`, exactly `120°` apart
 - shared per-target contact interval: `650 ms`
-- Rank-IV PHASE SHEAR remains bounded exactly as above.
+- Rank-IV shear/rearm rules remain unchanged.
 
-No node may independently bypass the shared per-target interval.
+No node may independently bypass the shared target interval.
 
 ## 9. ECHO MINE Rank II–V
 
-ECHO remains delayed route-planning damage. Every useful mine still requires a genuine leave-and-return phase cycle.
+Every useful ECHO mine still requires a genuine leave/return phase cycle.
 
-### Rank II — LONG MEMORY
-
-Mechanical change:
-
-- more remembered terrain may coexist and persist.
-
-Profile:
+### II — LONG MEMORY
 
 - placement interval: `1800 ms`
 - max active: `4`
-- minimum separation: `56 px`
+- min separation: `56 px`
 - lifetime: `12000 ms`
 - return delay: `250 ms`
-- trigger radius: `68 px`
-- blast radius: `84 px`
-- damage: `16`
+- trigger: `68 px`
+- blast: `84 px`
+- damage: `16`.
 
-Oldest-ID deterministic replacement remains mandatory.
+Oldest-ID replacement remains deterministic.
 
-### Rank III — WIDER COLLAPSE
-
-Mechanical change:
-
-- mines control a larger local route on return.
-
-Profile:
+### III — WIDER COLLAPSE
 
 - max active: `4`
 - lifetime: `12000 ms`
 - return delay: `250 ms`
-- trigger radius: `76 px`
-- blast radius: `108 px`
+- trigger: `76 px`
+- blast: `108 px`
 - damage: `16`
-- placement interval/minimum separation unchanged.
+- placement/min separation unchanged.
 
-Blast remains one event; it may not arm, trigger, or create another mine.
+Blast never arms, triggers, or creates another mine.
 
-### Rank IV — FAST RECALL
-
-Mechanical change:
-
-- returned mines become dangerous sooner, but never immediately.
-
-Profile:
+### IV — FAST RECALL
 
 - return delay: `140 ms`
-- all Rank-III spatial values remain unchanged.
+- Rank-III spatial values unchanged.
 
 Hard floor:
 
-- no V2-3B or later passive may reduce ECHO return readiness below `100 ms` without a new reviewed gate.
+- no V2-3B or later passive may reduce return readiness below `100 ms` without a reviewed gate.
 
-### Rank V — DEEP MEMORY
+### V — DEEP MEMORY
 
-Mechanical change:
+Each completed `away -> returned-home` cycle may increment `memoryDepth`.
 
-- a mine that survives repeated phase cycling gains a deterministic deeper-memory state.
+State rules:
 
-State extension:
+- depth cap: `2`
+- minimum time between accepted depth increments on the same mine: `900 ms`
+- a faster oscillation may transition mine phase state normally but does not add depth;
+- depth persists until trigger, expiry, or replacement;
+- staying in one phase never increases depth.
 
-- each completed `away -> returned-home` cycle increments `memoryDepth`;
-- `memoryDepth` is capped at `2`;
-- depth is retained until trigger, expiry, or replacement;
-- merely staying in one phase never increases depth.
+Depth `0..1` uses the Rank-IV profile.
 
-Normal depth `0..1` profile remains Rank IV.
+At depth `2`:
 
-At `memoryDepth = 2`:
-
-- trigger radius: `84 px`
-- blast radius: `120 px`
+- trigger: `84 px`
+- blast: `120 px`
 - damage: `20`
-- return delay remains `140 ms`
-- max active remains `4`
+- return delay: `140 ms`
+- max active remains `4`.
 
-This makes deliberate revisiting stronger while preserving the leave/return requirement and all hard caps.
+Overlapping-ready-mine resolution:
+
+- mines resolve in ascending stable mine ID;
+- after each blast, target active/dead state is re-evaluated before the next mine resolves;
+- expiry/replacement never detonates.
+
+This preserves deterministic burst behavior and prevents same-tick ambiguity.
 
 ## 10. SIGNAL ARC Rank II–V
 
 SIGNAL ARC remains deterministic corporeal graph routing.
 
-### Rank II — EXTRA LINK
-
-Mechanical change:
-
-- chain cap grows from `3` to `4` unique targets.
-
-Profile:
+### II — EXTRA LINK
 
 - cooldown: `1250 ms`
-- acquisition range: `420 px`
-- relay range: `180 px`
-- max targets: `4`
-- damage by hop: `10 / 8 / 6 / 5`
+- acquisition: `420 px`
+- relay: `180 px`
+- max unique targets: `4`
+- damage: `10 / 8 / 6 / 5`.
 
-Each target may still be hit at most once per cast.
+Each target may be hit once/cast.
 
-### Rank III — LOWER DECAY
+### III — LOWER DECAY
 
-Mechanical change:
-
-- later hops retain more authority.
-
-Profile:
-
-- max targets: `4`
-- damage by hop: `10 / 9 / 8 / 7`
+- max unique targets: `4`
+- damage: `10 / 9 / 8 / 7`
 - ranges/cooldown unchanged.
 
-This is a numerical rank, but it acts on the already-expanded graph and is bounded by the four-target cap.
+This intentionally strengthens the bounded graph rather than adding another projectile/branch.
 
-### Rank IV — RESONANT RELAY
+### IV — RESONANT RELAY
 
-Mechanical change:
+First COMMON target used as a relay may extend exactly one subsequent edge.
 
-- the first COMMON target used as a relay may extend exactly one subsequent relay edge.
-
-Profile:
-
-- normal relay range: `180 px`
-- one-time COMMON relay bonus: `+60 px`
-- boosted relay range: `240 px`
-- bonus uses per cast: max `1`
+- normal relay: `180 px`
+- one-time COMMON bonus: `+60 px`
+- boosted relay: `240 px`
+- bonus uses/cast: `1`
 - max targets: `4`
-- damage: `10 / 9 / 8 / 7`
+- damage: `10 / 9 / 8 / 7`.
 
-Authority:
+Rules:
 
-- COMMON may extend distance only;
-- the destination still must be corporeal in the current phase;
-- COMMON never makes an off-phase ghost a legal target;
+- COMMON extends distance only;
+- destination must still be corporeal in current phase;
+- COMMON never legalizes a ghost;
 - unused bonus does not carry between casts;
 - SHIFT does not reset cooldown.
 
-### Rank V — CHAIN CONTROL
+### V — CHAIN CONTROL
 
-Mechanical change:
-
-- relay ordering becomes deterministic coverage-aware instead of purely nearest-neighbor.
-
-The initial target remains the nearest legal corporeal target using distance then stable ID.
+Initial target remains nearest legal corporeal target by distance then stable ID.
 
 For each relay hop:
 
-1. enumerate unvisited legal corporeal candidates within the current relay range;
-2. for each candidate compute `forwardDegree`: count of other unvisited legal corporeal targets reachable from that candidate using the next normal/COMMON-bonus relay range;
-3. choose highest `forwardDegree`;
-4. tie-break by shortest current edge distance;
-5. final tie-break by lower stable spawn ID.
+1. enumerate unvisited legal corporeal candidates inside current relay range;
+2. compute each candidate's `forwardDegree`: number of other unvisited legal corporeal targets reachable from it using the next applicable normal/COMMON-bonus relay range;
+3. highest `forwardDegree` wins;
+4. tie: shortest current edge;
+5. final tie: lower stable spawn ID.
 
-Hard caps remain:
+Hard caps:
 
 - max targets: `4`
-- no branching;
-- no recursion;
-- no repeated target;
-- at most one COMMON range bonus per cast;
-- candidate population is bounded by the existing active-enemy cap (`48`).
-
-Worst-case selection work remains bounded to a small `O(n²)` graph scan per cast under the 48-enemy safety cap.
+- no branching/recursion/repeated target;
+- max one COMMON bonus/cast;
+- candidate population bounded by existing active-enemy cap `48`;
+- bounded small `O(n²)` graph scan/cast.
 
 ## 11. Twenty-transition matrix
 
 | Family | II | III | IV | V |
 |---|---|---|---|---|
-| DELTA | 720ms cadence | 9.5× world mask scale | 140ms previous-phase echo, 4 dmg | 14 primary dmg + 90ms normal stagger |
-| VECTOR | 2-hit line, 10/7 | +120px priority band | first post-SHIFT 3-hit line 10/7/5 | priority lock stacks to 16 primary dmg |
-| ORBIT | 2 nodes / 180° | 80px radius / 30px contact | 60°/160ms one-hit shear | 3 nodes / 120°, 650ms shared hit interval |
-| ECHO | 4 mines / 12s life | 76 trigger / 108 blast | 140ms return delay | depth-2: 84 trigger / 120 blast / 20 dmg |
-| SIGNAL | 4 hops, 10/8/6/5 | 10/9/8/7 | one COMMON +60px relay | degree-aware deterministic relay ordering |
+| DELTA | 720ms cadence | 9.5 world mask scale | 140ms previous-phase 4-dmg echo; 650ms rearm | 14 primary + 90ms normal stagger |
+| VECTOR | 2-hit line 10/7 | +120px priority band | first post-SHIFT 3-hit line 10/7/5 | priority lock to 16 primary damage |
+| ORBIT | 2 nodes / 180° | 80px radius / 30px contact | 60°/160ms shear; 650ms rearm | 3 nodes / 120°, 650ms shared hit interval |
+| ECHO | 4 mines / 12s life | 76 trigger / 108 blast | 140ms return delay | depth-2 after guarded cycles: 84/120/20 |
+| SIGNAL | 4 hops 10/8/6/5 | 10/9/8/7 | one COMMON +60px relay | degree-aware deterministic relays |
 
 ## 12. Performance and abuse caps
 
-These caps are part of the mechanic contract, not optional optimization:
-
 ### DELTA
 
-- canonical source grid max: `16×16 = 256` points;
-- max pending PHASE ECHO: `1`;
-- max damage applications per target: one primary per pulse + one explicitly eligible echo per accepted SHIFT.
+- canonical grid max `256` points;
+- pending PHASE ECHO max `1`;
+- PHASE ECHO rearm `650 ms`;
+- max one primary hit/target/pulse plus one explicitly eligible echo hit/target/eligible SHIFT.
 
 ### VECTOR
 
-- max in-flight projectiles: `2`;
-- normal max hits/projectile: `2`;
-- post-SHIFT transfer max hits/projectile: `3`;
-- no recursive/refraction behavior in V2-3B.
+- max in flight `2`;
+- normal max hits/projectile `2`;
+- transfer max hits/projectile `3`;
+- transfer charge max `1`;
+- no refraction/recursion in V2-3B.
 
 ### ORBIT
 
-- max nodes: `3`;
-- one shared normal contact cooldown ledger per target;
-- PHASE SHEAR max one hit per target per accepted SHIFT.
+- max nodes `3`;
+- shared normal target cooldown ledger;
+- max one shear hit/target/eligible SHIFT;
+- shear rearm `650 ms`.
 
 ### ECHO
 
-- max mines: `4`;
-- memory depth max: `2`;
-- no recursive detonation;
-- no mine-created mine;
+- max mines `4`;
+- depth max `2`;
+- depth increment guard `900 ms`/mine;
+- no recursive detonation/mine creation;
+- ascending-ID overlapping resolution;
 - deterministic oldest replacement.
 
 ### SIGNAL ARC
 
-- max unique targets: `4`;
+- max unique targets `4`;
 - max one COMMON relay bonus/cast;
 - no recursion/branching;
-- active enemy population assumed bounded by existing `48` cap.
+- active-enemy population cap `48`.
 
-## 13. Required deterministic qualification contracts
-
-V2-3B implementation may not be called technically qualified without deterministic tests proving all of the following.
+## 13. Required deterministic qualification
 
 ### Global
 
-- ranks advance exactly one step I→II→III→IV→V;
-- Rank V has no further rank transition;
-- all profiles are deterministic and immutable;
-- no rank changes target legality from corporeal to generic ghost targeting;
-- SHIFT never resets ordinary cooldown state;
-- all counts/caps remain within this document under adversarial candidate ordering.
+- exact I→II→III→IV→V transitions;
+- no Rank-V successor;
+- deterministic immutable profiles;
+- no generic ghost targeting;
+- SHIFT never resets ordinary cooldown;
+- SHIFT-rider rearm guards work independently of any global SHIFT commitment interval;
+- adversarial candidate ordering cannot bypass caps.
 
 ### DELTA
 
-- Rank II exact `720 ms` cadence;
-- Rank III exact point placement under `9.5` world scale;
-- sparse and dense Friend masks retain equal per-target damage authority;
-- Rank IV echo uses previous-phase geometry and only previous-phase ghost alignment;
-- COMMON/new-phase corporeal targets are excluded from PHASE ECHO;
-- max one pending echo;
-- Rank V stagger durations and resistance hooks exact.
+- Rank-II `720 ms` exact;
+- Rank-III `9.5` placement exact;
+- sparse/dense Friend masks have equal per-target authority;
+- Rank-IV previous-phase geometry/authority exact;
+- COMMON/new-phase corporeal targets excluded from echo;
+- `650 ms` echo rearm and max-one-pending exact;
+- Rank-V stagger/resistance hooks exact.
 
 ### VECTOR
 
-- Rank-II line penetration is candidate-order independent;
-- secondary target must be beyond primary and inside 20px corridor;
-- Rank-III priority band never selects a target more than 120px beyond nearest legal distance;
-- stable ID resolves full ties;
-- Rank-IV transfer never stacks and never resets cooldown;
-- Rank-V lock sequence is exactly 10→12→14→16 and resets on every specified invalidation.
+- Rank-II line result input-order independent;
+- secondary beyond primary and inside `20 px` corridor;
+- Rank-III cannot choose >`120 px` beyond nearest legal distance;
+- stable-ID full tie break;
+- Rank-IV charge never stacks and no cooldown reset;
+- Rank-V damage sequence exactly `10→12→14→16` and every reset condition proven.
 
 ### ORBIT
 
-- exact deterministic angular spacing for 1/2/3 nodes;
-- all nodes share one per-target normal hit ledger;
-- SHIFT reverses without angle reset;
-- shear is emitted once per accepted SHIFT;
-- one target cannot receive multiple shear hits from multiple nodes in the same SHIFT event.
+- exact 1/2/3-node spacing;
+- shared target hit ledger;
+- SHIFT reversal preserves angle;
+- shear emitted only when `650 ms` rearm allows;
+- one target cannot receive multi-node shear duplicates in one event.
 
 ### ECHO
 
-- Rank-II max active/lifetime exact;
+- Rank-II cap/lifetime exact;
 - Rank-III radii exact;
-- Rank-IV return delay exact and nonzero;
-- memoryDepth only increments on genuine completed leave/return cycles;
-- depth max 2;
-- depth-2 profile exact;
-- expiry/replacement never detonates a mine.
+- Rank-IV delay exact and nonzero;
+- depth increments only on genuine leave/return and respects `900 ms` guard;
+- depth cap `2` and depth-2 profile exact;
+- multi-mine resolution ascending ID with target-state re-evaluation;
+- expiry/replacement never detonates.
 
 ### SIGNAL ARC
 
-- Rank-II four-hop cap and damage sequence exact;
-- Rank-III decay sequence exact;
-- Rank-IV COMMON bonus applies at most once and never legalizes a ghost;
-- Rank-V ordering is invariant to input array order;
-- graph ordering remains deterministic under equal degree/distance via stable ID;
-- no target appears twice in one cast.
+- Rank-II 4-hop cap/damage exact;
+- Rank-III decay exact;
+- Rank-IV COMMON bonus once/cast and never legalizes ghost;
+- Rank-V ordering input-array invariant;
+- degree/distance ties resolve by stable ID;
+- no duplicate target/cast.
 
 ## 14. Required browser qualification
 
-After deterministic tests pass, the live integration tranche must prove both `960` and `390` widths.
-
-At minimum:
+Both `960` and `390` widths must prove:
 
 - every family can naturally reach at least one higher rank through the production draft adapter;
-- each implemented rank change is visible/observable rather than state-only;
-- DELTA Friend geometry remains readable at Rank III–V;
-- VECTOR post-SHIFT transfer is visibly distinguishable from ordinary penetration;
-- ORBIT 2/3-node spacing and reversal remain readable on 390px;
-- ECHO deep-memory state has a readable but restrained marker;
-- SIGNAL four-hop graph remains legible without covering the screen;
-- reduced-motion mode preserves all tactical information;
-- no new controls are introduced;
-- exact-three production draft continues passing;
+- each rank change is visible/observable rather than state-only;
+- DELTA geometry readable at III–V;
+- VECTOR transfer distinguishable from normal penetration;
+- ORBIT 2/3-node spacing and reversal readable on 390;
+- ECHO deep-memory state uses a restrained readable marker;
+- SIGNAL four-hop graph remains legible;
+- reduced motion preserves tactical information;
+- no new controls;
+- exact-three production draft remains green;
 - V2-1 through V2-2E regression remains green.
 
 ## 15. Balance-review triggers
 
-A numerical profile may be reopened only if qualification demonstrates one of these concrete conditions:
+Reopen a value only if evidence shows:
 
-- a rank creates dominant standing-still play;
-- a rank makes SHIFT avoidance preferable to phase engagement;
-- a rank makes one family universally superior across its non-role situations;
-- a single target receives unintended repeated hits beyond the documented cap;
-- mobile readability materially fails;
-- active-object counts exceed bounded runtime budgets;
-- common current enemies become trivial before V2-4 escalation;
-- a Friend's canonical pixel density produces materially higher raw DELTA authority than another qualified Friend.
+- dominant standing-still play;
+- SHIFT avoidance is preferable to phase engagement;
+- SHIFT spam turns a rider into the dominant DPS source;
+- one family becomes universally superior outside its role;
+- target receives hits above documented cap;
+- 390px readability fails;
+- runtime object/work budgets exceed caps;
+- current common enemies become trivial before V2-4 escalation;
+- canonical Friend pixel density produces materially different raw DELTA authority.
 
-The correction should target the violating value/mechanic only. Do not globally rebalance unrelated families to compensate for one defect.
+Correct the violating mechanic/value only; do not globally rebalance unrelated families as compensation.
 
 ## 16. Implementation sequencing recommendation
-
-V2-3B should be implemented in bounded subtranches against this single gate:
 
 1. **V2-3B1 — DELTA II–V**
 2. **V2-3B2 — VECTOR II–V**
@@ -748,13 +646,11 @@ V2-3B should be implemented in bounded subtranches against this single gate:
 5. **V2-3B5 — SIGNAL II–V**
 6. **V2-3B6 — integrated rank/draft/browser qualification**
 
-Each family must receive pure deterministic tests before Phaser behavior is accepted.
+Each family receives pure deterministic tests before Phaser behavior is accepted.
 
-The progression adapter should be integrated only far enough to expose mechanics that actually exist. A rank card must never promise a mechanic that has not been implemented in runtime.
+The progression adapter may expose only mechanics that actually exist. A rank card may never promise an unimplemented runtime behavior.
 
 ## 17. Explicit boundaries after this gate
-
-After this planning gate:
 
 - `V2_3A = TECHNICALLY_QUALIFIED`
 - `V2_3B_DESIGN_GATE = READY_FOR_OWNER_REVIEW`
