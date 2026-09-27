@@ -109,10 +109,12 @@ function qualify(width) {
         } else if (rank === 1 && ids.includes("DELTA_RANK")) desired = "DELTA_RANK";
         // The natural proof must behave like a survivable player route. Once
         // DELTA II has been earned, critical HP takes priority over optional
-        // acquisitions or later ranks. This uses only the real draft UI/state.
+        // acquisitions or later ranks. If repair is not offered, ORBIT is the
+        // legitimate close-defense fallback before greedily ranking DELTA.
         else if (hp <= 55 && ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
         else if (!acquiredEcho && ids.includes("ECHO_MINE")) desired = "ECHO_MINE";
         else if (!acquiredSignal && ids.includes("SIGNAL_ARC")) desired = "SIGNAL_ARC";
+        else if (hp <= 55 && ids.includes("ORBIT_NODES")) desired = "ORBIT_NODES";
         else if (ids.includes("DELTA_RANK")) desired = "DELTA_RANK";
         else desired = ids[0];
 
