@@ -140,6 +140,8 @@ function qualify(width) {
       assert.ok(Number(await data("vector-in-flight")) <= 2, "VECTOR pool evidence must remain within global cap even when unowned");
       assert.ok(list(await data("signal-last-chain-ids")).length <= 3, "SIGNAL ARC chain must remain hard-capped");
 
+      // SHIFT intentionally clears the last-chain snapshot. Do not close the
+      // integrated proof until a real post-SHIFT ARC cast has repopulated it.
       const integrated =
         Number(await data("orbit-hits")) > orbitHitsBefore
         && Number(await data("echo-placements")) > echoPlacementsBefore
@@ -148,7 +150,8 @@ function qualify(width) {
         && Number(await data("signal-casts")) > signalCastsBefore
         && Number(await data("signal-hits")) > signalHitsBefore
         && Number(await data("signal-multi-target-casts")) > signalMultiBefore
-        && Number(await data("signal-shift-graph-invalidations")) > signalInvalidationsBefore;
+        && Number(await data("signal-shift-graph-invalidations")) > signalInvalidationsBefore
+        && list(await data("signal-last-chain-ids")).length >= 1;
       if (integrated) break;
 
       await canvas.press(route[routeIndex++ % route.length], { delay: 220 });
