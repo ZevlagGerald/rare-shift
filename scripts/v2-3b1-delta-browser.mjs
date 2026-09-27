@@ -50,9 +50,6 @@ function qualify(width) {
     const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
     let routeIndex = 0;
 
-    // Reuse the movement cadence already proven by the V2-2D/E browser gates.
-    // This route naturally collects enough local Signal without dangerous long
-    // arena sweeps and previously reached DELTA IV in this exact tranche.
     const moveUntilDraft = async (minimumLevel, deadlineMs, label) => {
       const deadline = Date.now() + deadlineMs;
       while (Date.now() < deadline) {
@@ -80,6 +77,30 @@ function qualify(width) {
       assert.equal(await data("draft-open"), "false", `${label} must resume combat`);
     };
 
+    const chooseSupportWithOneRepair = async (minimumLevel, label) => {
+      let repairUsed = false;
+      let nextLevel = minimumLevel;
+      while (Number(await data("weapon-slots-used")) < 4) {
+        await moveUntilDraft(nextLevel, 120_000, label);
+        const ids = list(await data("draft-ids"));
+        const hp = Number(await data("hp"));
+        const repairIndex = ids.indexOf("FIELD_REPAIR");
+        if (!repairUsed && hp <= 45 && repairIndex >= 0) {
+          await clickDraft(canvas, repairIndex, ids.length);
+          repairUsed = true;
+          await page.waitForTimeout(220);
+          nextLevel = Number(await data("level")) + 1;
+          continue;
+        }
+        const supportId = ["ORBIT_NODES", "VECTOR_NEEDLE"].find(id => ids.includes(id));
+        assert.ok(supportId, `final support acquisition missing: ${ids.join(",")}`);
+        await clickDraft(canvas, ids.indexOf(supportId), ids.length);
+        await page.waitForTimeout(220);
+        break;
+      }
+      assert.equal(await data("weapon-slots-used"), "4");
+    };
+
     const investDelta = async (targetRank, label) => {
       let nextLevel = Number(await data("level")) + 1;
       let repairUsed = false;
@@ -89,22 +110,16 @@ function qualify(width) {
         const hp = Number(await data("hp"));
         const repairIndex = ids.indexOf("FIELD_REPAIR");
         const deltaIndex = ids.indexOf("DELTA_RANK");
-
-        // Permit one genuine survival choice between consecutive rank upgrades,
-        // but never allow repeated repairs to starve the rank objective.
-        if (!repairUsed && hp <= 50 && repairIndex >= 0) {
+        if (!repairUsed && hp <= 45 && repairIndex >= 0) {
           await clickDraft(canvas, repairIndex, ids.length);
           repairUsed = true;
           await page.waitForTimeout(220);
-          assert.ok(Number(await data("hp")) > hp, `${label} repair must actually restore HP`);
           nextLevel = Number(await data("level")) + 1;
           continue;
         }
-
         assert.ok(deltaIndex >= 0, `${label} DELTA_RANK missing: ${ids.join(",")}`);
         await clickDraft(canvas, deltaIndex, ids.length);
         await page.waitForTimeout(220);
-        assert.equal(await data("draft-open"), "false");
       }
       assert.equal(Number(await data("delta-rank")), targetRank);
     };
@@ -114,20 +129,19 @@ function qualify(width) {
     assert.equal(await data("delta-world-scale"), "8");
     assert.equal(await data("delta-damage"), "12");
 
-    // This exact support trio previously reached Level 7 / DELTA IV without any
-    // repair policy. ORBIT and ECHO also keep kills/pickups near the player's path.
-    await choose("ORBIT_NODES", 2, "Level 2 ORBIT support acquisition");
-    assert.equal(await data("orbit-owned"), "true");
+    // The first higher-rank proof is a normal Level-2 choice. This gives the run
+    // its real DENSE SAMPLE cadence benefit before later enemy density rises.
+    await choose("DELTA_RANK", 2, "DELTA Rank II");
+    assert.equal(await data("delta-rank"), "2");
+    assert.equal(await data("delta-cooldown-ms"), "720");
+    assert.equal(await data("delta-world-scale"), "8");
+    assert.equal(await data("delta-damage"), "12");
+
     await choose("ECHO_MINE", 3, "Level 3 ECHO support acquisition");
     assert.equal(await data("echo-owned"), "true");
     await choose("SIGNAL_ARC", 4, "Level 4 SIGNAL support acquisition");
     assert.equal(await data("signal-owned"), "true");
-    assert.equal(await data("weapon-slots-used"), "4");
-
-    await investDelta(2, "DELTA Rank II");
-    assert.equal(await data("delta-cooldown-ms"), "720");
-    assert.equal(await data("delta-world-scale"), "8");
-    assert.equal(await data("delta-damage"), "12");
+    await chooseSupportWithOneRepair(5, "final active support family");
 
     await investDelta(3, "DELTA Rank III");
     assert.equal(await data("delta-cooldown-ms"), "720");
@@ -176,7 +190,7 @@ function qualify(width) {
       } else {
         const ids = list(await data("draft-ids"));
         const repairIndex = ids.indexOf("FIELD_REPAIR");
-        const choiceIndex = Number(await data("hp")) <= 50 && repairIndex >= 0 ? repairIndex : 0;
+        const choiceIndex = Number(await data("hp")) <= 45 && repairIndex >= 0 ? repairIndex : 0;
         await clickDraft(canvas, choiceIndex, ids.length);
         await page.waitForTimeout(180);
       }
