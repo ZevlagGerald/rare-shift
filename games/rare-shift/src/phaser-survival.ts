@@ -613,7 +613,7 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private emitShiftFx(): void {
-    const tone = hex(this.phase === "A" ? V2_PALETTE.phaseA) : hex(V2_PALETTE.phaseB);
+    const tone = hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB);
     const fx = this.add.graphics().setPosition(this.friend.x, this.friend.y).setDepth(29);
     fx.lineStyle(2, tone, 0.82).strokeCircle(0, 0, 36); fx.lineStyle(1, hex(V2_PALETTE.common), 0.35).strokeCircle(0, 0, 46);
     const duration = effectDuration("SHIFT_TRANSITION", this.reduced);
