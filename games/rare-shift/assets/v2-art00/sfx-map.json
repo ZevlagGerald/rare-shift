@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "status": "CANDIDATE_MAPPING_ONLY",
+  "sourcePolicy": "Kenney CC0 preferred; exact audio files selected only after in-game audition",
+  "events": {
+    "shift": {"sourcePool":"Kenney Sci-fi Sounds","character":"short phase snap; no long tail","maxMs":260},
+    "deltaBurst": {"sourcePool":"Kenney Sci-fi Sounds","character":"compact energy pulse","maxMs":220},
+    "enemyHit": {"sourcePool":"Kenney Impact Sounds","character":"dry readable tick; low masking","maxMs":120},
+    "enemyDeath": {"sourcePool":"Kenney Impact Sounds","character":"brief fractured pop","maxMs":220},
+    "signalXpPickup": {"sourcePool":"Kenney Interface Sounds","character":"small bright confirmation","maxMs":120},
+    "levelUp": {"sourcePool":"Kenney Interface Sounds","character":"two-step positive cue","maxMs":420},
+    "draftSelect": {"sourcePool":"Kenney Interface Sounds","character":"decisive UI lock-in","maxMs":160},
+    "playerHit": {"sourcePool":"Kenney Impact Sounds","character":"low transient; distinct from enemy hit","maxMs":180}
+  },
+  "rules": [
+    "No exact audio file is production-approved before audition in combat.",
+    "Audio must support mute and reduced-stimulation settings.",
+    "No event may rely on audio alone for gameplay state.",
+    "Avoid long reverbs that obscure high-density combat."
+  ]
+}
