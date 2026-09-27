@@ -122,19 +122,21 @@ async function qualifyRankV({ page, game }) {
         if (before.hp >= 100) assert.equal(ids.includes("FIELD_REPAIR"), false, "full-HP FIELD REPAIR must be absent");
         if (before.pickupRadius >= V21_SIGNAL_MAGNET_MAX_RADIUS) assert.equal(ids.includes("SIGNAL_MAGNET"), false, "capped SIGNAL MAGNET must be absent");
 
+        console.log(`RARE_SHIFT_V2_1C_POST_RANK_V_DRAFT_IDS=${ids.join(",")}`);
         await screenshot(page, "rank-v-postfix-draft");
 
-        // Prefer FIELD REPAIR when available because the long qualifier has
-        // intentionally accumulated combat damage. This is a real legal draft
-        // choice, not a test-only heal, and lets us prove that the rendered
-        // postfix card is actionable.
+        // Four preceding DELTA upgrades already prove the real pointer path.
+        // Use the runtime's supported 1-3 keyboard path for the final postfix
+        // selection so this assertion exercises chooseDraft() without relying
+        // on scaled-canvas pointer-coordinate precision for a reduced card set.
         const selectedId = ids.includes("FIELD_REPAIR") ? "FIELD_REPAIR" : ids[0];
         const selectedIndex = ids.indexOf(selectedId);
         const hpBefore = before.hp;
         const radiusBefore = before.pickupRadius;
-        await clickDraftChoice(canvas, selectedIndex, count);
+        await canvas.focus();
+        await canvas.press(String(selectedIndex + 1));
         await page.waitForTimeout(200);
-        assert.equal(await data("draft-open"), "false", "postfix pointer selection must close the draft");
+        assert.equal(await data("draft-open"), "false", "postfix keyboard selection must close the draft");
         assert.equal(Number(await data("delta-rank")), 5, "postfix selection must not change maxed DELTA rank");
 
         if (selectedId === "FIELD_REPAIR") {
