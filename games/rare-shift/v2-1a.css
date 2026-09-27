@@ -1,0 +1,39 @@
+.rare-shift-accessibility {
+  max-width: max-content;
+}
+
+.rare-shift-accessibility-survival {
+  top: 78px;
+  right: 14px;
+  padding: 4px 7px;
+  border: 1px solid rgba(101, 115, 131, .48);
+  background: rgba(11, 14, 18, .86);
+  color: #9eabb8;
+  font-size: 9px;
+  line-height: 1;
+}
+
+.rare-shift-accessibility-survival label {
+  white-space: nowrap;
+}
+
+.rare-shift-accessibility-survival input {
+  width: 12px;
+  height: 12px;
+  margin: 0;
+}
+
+@media (max-width: 560px) {
+  .rare-shift-accessibility-survival {
+    top: 32px;
+    right: 4px;
+    padding: 2px 4px;
+    font-size: 6px;
+    opacity: .82;
+  }
+
+  .rare-shift-accessibility-survival input {
+    width: 9px;
+    height: 9px;
+  }
+}
