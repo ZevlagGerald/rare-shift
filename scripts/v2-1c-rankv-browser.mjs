@@ -74,20 +74,16 @@ async function qualifyRankV({ page, game }) {
   assert.equal(await data("level"), "1");
   assert.equal(await data("dead"), "false");
 
-  // Keep the qualification player moving almost continuously. The bounded V2-1
-  // slice is tuned for 30-60 seconds, so a long Rank-V proof must not add large
-  // stationary gaps that manufacture contact damage unrelated to draft validity.
-  const route = [
-    "ArrowRight", "ArrowRight",
-    "ArrowDown", "ArrowDown",
-    "ArrowLeft", "ArrowLeft",
-    "ArrowUp", "ArrowUp",
-  ];
+  // Preserve the short-slice movement pattern already demonstrated to produce
+  // genuine kills/XP. Once Rank V is reached, increase movement duty-cycle so
+  // the qualifier can survive long enough to observe the next real level-up
+  // without changing gameplay state or granting test-only health.
+  const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
   let routeIndex = 0;
   let deltaSelections = 0;
   let rankVReached = false;
   let postRankVDraftObserved = false;
-  const deadline = Date.now() + 240_000;
+  const deadline = Date.now() + 180_000;
 
   while (Date.now() < deadline && !postRankVDraftObserved) {
     const before = await snapshot(data);
@@ -128,10 +124,15 @@ async function qualifyRankV({ page, game }) {
 
         await screenshot(page, "rank-v-postfix-draft");
 
-        const selectedId = ids[0];
+        // Prefer FIELD REPAIR when available because the long qualifier has
+        // intentionally accumulated combat damage. This is a real legal draft
+        // choice, not a test-only heal, and lets us prove that the rendered
+        // postfix card is actionable.
+        const selectedId = ids.includes("FIELD_REPAIR") ? "FIELD_REPAIR" : ids[0];
+        const selectedIndex = ids.indexOf(selectedId);
         const hpBefore = before.hp;
         const radiusBefore = before.pickupRadius;
-        await clickDraftChoice(canvas, 0, count);
+        await clickDraftChoice(canvas, selectedIndex, count);
         await page.waitForTimeout(200);
         assert.equal(await data("draft-open"), "false", "postfix pointer selection must close the draft");
         assert.equal(Number(await data("delta-rank")), 5, "postfix selection must not change maxed DELTA rank");
@@ -151,9 +152,11 @@ async function qualifyRankV({ page, game }) {
       }
     }
 
-    await canvas.press(route[routeIndex % route.length], { delay: 760 });
+    const moveDelay = rankVReached ? 650 : 520;
+    const settleDelay = rankVReached ? 180 : 520;
+    await canvas.press(route[routeIndex % route.length], { delay: moveDelay });
     routeIndex += 1;
-    await page.waitForTimeout(90);
+    await page.waitForTimeout(settleDelay);
 
     if (routeIndex % 2 === 0 && !datasetBoolean(await data("draft-open"))) {
       await canvas.press("Space");
@@ -183,7 +186,7 @@ async function qualifyRankV({ page, game }) {
 await testGame(gameDirectory, {
   width: 960,
   height: 800,
-  timeout: 280_000,
+  timeout: 220_000,
   screenshot: resolve("artifacts/rare-shift-v2-1c-rankv-host-960.png"),
   check: qualifyRankV,
 });
