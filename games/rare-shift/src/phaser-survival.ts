@@ -66,6 +66,10 @@ function hex(value: string): number {
   return Number.parseInt(value.slice(1), 16);
 }
 
+function romanRank(rank: number): string {
+  return ["I", "II", "III", "IV", "V"][Math.max(1, Math.min(5, rank)) - 1];
+}
+
 class SurvivalScene extends Phaser.Scene {
   private readonly pair: SelectedFramePair;
   private readonly friendLabel: string;
@@ -96,6 +100,7 @@ class SurvivalScene extends Phaser.Scene {
   private draftOpen = false;
   private draftChoices: readonly V21DraftChoice[] = [];
   private draftViews: Phaser.GameObjects.Container[] = [];
+  private draftBackdrop: Phaser.GameObjects.Rectangle | null = null;
   private qualified = false;
 
   private moveUp = false;
@@ -107,10 +112,14 @@ class SurvivalScene extends Phaser.Scene {
   private joystickVector = { x: 0, y: 0 };
   private joystickBase!: Phaser.GameObjects.Arc;
   private joystickKnob!: Phaser.GameObjects.Arc;
+  private touchZone!: Phaser.GameObjects.Rectangle;
+  private shiftButton!: Phaser.GameObjects.Rectangle;
+  private shiftLabel!: Phaser.GameObjects.Text;
 
   private hpBar!: Phaser.GameObjects.Graphics;
   private xpBar!: Phaser.GameObjects.Graphics;
   private hudText!: Phaser.GameObjects.Text;
+  private buildText!: Phaser.GameObjects.Text;
   private phaseText!: Phaser.GameObjects.Text;
   private statusText!: Phaser.GameObjects.Text;
 
@@ -188,6 +197,26 @@ class SurvivalScene extends Phaser.Scene {
   private drawWorld(): void {
     this.background = this.add.graphics().setDepth(-10);
     this.background.fillStyle(hex(V2_PALETTE.backgroundPrimary), 1).fillRect(0, 0, V21_WORLD_WIDTH, V21_WORLD_HEIGHT);
+
+    const sectorW = V21_WORLD_WIDTH / 5;
+    const sectorH = V21_WORLD_HEIGHT / 4;
+    for (let sy = 0; sy < 4; sy++) {
+      for (let sx = 0; sx < 5; sx++) {
+        const left = sx * sectorW;
+        const top = sy * sectorH;
+        if ((sx + sy) % 2 === 0) {
+          this.background.fillStyle(hex(V2_PALETTE.backgroundSecondary), 0.22)
+            .fillRect(left + 8, top + 8, sectorW - 16, sectorH - 16);
+        }
+        this.background.lineStyle(1, hex(V2_PALETTE.gridLine), 0.2)
+          .strokeRect(left + 8, top + 8, sectorW - 16, sectorH - 16);
+        const railTone = (sx + sy) % 2 === 0 ? hex(V2_PALETTE.phaseA) : hex(V2_PALETTE.phaseB);
+        this.background.lineStyle(2, railTone, 0.09);
+        this.background.lineBetween(left + 26, top + 28, left + 102, top + 28);
+        this.background.lineBetween(left + 26, top + 28, left + 26, top + 78);
+      }
+    }
+
     const grid = buildFractureGrid(30, 20, this.seed);
     const cellW = V21_WORLD_WIDTH / 30;
     const cellH = V21_WORLD_HEIGHT / 20;
@@ -196,11 +225,11 @@ class SurvivalScene extends Phaser.Scene {
         const px = x * cellW, py = y * cellH;
         const cell = grid[y][x];
         if (cell === "GRID") {
-          this.background.lineStyle(1, hex(V2_PALETTE.gridLine), 0.28).strokeRect(px + 1, py + 1, cellW - 2, cellH - 2);
+          this.background.lineStyle(1, hex(V2_PALETTE.gridLine), 0.32).strokeRect(px + 1, py + 1, cellW - 2, cellH - 2);
         } else if (cell === "FRACTURE") {
-          this.background.lineStyle(1, hex(V2_PALETTE.gridLine), 0.62).lineBetween(px + 8, py + cellH - 10, px + cellW - 8, py + 10);
+          this.background.lineStyle(1, hex(V2_PALETTE.gridLine), 0.7).lineBetween(px + 8, py + cellH - 10, px + cellW - 8, py + 10);
         } else if (cell === "COMMON_MARK") {
-          this.background.fillStyle(hex(V2_PALETTE.common), 0.08).fillRect(px + cellW / 2 - 4, py + cellH / 2 - 4, 8, 8);
+          this.background.fillStyle(hex(V2_PALETTE.common), 0.12).fillRect(px + cellW / 2 - 4, py + cellH / 2 - 4, 8, 8);
         }
       }
     }
@@ -215,6 +244,8 @@ class SurvivalScene extends Phaser.Scene {
     for (let i = 0; i < PICKUP_POOL_SIZE; i++) {
       const view = this.add.container(-500, -500).setDepth(15).setVisible(false);
       this.paintRows(view, V2_ART_SPRITES.SIGNAL_XP.rows, hex(V2_PALETTE.common), 2);
+      const ring = this.add.circle(0, 0, 20, hex(V2_PALETTE.common), 0.025).setStrokeStyle(1, hex(V2_PALETTE.common), 0.28);
+      view.addAt(ring, 0);
       this.pickups.push({ active: false, x: -500, y: -500, view });
     }
   }
@@ -228,12 +259,31 @@ class SurvivalScene extends Phaser.Scene {
     }
   }
 
+  private paintEnemy(container: Phaser.GameObjects.Container, kind: V2EnemyKind): void {
+    const tone = kind === "TRACE" ? hex(V2_PALETTE.common) : kind === "SPLIT_A" ? hex(V2_PALETTE.phaseA) : hex(V2_PALETTE.phaseB);
+    this.paintRows(container, V2_ART_SPRITES[kind].rows, tone, 2);
+    if (kind === "TRACE") {
+      container.add(this.add.rectangle(0, 0, 40, 40, 0x000000, 0).setStrokeStyle(1, tone, 0.48));
+      container.add(this.add.rectangle(0, -22, 10, 2, tone, 0.7));
+      container.add(this.add.rectangle(0, 22, 10, 2, tone, 0.7));
+    } else {
+      const side = kind === "SPLIT_A" ? -22 : 22;
+      const inward = kind === "SPLIT_A" ? 4 : -4;
+      container.add(this.add.rectangle(side, 0, 3, 30, tone, 0.72));
+      container.add(this.add.rectangle(side + inward, -13, 10, 3, tone, 0.72));
+      container.add(this.add.rectangle(side + inward, 13, 10, 3, tone, 0.72));
+    }
+  }
+
   private paintFriend(): void {
     this.friend.removeAll(true);
     const rows = this.phase === "A" ? this.pair.a.rows : this.pair.b.rows;
-    const scale = 3;
+    const tone = hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB);
+    const scale = 4;
     const left = -(16 * scale) / 2;
     const top = -(16 * scale) / 2;
+    this.friend.add(this.add.circle(0, 5, 42, tone, 0.035).setStrokeStyle(1, tone, 0.52));
+    this.friend.add(this.add.circle(0, 5, 34, hex(V2_PALETTE.common), 0.018).setStrokeStyle(1, hex(V2_PALETTE.common), 0.16));
     for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) if (rows[y][x] === "#") {
       this.friend.add(this.add.rectangle(left + x * scale + scale / 2, top + y * scale + scale / 2, scale + 2, scale + 2, hex(V2_PALETTE.common)));
     }
@@ -248,8 +298,9 @@ class SurvivalScene extends Phaser.Scene {
     this.hpBar = this.add.graphics().setScrollFactor(0).setDepth(101);
     this.xpBar = this.add.graphics().setScrollFactor(0).setDepth(101);
     this.hudText = this.add.text(40, 18, "", { fontFamily: "monospace", fontSize: "14px", color: V2_PALETTE.common, fontStyle: "bold" }).setScrollFactor(0).setDepth(102);
-    this.phaseText = this.add.text(748, 18, "", { fontFamily: "monospace", fontSize: "15px", color: V2_PALETTE.phaseB, fontStyle: "bold", align: "right" }).setScrollFactor(0).setDepth(102);
-    this.statusText = this.add.text(480, 598, "MOVE · AUTO-ATTACK · SPACE/SHIFT changes threat authority", { fontFamily: "monospace", fontSize: "12px", color: "#aeb9c5", backgroundColor: "#0b0e12", padding: { x: 8, y: 5 } }).setOrigin(0.5).setScrollFactor(0).setDepth(110);
+    this.buildText = this.add.text(574, 20, "", { fontFamily: "monospace", fontSize: "11px", color: "#9eabb8", fontStyle: "bold" }).setScrollFactor(0).setDepth(102);
+    this.phaseText = this.add.text(790, 16, "", { fontFamily: "monospace", fontSize: "14px", color: V2_PALETTE.phaseB, fontStyle: "bold", align: "right" }).setScrollFactor(0).setDepth(102);
+    this.statusText = this.add.text(480, 82, "MOVE · AUTO-FIRE · SPACE / SHIFT", { fontFamily: "monospace", fontSize: "10px", color: "#aeb9c5", backgroundColor: "#0b0e12", padding: { x: 8, y: 4 } }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(110);
     this.updateHud();
   }
 
@@ -260,9 +311,11 @@ class SurvivalScene extends Phaser.Scene {
     this.xpBar.clear();
     this.xpBar.fillStyle(0x202832, 1).fillRect(310, 48, 240, 8);
     this.xpBar.fillStyle(0x7ee787, 1).fillRect(310, 48, 240 * this.xp / xpThreshold(this.level), 8);
-    this.hudText.setText(`HP ${Math.max(0, this.hp)}/${V21_PLAYER_MAX_HP}   LV ${this.level}   XP ${this.xp}/${xpThreshold(this.level)}   KILLS ${this.kills}   DELTA ${this.deltaRank}`);
+    this.hudText.setText(`HP ${Math.max(0, this.hp)}/${V21_PLAYER_MAX_HP}   LV ${this.level}   XP ${this.xp}/${xpThreshold(this.level)}`);
+    this.buildText.setText(`K ${this.kills} · Δ ${romanRank(this.deltaRank)}`);
     this.phaseText.setColor(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB);
     this.phaseText.setText(`PHASE ${this.phase}\nFRAME ${this.phase === "A" ? this.pair.a.index : this.pair.b.index}`);
+    if (this.shiftButton) this.shiftButton.setStrokeStyle(2, hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB));
   }
 
   private spawnEnemy(): void {
@@ -275,9 +328,8 @@ class SurvivalScene extends Phaser.Scene {
     slot.x = spec.position.x;
     slot.y = spec.position.y;
     slot.view.setPosition(slot.x, slot.y).setVisible(true);
-    const tone = spec.kind === "TRACE" ? hex(V2_PALETTE.common) : spec.kind === "SPLIT_A" ? hex(V2_PALETTE.phaseA) : hex(V2_PALETTE.phaseB);
-    this.paintRows(slot.view, V2_ART_SPRITES[spec.kind].rows, tone, 2);
-    slot.view.setAlpha(isEnemyCorporeal(spec.kind, this.phase) ? 1 : 0.28);
+    this.paintEnemy(slot.view, spec.kind);
+    slot.view.setAlpha(isEnemyCorporeal(spec.kind, this.phase) ? 1 : 0.24);
   }
 
   private updateEnemies(dt: number): void {
@@ -291,7 +343,7 @@ class SurvivalScene extends Phaser.Scene {
       enemy.y += dy / distance * speed * dt;
       enemy.view.setPosition(enemy.x, enemy.y);
       const corporeal = isEnemyCorporeal(enemy.kind, this.phase);
-      enemy.view.setAlpha(corporeal ? 1 : 0.25);
+      enemy.view.setAlpha(corporeal ? 1 : 0.22);
       if (corporeal && distance < 32 && this.elapsedActiveMs - this.lastContactAt >= V21_CONTACT_INVULN_MS) {
         this.lastContactAt = this.elapsedActiveMs;
         this.hp = Math.max(0, this.hp - enemyContactDamage(enemy.kind));
@@ -306,11 +358,28 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private fireDelta(profile: ReturnType<typeof buildDeltaProfile>): void {
-    this.burst.clear().setVisible(true).setPosition(this.friend.x, this.friend.y);
+    this.tweens.killTweensOf(this.burst);
+    this.burst.clear().setVisible(true).setPosition(this.friend.x, this.friend.y).setScale(this.reduced ? 1 : 0.72).setAlpha(1);
     const tone = this.phase === "A" ? hex(V2_PALETTE.phaseA) : hex(V2_PALETTE.phaseB);
-    this.burst.fillStyle(tone, this.reduced ? 0.5 : 0.78);
-    for (const point of profile.points) this.burst.fillRect(point.x * DELTA_PIXEL_SCALE - 3, point.y * DELTA_PIXEL_SCALE - 3, 6, 6);
-    this.time.delayedCall(effectDuration("DELTA_BURST", this.reduced), () => this.burst.setVisible(false));
+    this.burst.fillStyle(hex(V2_PALETTE.common), this.reduced ? 0.16 : 0.22);
+    for (const point of profile.points) this.burst.fillRect(point.x * DELTA_PIXEL_SCALE - 6, point.y * DELTA_PIXEL_SCALE - 6, 12, 12);
+    this.burst.fillStyle(tone, this.reduced ? 0.62 : 0.96);
+    for (const point of profile.points) this.burst.fillRect(point.x * DELTA_PIXEL_SCALE - 4, point.y * DELTA_PIXEL_SCALE - 4, 8, 8);
+
+    const duration = effectDuration("DELTA_BURST", this.reduced);
+    if (this.reduced) {
+      this.time.delayedCall(duration, () => this.burst.setVisible(false));
+    } else {
+      this.tweens.add({
+        targets: this.burst,
+        scaleX: 1.08,
+        scaleY: 1.08,
+        alpha: 0,
+        duration,
+        ease: "Quad.Out",
+        onComplete: () => this.burst.setVisible(false).setAlpha(1).setScale(1),
+      });
+    }
 
     for (const enemy of this.enemies) {
       if (!enemy.active || !isEnemyCorporeal(enemy.kind, this.phase)) continue;
@@ -318,22 +387,39 @@ class SurvivalScene extends Phaser.Scene {
       enemy.hp -= profile.damage;
       enemy.view.setAlpha(0.55);
       this.time.delayedCall(effectDuration("ENEMY_HIT", this.reduced), () => {
-        if (enemy.active) enemy.view.setAlpha(isEnemyCorporeal(enemy.kind, this.phase) ? 1 : 0.25);
+        if (enemy.active) enemy.view.setAlpha(isEnemyCorporeal(enemy.kind, this.phase) ? 1 : 0.22);
       });
       if (enemy.hp <= 0) this.killEnemy(enemy);
     }
   }
 
   private killEnemy(enemy: EnemyRuntime): void {
+    const deathX = enemy.x;
+    const deathY = enemy.y;
+    const deathTone = enemy.kind === "TRACE" ? hex(V2_PALETTE.common) : enemy.kind === "SPLIT_A" ? hex(V2_PALETTE.phaseA) : hex(V2_PALETTE.phaseB);
     enemy.active = false;
     enemy.view.setVisible(false);
     this.kills += 1;
+    this.emitDeathFx(deathX, deathY, deathTone);
     const pickup = this.pickups.find(item => !item.active);
     if (pickup) {
       pickup.active = true;
-      pickup.x = enemy.x;
-      pickup.y = enemy.y;
+      pickup.x = deathX;
+      pickup.y = deathY;
       pickup.view.setPosition(pickup.x, pickup.y).setVisible(true).setAlpha(1);
+    }
+  }
+
+  private emitDeathFx(x: number, y: number, tone: number): void {
+    const fx = this.add.graphics().setPosition(x, y).setDepth(25);
+    fx.fillStyle(tone, 0.78);
+    fx.fillRect(-12, -2, 24, 4);
+    fx.fillRect(-2, -12, 4, 24);
+    const duration = effectDuration("ENEMY_DEATH", this.reduced);
+    if (this.reduced) {
+      this.time.delayedCall(duration, () => fx.destroy());
+    } else {
+      this.tweens.add({ targets: fx, scaleX: 1.6, scaleY: 1.6, alpha: 0, duration, ease: "Quad.Out", onComplete: () => fx.destroy() });
     }
   }
 
@@ -364,22 +450,46 @@ class SurvivalScene extends Phaser.Scene {
 
   private openDraft(): void {
     this.draftOpen = true;
+    this.setCombatControlsEnabled(false);
+    this.draftBackdrop?.destroy();
+    this.draftBackdrop = this.add.rectangle(480, 320, 960, 640, 0x05070a, 0.58).setScrollFactor(0).setDepth(180);
     const state: V21BuildState = { deltaRank: this.deltaRank, hp: this.hp, maxHp: V21_PLAYER_MAX_HP, pickupRadius: this.pickupRadius };
     this.draftChoices = buildV21Draft(this.seed, this.level, state);
     const xs = [220, 480, 740];
     this.draftViews = this.draftChoices.map((choice, index) => this.makeDraftCard(xs[index], choice, index));
-    this.statusText.setText("LEVEL UP // choose 1 of 3 · keys 1–3 or tap");
+    this.statusText.setText("LEVEL UP // choose 1 of 3 · keys 1–3 or tap").setDepth(210);
     this.syncTestState();
   }
 
   private makeDraftCard(x: number, choice: V21DraftChoice, index: number): Phaser.GameObjects.Container {
     const container = this.add.container(x, 320).setScrollFactor(0).setDepth(200);
     const border = choice.id === "DELTA_RANK" ? hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB) : 0x657383;
-    const bg = this.add.rectangle(0, 0, 220, 230, 0x11151b, 0.98).setStrokeStyle(2, border).setInteractive({ useHandCursor: true });
-    const tag = this.add.text(0, -82, `${index + 1} // ${choice.category}`, { fontFamily: "monospace", fontSize: "12px", color: "#8b98a7" }).setOrigin(0.5);
-    const title = this.add.text(0, -36, choice.id === "DELTA_RANK" ? `${choice.name} ${this.deltaRank + 1}` : choice.name, { fontFamily: "monospace", fontSize: "18px", color: V2_PALETTE.common, fontStyle: "bold", align: "center", wordWrap: { width: 190 } }).setOrigin(0.5);
-    const desc = this.add.text(0, 45, choice.description, { fontFamily: "monospace", fontSize: "12px", color: "#bac5d0", align: "center", wordWrap: { width: 180 } }).setOrigin(0.5);
-    container.add([bg, tag, title, desc]);
+    const bg = this.add.rectangle(0, 0, 220, 230, 0x11151b, 0.99).setStrokeStyle(choice.id === "DELTA_RANK" ? 3 : 2, border).setInteractive({ useHandCursor: true });
+    const tag = this.add.text(0, -91, `${index + 1} // ${choice.category}`, { fontFamily: "monospace", fontSize: "11px", color: "#8b98a7" }).setOrigin(0.5);
+    const nextRank = Math.min(5, this.deltaRank + 1);
+    const titleText = choice.id === "DELTA_RANK" ? `${choice.name} ${romanRank(nextRank)}` : choice.name;
+    const title = this.add.text(0, -54, titleText, { fontFamily: "monospace", fontSize: "17px", color: V2_PALETTE.common, fontStyle: "bold", align: "center", wordWrap: { width: 190 } }).setOrigin(0.5);
+    const detail = this.add.text(0, -27, choice.id === "DELTA_RANK" ? `RANK ${romanRank(this.deltaRank)} → ${romanRank(nextRank)}` : "RUN UTILITY", { fontFamily: "monospace", fontSize: "9px", color: choice.id === "DELTA_RANK" ? (this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB) : "#748392", letterSpacing: 1 }).setOrigin(0.5);
+    const desc = this.add.text(0, 61, choice.description, { fontFamily: "monospace", fontSize: "11px", color: "#bac5d0", align: "center", wordWrap: { width: 178 } }).setOrigin(0.5);
+    container.add([bg, tag, title, detail]);
+
+    if (choice.id === "DELTA_RANK") {
+      const preview = this.add.graphics();
+      const profile = buildDeltaProfile(this.pair.a.rows, this.pair.b.rows, this.phase, nextRank);
+      preview.fillStyle(border, 0.82);
+      for (const point of profile.points) preview.fillRect(point.x * 1.35 - 1.5, point.y * 1.35 - 1.5, 3, 3);
+      preview.setPosition(0, 9);
+      container.add(preview);
+    } else {
+      const glyph = this.add.graphics();
+      glyph.lineStyle(2, border, 0.62);
+      glyph.strokeRect(-12, -3, 24, 24);
+      glyph.lineBetween(-6, 9, 6, 9);
+      glyph.setPosition(0, -2);
+      container.add(glyph);
+    }
+
+    container.add(desc);
     bg.on("pointerdown", () => this.chooseDraft(index));
     return container;
   }
@@ -395,8 +505,11 @@ class SurvivalScene extends Phaser.Scene {
     for (const view of this.draftViews) view.destroy(true);
     this.draftViews = [];
     this.draftChoices = [];
+    this.draftBackdrop?.destroy();
+    this.draftBackdrop = null;
     this.draftOpen = false;
-    this.statusText.setText(`${choice.name} selected // combat resumed.`);
+    this.setCombatControlsEnabled(true);
+    this.statusText.setDepth(110).setText(`${choice.name} selected // combat resumed.`);
     this.updateHud();
     this.syncTestState();
   }
@@ -415,11 +528,25 @@ class SurvivalScene extends Phaser.Scene {
     this.phase = this.phase === "A" ? "B" : "A";
     this.shifts += 1;
     this.paintFriend();
-    for (const enemy of this.enemies) if (enemy.active) enemy.view.setAlpha(isEnemyCorporeal(enemy.kind, this.phase) ? 1 : 0.25);
+    for (const enemy of this.enemies) if (enemy.active) enemy.view.setAlpha(isEnemyCorporeal(enemy.kind, this.phase) ? 1 : 0.22);
     this.updateHud();
     this.statusText.setText(`SHIFT → Phase ${this.phase} // threat authority rewritten.`);
-    if (!this.reduced) this.cameras.main.flash(80, this.phase === "A" ? 76 : 247, this.phase === "A" ? 201 : 37, this.phase === "A" ? 240 : 133, false);
+    this.emitShiftFx();
     this.syncTestState();
+  }
+
+  private emitShiftFx(): void {
+    const tone = hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB);
+    const fx = this.add.graphics().setPosition(this.friend.x, this.friend.y).setDepth(29);
+    fx.lineStyle(2, tone, 0.82).strokeCircle(0, 0, 36);
+    fx.lineStyle(1, hex(V2_PALETTE.common), 0.35).strokeCircle(0, 0, 46);
+    const duration = effectDuration("SHIFT_TRANSITION", this.reduced);
+    if (this.reduced) {
+      this.time.delayedCall(duration, () => fx.destroy());
+    } else {
+      this.tweens.add({ targets: fx, scaleX: 1.8, scaleY: 1.8, alpha: 0, duration, ease: "Quad.Out", onComplete: () => fx.destroy() });
+      this.cameras.main.flash(70, this.phase === "A" ? 76 : 247, this.phase === "A" ? 201 : 37, this.phase === "A" ? 240 : 133, false);
+    }
   }
 
   private installKeyboard(): void {
@@ -444,10 +571,10 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private installTouch(): void {
-    this.joystickBase = this.add.circle(this.joystickOrigin.x, this.joystickOrigin.y, 62, 0x202832, 0.75).setStrokeStyle(2, 0x657383).setScrollFactor(0).setDepth(120);
+    this.joystickBase = this.add.circle(this.joystickOrigin.x, this.joystickOrigin.y, 62, 0x202832, 0.72).setStrokeStyle(2, 0x657383).setScrollFactor(0).setDepth(120);
     this.joystickKnob = this.add.circle(this.joystickOrigin.x, this.joystickOrigin.y, 24, 0xe8edf2, 0.65).setScrollFactor(0).setDepth(121);
-    const zone = this.add.rectangle(this.joystickOrigin.x, this.joystickOrigin.y, 220, 180, 0x000000, 0.001).setScrollFactor(0).setDepth(122).setInteractive();
-    zone.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+    this.touchZone = this.add.rectangle(this.joystickOrigin.x, this.joystickOrigin.y, 220, 180, 0x000000, 0.001).setScrollFactor(0).setDepth(122).setInteractive();
+    this.touchZone.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
       if (this.draftOpen) return;
       this.joystickPointer = pointer.id;
       this.updateJoystick(pointer.x, pointer.y);
@@ -462,10 +589,23 @@ class SurvivalScene extends Phaser.Scene {
       this.joystickKnob.setPosition(this.joystickOrigin.x, this.joystickOrigin.y);
     });
 
-    const shift = this.add.rectangle(842, 530, 150, 72, 0x202832, 0.95).setStrokeStyle(2, hex(V2_PALETTE.phaseB)).setScrollFactor(0).setDepth(122).setInteractive({ useHandCursor: true });
-    const label = this.add.text(842, 530, "SHIFT\nSPACE", { fontFamily: "monospace", fontSize: "16px", color: V2_PALETTE.common, fontStyle: "bold", align: "center" }).setOrigin(0.5).setScrollFactor(0).setDepth(123);
-    shift.on("pointerdown", () => this.shift());
-    label.setInteractive({ useHandCursor: true }).on("pointerdown", () => this.shift());
+    this.shiftButton = this.add.rectangle(842, 530, 150, 72, 0x202832, 0.95).setStrokeStyle(2, hex(V2_PALETTE.phaseB)).setScrollFactor(0).setDepth(122).setInteractive({ useHandCursor: true });
+    this.shiftLabel = this.add.text(842, 530, "SHIFT\nSPACE", { fontFamily: "monospace", fontSize: "16px", color: V2_PALETTE.common, fontStyle: "bold", align: "center" }).setOrigin(0.5).setScrollFactor(0).setDepth(123);
+    this.shiftButton.on("pointerdown", () => this.shift());
+    this.shiftLabel.setInteractive({ useHandCursor: true }).on("pointerdown", () => this.shift());
+  }
+
+  private setCombatControlsEnabled(enabled: boolean): void {
+    const alpha = enabled ? 1 : 0.2;
+    this.joystickBase.setAlpha(alpha);
+    this.joystickKnob.setAlpha(alpha);
+    this.shiftButton.setAlpha(alpha);
+    this.shiftLabel.setAlpha(enabled ? 1 : 0.28);
+    if (!enabled) {
+      this.joystickPointer = null;
+      this.joystickVector = { x: 0, y: 0 };
+      this.joystickKnob.setPosition(this.joystickOrigin.x, this.joystickOrigin.y);
+    }
   }
 
   private updateJoystick(x: number, y: number): void {
@@ -502,6 +642,8 @@ class SurvivalScene extends Phaser.Scene {
     canvas.dataset.qualified = this.qualified ? "true" : "false";
     canvas.dataset.dead = this.dead ? "true" : "false";
     canvas.dataset.seed = String(this.seed);
+    canvas.dataset.controlsDimmed = this.draftOpen ? "true" : "false";
+    canvas.dataset.deltaFx = "canonical-exclusive";
   }
 }
 
