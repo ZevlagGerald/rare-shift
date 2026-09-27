@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyV21Draft, buildV21Draft } from "../src/draft-core.ts";
+import { applyV21Draft, buildV21Draft, isV21DraftChoiceValid } from "../src/draft-core.ts";
 import {
   buildDeltaProfile,
   deltaDamageForRank,
@@ -69,15 +69,72 @@ test("Signal XP crosses deterministic level thresholds", () => {
   assert.equal(result.levelsGained, 1);
 });
 
-test("V2-1 draft always exposes exactly three distinct choices and DELTA upgrade", () => {
+test("V2-1 draft exposes three distinct actionable choices when all three effects are valid", () => {
   const state = { deltaRank: 1, hp: 55, maxHp: 100, pickupRadius: 76 };
   const draft = buildV21Draft(13699, 2, state);
   assert.equal(draft.length, 3);
   assert.equal(new Set(draft.map(choice => choice.id)).size, 3);
-  assert.ok(draft.some(choice => choice.id === "DELTA_RANK" && !choice.disabled));
+  assert.ok(draft.every(choice => !choice.disabled && isV21DraftChoiceValid(state, choice.id)));
+  assert.ok(draft.some(choice => choice.id === "DELTA_RANK"));
   assert.equal(applyV21Draft(state, "DELTA_RANK").deltaRank, 2);
   assert.equal(applyV21Draft(state, "FIELD_REPAIR").hp, 80);
   assert.equal(applyV21Draft(state, "SIGNAL_MAGNET").pickupRadius, 111);
+});
+
+test("DELTA Rank I-IV remains eligible while Rank V is absent rather than disabled", () => {
+  for (let rank = 1; rank <= 4; rank++) {
+    const state = { deltaRank: rank, hp: 50, maxHp: 100, pickupRadius: 76 };
+    const draft = buildV21Draft(13699, rank + 1, state);
+    assert.ok(draft.some(choice => choice.id === "DELTA_RANK"));
+  }
+
+  const maxed = { deltaRank: 5, hp: 50, maxHp: 100, pickupRadius: 76 };
+  const draft = buildV21Draft(13699, 6, maxed);
+  assert.equal(draft.some(choice => choice.id === "DELTA_RANK"), false);
+  assert.equal(draft.some(choice => choice.disabled), false);
+  assert.throws(() => applyV21Draft(maxed, "DELTA_RANK"), /already rank V/u);
+});
+
+test("FIELD REPAIR and SIGNAL MAGNET are filtered when they would be no-ops", () => {
+  const fullHp = { deltaRank: 2, hp: 100, maxHp: 100, pickupRadius: 76 };
+  assert.equal(buildV21Draft(13699, 3, fullHp).some(choice => choice.id === "FIELD_REPAIR"), false);
+  assert.throws(() => applyV21Draft(fullHp, "FIELD_REPAIR"), /missing HP/u);
+
+  const cappedMagnet = { deltaRank: 2, hp: 50, maxHp: 100, pickupRadius: 220 };
+  assert.equal(buildV21Draft(13699, 3, cappedMagnet).some(choice => choice.id === "SIGNAL_MAGNET"), false);
+  assert.throws(() => applyV21Draft(cappedMagnet, "SIGNAL_MAGNET"), /pickup-radius cap/u);
+});
+
+test("every rendered draft choice produces a real state change", () => {
+  const states = [
+    { deltaRank: 1, hp: 50, maxHp: 100, pickupRadius: 76 },
+    { deltaRank: 5, hp: 50, maxHp: 100, pickupRadius: 76 },
+    { deltaRank: 5, hp: 100, maxHp: 100, pickupRadius: 76 },
+    { deltaRank: 2, hp: 50, maxHp: 100, pickupRadius: 220 },
+  ];
+
+  for (const [index, state] of states.entries()) {
+    for (const choice of buildV21Draft(13699, index + 2, state)) {
+      assert.notDeepEqual(applyV21Draft(state, choice.id), state, `${choice.id} must change state`);
+    }
+  }
+});
+
+test("partially exhausted draft pools remain deterministic and contain only valid alternatives", () => {
+  const oneExhausted = { deltaRank: 5, hp: 50, maxHp: 100, pickupRadius: 76 };
+  const a = buildV21Draft(13699, 6, oneExhausted);
+  const b = buildV21Draft(13699, 6, oneExhausted);
+  assert.deepEqual(a, b);
+  assert.deepEqual(new Set(a.map(choice => choice.id)), new Set(["FIELD_REPAIR", "SIGNAL_MAGNET"]));
+
+  const multipleExhausted = { deltaRank: 5, hp: 100, maxHp: 100, pickupRadius: 76 };
+  const reduced = buildV21Draft(13699, 7, multipleExhausted);
+  assert.deepEqual(reduced.map(choice => choice.id), ["SIGNAL_MAGNET"]);
+});
+
+test("fully exhausted draft pool returns no dead or fake cards", () => {
+  const exhausted = { deltaRank: 5, hp: 100, maxHp: 100, pickupRadius: 220 };
+  assert.deepEqual(buildV21Draft(13699, 8, exhausted), []);
 });
 
 test("qualification gate requires the complete bounded V2-1 interaction", () => {

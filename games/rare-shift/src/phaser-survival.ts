@@ -70,6 +70,12 @@ function romanRank(rank: number): string {
   return ["I", "II", "III", "IV", "V"][Math.max(1, Math.min(5, rank)) - 1];
 }
 
+function draftCardXs(count: number): readonly number[] {
+  if (count === 1) return [480];
+  if (count === 2) return [350, 610];
+  return [220, 480, 740];
+}
+
 class SurvivalScene extends Phaser.Scene {
   private readonly pair: SelectedFramePair;
   private readonly friendLabel: string;
@@ -449,15 +455,25 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private openDraft(): void {
+    const state: V21BuildState = { deltaRank: this.deltaRank, hp: this.hp, maxHp: V21_PLAYER_MAX_HP, pickupRadius: this.pickupRadius };
+    this.draftChoices = buildV21Draft(this.seed, this.level, state);
+
+    if (this.draftChoices.length === 0) {
+      this.draftOpen = false;
+      this.setCombatControlsEnabled(true);
+      this.statusText.setDepth(110).setText("LEVEL UP // upgrade pool exhausted · combat resumed.");
+      this.syncTestState();
+      return;
+    }
+
     this.draftOpen = true;
     this.setCombatControlsEnabled(false);
     this.draftBackdrop?.destroy();
     this.draftBackdrop = this.add.rectangle(480, 320, 960, 640, 0x05070a, 0.58).setScrollFactor(0).setDepth(180);
-    const state: V21BuildState = { deltaRank: this.deltaRank, hp: this.hp, maxHp: V21_PLAYER_MAX_HP, pickupRadius: this.pickupRadius };
-    this.draftChoices = buildV21Draft(this.seed, this.level, state);
-    const xs = [220, 480, 740];
+    const xs = draftCardXs(this.draftChoices.length);
     this.draftViews = this.draftChoices.map((choice, index) => this.makeDraftCard(xs[index], choice, index));
-    this.statusText.setText("LEVEL UP // choose 1 of 3 · keys 1–3 or tap").setDepth(210);
+    const keyLabel = this.draftChoices.length === 1 ? "key 1" : `keys 1–${this.draftChoices.length}`;
+    this.statusText.setText(`LEVEL UP // choose 1 of ${this.draftChoices.length} · ${keyLabel} or tap`).setDepth(210);
     this.syncTestState();
   }
 
@@ -636,8 +652,10 @@ class SurvivalScene extends Phaser.Scene {
     canvas.dataset.kills = String(this.kills);
     canvas.dataset.shifts = String(this.shifts);
     canvas.dataset.deltaRank = String(this.deltaRank);
+    canvas.dataset.pickupRadius = String(this.pickupRadius);
     canvas.dataset.draftOpen = this.draftOpen ? "true" : "false";
     canvas.dataset.draftCount = String(this.draftChoices.length);
+    canvas.dataset.draftIds = this.draftChoices.map(choice => choice.id).join(",");
     canvas.dataset.activeEnemies = String(this.enemies.filter(enemy => enemy.active).length);
     canvas.dataset.qualified = this.qualified ? "true" : "false";
     canvas.dataset.dead = this.dead ? "true" : "false";
