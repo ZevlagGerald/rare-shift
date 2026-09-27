@@ -86,6 +86,8 @@ function qualifyV21(width) {
     assert.equal(await data("delta-rank"), "1");
     assert.equal(await data("level"), "1");
     assert.equal(await data("dead"), "false");
+    assert.equal(await data("delta-fx"), "canonical-exclusive");
+    assert.equal(await data("controls-dimmed"), "false");
 
     await screenshot(page, width, "initial");
 
@@ -105,9 +107,6 @@ function qualifyV21(width) {
     assert.notEqual(await data("phase"), initialPhase);
     assert.ok(Number(await data("shifts")) >= 1);
 
-    // V2-1 must prove real combat rather than a hidden state mutation. Move in short
-    // bursts, then deliberately hold position so enemies enter the canonical DELTA
-    // field and nearby Signal XP can magnetize into the Friend.
     const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
     let routeIndex = 0;
     let draftCaptured = false;
@@ -119,6 +118,7 @@ function qualifyV21(width) {
 
       if (before.draftOpen) {
         assert.equal(await data("draft-count"), "3");
+        assert.equal(await data("controls-dimmed"), "true");
         await screenshot(page, width, "draft");
         draftCaptured = true;
         const seed = Number(await data("seed"));
@@ -127,19 +127,16 @@ function qualifyV21(width) {
         await canvas.press(key);
         await page.waitForTimeout(150);
         assert.equal(await data("draft-open"), "false");
+        assert.equal(await data("controls-dimmed"), "false");
         assert.ok(Number(await data("delta-rank")) >= 2);
       }
 
       if (datasetBoolean(await data("qualified"))) break;
 
-      // Short reposition, then 1.4 s combat hold. The hold is intentional: this is
-      // still natural play and gives auto-fire/pickup attraction time to operate.
       await canvas.press(route[routeIndex % route.length], { delay: 460 });
       routeIndex += 1;
       await page.waitForTimeout(1400);
 
-      // Alternate phases often enough to exercise A/B authority and prevent a
-      // permanently ghosted split population from starving the kill/XP loop.
       if (routeIndex % 2 === 0 && !datasetBoolean(await data("draft-open"))) {
         await canvas.press("Space");
         await page.waitForTimeout(120);
@@ -165,7 +162,6 @@ function qualifyV21(width) {
 
     await screenshot(page, width, "qualified");
 
-    // Reduced motion must remain usable in the same qualified runtime.
     const reduce = game.getByLabel("Reduce motion");
     await reduce.check();
     assert.equal(await reduce.isChecked(), true);
