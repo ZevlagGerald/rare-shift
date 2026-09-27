@@ -62,7 +62,7 @@ test("DELTA rank power is normalized independently of canonical pixel count", ()
   const broadA = rows([[1, 1], [2, 2], [3, 3], [4, 4]]), broadB = rows([[14, 14]]);
   assert.equal(buildDeltaProfile(sparseA, sparseB, "A", 2).damage, buildDeltaProfile(broadA, broadB, "A", 2).damage);
   assert.equal(deltaDamageForRank(1), 12);
-  assert.equal(deltaDamageForRank(5), 28);
+  assert.equal(deltaDamageForRank(5), 14);
 });
 
 test("spawn sequence is deterministic and includes phased threats", () => {
