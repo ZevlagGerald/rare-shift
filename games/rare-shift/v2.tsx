@@ -7,6 +7,7 @@ import { derivePhaseField, selectFramePair } from "./src/phase-core.ts";
 import { mountPhaserSurvival, type PhaserSurvivalController } from "./src/phaser-survival.ts";
 import type { FrameCandidate, FrameRows, PixelClass, SelectedFramePair } from "./src/types.ts";
 import "./style.css";
+import "./v2-1a.css";
 
 type Stage = "loading" | "scan" | "survival" | "error";
 
@@ -140,9 +141,8 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
       <strong>{stage === "loading" ? "Reading your Friend's 64 canonical frames…" : "RARE//SHIFT could not start"}</strong>
       {stage === "error" && <><p>{error}</p><button type="button" disabled={paused} onClick={() => setRetry(value => value + 1)}>Retry</button></>}
     </div>}
-    <div className="rare-shift-accessibility">
+    <div className={`rare-shift-accessibility rare-shift-accessibility-${stage}`} data-build-note="V2-1A canonical DELTA combat sandbox">
       <label><input type="checkbox" checked={reducedMotion} onChange={event => setReducedMotion(event.target.checked)} /> Reduce motion</label>
-      <span>V2-1 SIGNAL DESCENT · canonical DELTA BURST · free combat sandbox · no RF spending · no persistent state</span>
     </div>
   </section>;
 }
