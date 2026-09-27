@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640" viewBox="0 0 960 640" shape-rendering="crispEdges">
+  <rect width="960" height="640" fill="#0b0e12"/>
+  <style>
+    .t{font-family:monospace;fill:#e8edf2}.m{font-family:monospace;fill:#7b8794}.panel{fill:#11151b;stroke:#202832;stroke-width:2}
+  </style>
+  <text class="t" x="24" y="30" font-size="18">RARE//SHIFT V2 — V2-ART-00 VISUAL NORMALIZATION PROOF</text>
+  <text class="m" x="24" y="52" font-size="12">canonical 1-bit identity × fractured phase-space</text>
+
+  <g transform="translate(24 78)">
+    <rect class="panel" width="560" height="320"/>
+    <text class="t" x="14" y="24" font-size="13">FRACTURE GRID // GAMEPLAY READABILITY</text>
+    <defs>
+      <pattern id="grid" width="64" height="64" patternUnits="userSpaceOnUse">
+        <rect width="64" height="64" fill="#0b0e12"/>
+        <path d="M0 32H24V28H36V32H64M32 0V20H36V44H32V64" fill="none" stroke="#202832" stroke-width="2"/>
+        <rect x="4" y="4" width="8" height="4" fill="#11151b"/>
+        <rect x="48" y="52" width="12" height="4" fill="#11151b"/>
+      </pattern>
+    </defs>
+    <rect x="12" y="38" width="536" height="268" fill="url(#grid)" stroke="#202832"/>
+
+    <g transform="translate(280 174) scale(3)">
+      <path d="M6 2h4v1h2v2h1v6h-1v2h-2v1H6v-1H4v-2H3V5h1V3h2z" fill="#e8edf2"/>
+      <rect x="5" y="5" width="2" height="2" fill="#0b0e12"/><rect x="9" y="5" width="2" height="2" fill="#0b0e12"/>
+    </g>
+    <text class="m" x="264" y="250" font-size="11">TRACE</text>
+
+    <g transform="translate(110 110) scale(3)">
+      <path d="M3 3h8v2h2v2h1v2h-2v2h-2v2H5v-1H3v-2H2V5h1z" fill="#4cc9f0"/>
+      <path d="M4 4h5v1H7v1H5v2H3V5h1z" fill="#e8edf2"/><path d="M10 6h3v1h-2v1h3v1h-4z" fill="#0b0e12"/>
+    </g>
+    <text class="m" x="92" y="187" font-size="11">SPLIT-A</text>
+
+    <g transform="translate(420 110) scale(3)">
+      <path d="M5 2h6v1h2v2h1v6h-2v2h-2v1H4v-2H2v-2h1V7H2V5h2V3h1z" fill="#f72585"/>
+      <path d="M11 3h1v2h1v2h-2V6H9V5h2z" fill="#e8edf2"/><path d="M3 8h4v1H4v1h2v1H3z" fill="#0b0e12"/>
+    </g>
+    <text class="m" x="402" y="187" font-size="11">SPLIT-B</text>
+
+    <g transform="translate(190 258) scale(2.1)">
+      <path d="M8 1l2 3 3 1-1 3 1 3-3 1-2 3-2-3-3-1 1-3-1-3 3-1z" fill="#e8edf2"/>
+      <path d="M8 4l1 2 2 1-2 1 1 2-2-1-2 1 1-2-2-1 2-1z" fill="#4cc9f0"/><rect x="8" y="7" width="2" height="2" fill="#f72585"/>
+    </g>
+    <text class="m" x="170" y="300" font-size="11">SIGNAL XP</text>
+
+    <g transform="translate(342 266)">
+      <circle r="32" fill="none" stroke="#4cc9f0" stroke-width="5" stroke-dasharray="12 6"/>
+      <circle r="20" fill="none" stroke="#f72585" stroke-width="4" stroke-dasharray="5 5"/>
+      <path d="M-44 0h26M18 0h26" stroke="#e8edf2" stroke-width="3"/>
+    </g>
+    <text class="m" x="319" y="318" font-size="11">SHIFT</text>
+  </g>
+
+  <g transform="translate(608 78)">
+    <rect class="panel" width="328" height="320"/>
+    <text class="t" x="14" y="24" font-size="13">HUD // TOUCH // DRAFT</text>
+    <rect x="14" y="42" width="300" height="30" fill="#11151b" stroke="#e8edf2" stroke-width="2"/>
+    <rect x="18" y="46" width="214" height="22" fill="#ff5964"/>
+    <text x="28" y="62" font-family="monospace" font-size="12" fill="#0b0e12">HP 71%</text>
+    <rect x="14" y="82" width="300" height="18" fill="#11151b" stroke="#202832" stroke-width="2"/>
+    <rect x="17" y="85" width="168" height="12" fill="#4cc9f0"/>
+    <rect x="185" y="85" width="52" height="12" fill="#f72585" opacity=".55"/>
+
+    <rect x="14" y="116" width="142" height="56" fill="#11151b" stroke="#4cc9f0" stroke-width="2"/>
+    <path d="M28 130h32v6H44v8H32v14H28z" fill="#4cc9f0"/>
+    <text class="t" x="72" y="149" font-size="13">PHASE A</text>
+
+    <rect x="172" y="116" width="142" height="56" rx="8" fill="#11151b" stroke="#e8edf2" stroke-width="2"/>
+    <path d="M184 132h25l-7-7 5-5 16 16-16 16-5-5 7-7h-25z" fill="#4cc9f0"/>
+    <text class="t" x="230" y="142" font-size="11">SPACE</text><text class="t" x="230" y="158" font-size="13">SHIFT</text>
+
+    <g transform="translate(14 190)">
+      <rect width="92" height="112" fill="#11151b" stroke="#4cc9f0" stroke-width="2"/>
+      <path d="M18 48l28-28 28 28-28-12z" fill="#4cc9f0"/>
+      <text class="t" x="8" y="76" font-size="10">DELTA II</text><text class="m" x="8" y="94" font-size="9">signature</text>
+    </g>
+    <g transform="translate(118 190)">
+      <rect width="92" height="112" fill="#11151b" stroke="#e8edf2" stroke-width="2"/>
+      <circle cx="46" cy="38" r="20" fill="none" stroke="#e8edf2" stroke-width="5"/>
+      <text class="t" x="8" y="76" font-size="10">COMMON</text><text class="m" x="8" y="94" font-size="9">protocol</text>
+    </g>
+    <g transform="translate(222 190)">
+      <rect width="92" height="112" fill="#11151b" stroke="#f72585" stroke-width="2"/>
+      <path d="M22 38h48M46 14v48M29 21l34 34M63 21L29 55" stroke="#f72585" stroke-width="4"/>
+      <text class="t" x="8" y="76" font-size="10">VECTOR</text><text class="m" x="8" y="94" font-size="9">weapon</text>
+    </g>
+  </g>
+
+  <g transform="translate(24 424)">
+    <rect class="panel" width="912" height="188"/>
+    <text class="t" x="14" y="24" font-size="13">PHASE GRAMMAR // NON-COLOR READABILITY</text>
+    <g transform="translate(28 48)">
+      <rect width="180" height="110" fill="#11151b" stroke="#4cc9f0" stroke-width="2"/>
+      <path d="M20 18h110v12H92v16H60v20H28v24H20z" fill="#4cc9f0"/>
+      <path d="M130 28l28 28-28 28V68h-24V44h24z" fill="#e8edf2"/>
+      <text class="t" x="14" y="102" font-size="11">A // angular + broken</text>
+    </g>
+    <g transform="translate(244 48)">
+      <rect width="180" height="110" fill="#11151b" stroke="#f72585" stroke-width="2"/>
+      <path d="M32 20h100v14H72v12h72v14H54v12h74v14H32z" fill="#f72585"/>
+      <path d="M134 20h20v66h-20V70h-18V36h18z" fill="#e8edf2"/>
+      <text class="t" x="14" y="102" font-size="11">B // offset + stepped</text>
+    </g>
+    <g transform="translate(460 48)">
+      <rect width="180" height="110" fill="#11151b" stroke="#e8edf2" stroke-width="2"/>
+      <rect x="30" y="22" width="120" height="58" fill="none" stroke="#e8edf2" stroke-width="10"/>
+      <rect x="68" y="38" width="44" height="26" fill="#e8edf2"/>
+      <text class="t" x="14" y="102" font-size="11">COMMON // stable + closed</text>
+    </g>
+    <g transform="translate(676 48)">
+      <rect width="208" height="110" fill="#11151b" stroke="#202832" stroke-width="2"/>
+      <path d="M14 30h38M82 20h20M132 38h52M26 70h22M72 82h44M150 72h26" stroke="#7b8794" stroke-width="4" opacity=".5"/>
+      <text class="m" x="14" y="102" font-size="11">VOID // sparse + quiet</text>
+    </g>
+  </g>
+</svg>
