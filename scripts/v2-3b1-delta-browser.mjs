@@ -98,9 +98,12 @@ function qualify(width) {
           assert.ok(desired, `Rank-IV echo proof requires a legal non-DELTA bridge choice: ${ids.join(",")}`);
         } else if (rank === 1 && ids.includes("DELTA_RANK")) desired = "DELTA_RANK";
         else if (hp <= 55 && ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
+        // The legacy live V2-2 draft fills Level 3/4 with acquisition cards, so
+        // FIELD REPAIR cannot appear there. When critical, take ORBIT before the
+        // forced ECHO/SIGNAL acquisitions; its locked role is close defense.
+        else if (hp <= 55 && ids.includes("ORBIT_NODES")) desired = "ORBIT_NODES";
         else if (!acquiredEcho && ids.includes("ECHO_MINE")) desired = "ECHO_MINE";
         else if (!acquiredSignal && ids.includes("SIGNAL_ARC")) desired = "SIGNAL_ARC";
-        else if (hp <= 55 && ids.includes("ORBIT_NODES")) desired = "ORBIT_NODES";
         else if (ids.includes("DELTA_RANK")) desired = "DELTA_RANK";
         else desired = ids[0];
 
