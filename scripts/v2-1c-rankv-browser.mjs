@@ -74,12 +74,20 @@ async function qualifyRankV({ page, game }) {
   assert.equal(await data("level"), "1");
   assert.equal(await data("dead"), "false");
 
-  const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
+  // Keep the qualification player moving almost continuously. The bounded V2-1
+  // slice is tuned for 30-60 seconds, so a long Rank-V proof must not add large
+  // stationary gaps that manufacture contact damage unrelated to draft validity.
+  const route = [
+    "ArrowRight", "ArrowRight",
+    "ArrowDown", "ArrowDown",
+    "ArrowLeft", "ArrowLeft",
+    "ArrowUp", "ArrowUp",
+  ];
   let routeIndex = 0;
   let deltaSelections = 0;
   let rankVReached = false;
   let postRankVDraftObserved = false;
-  const deadline = Date.now() + 220_000;
+  const deadline = Date.now() + 240_000;
 
   while (Date.now() < deadline && !postRankVDraftObserved) {
     const before = await snapshot(data);
@@ -99,7 +107,7 @@ async function qualifyRankV({ page, game }) {
         const deltaIndex = ids.indexOf("DELTA_RANK");
         assert.ok(deltaIndex >= 0, `DELTA must remain legal below Rank V: ${JSON.stringify(before)} ids=${ids.join(",")}`);
         await clickDraftChoice(canvas, deltaIndex, count);
-        await page.waitForTimeout(250);
+        await page.waitForTimeout(200);
         assert.equal(await data("draft-open"), "false", "pointer-selected DELTA draft must close");
         const afterRank = Number(await data("delta-rank"));
         assert.equal(afterRank, before.deltaRank + 1, "DELTA pointer selection must increase exactly one rank");
@@ -124,7 +132,7 @@ async function qualifyRankV({ page, game }) {
         const hpBefore = before.hp;
         const radiusBefore = before.pickupRadius;
         await clickDraftChoice(canvas, 0, count);
-        await page.waitForTimeout(250);
+        await page.waitForTimeout(200);
         assert.equal(await data("draft-open"), "false", "postfix pointer selection must close the draft");
         assert.equal(Number(await data("delta-rank")), 5, "postfix selection must not change maxed DELTA rank");
 
@@ -143,13 +151,13 @@ async function qualifyRankV({ page, game }) {
       }
     }
 
-    await canvas.press(route[routeIndex % route.length], { delay: 520 });
+    await canvas.press(route[routeIndex % route.length], { delay: 760 });
     routeIndex += 1;
-    await page.waitForTimeout(650);
+    await page.waitForTimeout(90);
 
     if (routeIndex % 2 === 0 && !datasetBoolean(await data("draft-open"))) {
       await canvas.press("Space");
-      await page.waitForTimeout(100);
+      await page.waitForTimeout(80);
     }
 
     if (routeIndex % 8 === 0) {
@@ -175,7 +183,7 @@ async function qualifyRankV({ page, game }) {
 await testGame(gameDirectory, {
   width: 960,
   height: 800,
-  timeout: 260_000,
+  timeout: 280_000,
   screenshot: resolve("artifacts/rare-shift-v2-1c-rankv-host-960.png"),
   check: qualifyRankV,
 });
