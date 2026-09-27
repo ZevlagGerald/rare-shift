@@ -4,12 +4,14 @@ on:
   push:
     branches:
       - feature/v2-1a-combat-readability-fx
+      - qualification/v2-1c-rankv-browser
     paths:
       - ".github/workflows/v2-1a-readability-qualification.yml"
       - "games/rare-shift/**"
       - "scripts/v2-art00-generate.mjs"
       - "scripts/v2-art00-browser.mjs"
       - "scripts/v2-1-browser.mjs"
+      - "scripts/v2-1c-rankv-browser.mjs"
       - "package.json"
       - "tsconfig.core.json"
   workflow_dispatch:
@@ -58,6 +60,7 @@ jobs:
           node --check scripts/v2-art00-generate.mjs
           node --check scripts/v2-art00-browser.mjs
           node --check scripts/v2-1-browser.mjs
+          node --check scripts/v2-1c-rankv-browser.mjs
 
       - name: Inherited deterministic core tests
         run: npm run test:core
@@ -87,6 +90,9 @@ jobs:
 
       - name: V2-1A desktop and narrow survival proof
         run: npm run test:v2-1-browser
+
+      - name: V2-1C natural Rank-V postfix browser proof
+        run: node --experimental-strip-types scripts/v2-1c-rankv-browser.mjs
 
       - name: Upload V2-1A evidence
         uses: actions/upload-artifact@v4
