@@ -30,7 +30,7 @@ export function isEnemyCorporeal(kind: V2EnemyKind, phase: Phase): boolean {
 }
 
 export function enemyContactDamage(kind: V2EnemyKind): number {
-  return kind === "TRACE" ? 8 : 10;
+  return kind === "TRACE" ? 4 : 5;
 }
 
 export function enemyBaseHp(kind: V2EnemyKind): number {
