@@ -1,0 +1,81 @@
+name: RARE SHIFT V2-2E Pointer Repair Only
+
+on:
+  push:
+    branches:
+      - feature/v2-2e-one-card-pointer-repair
+    paths:
+      - ".github/workflows/v2-2e-pointer-only.yml"
+      - "games/rare-shift/src/draft-pointer-core.ts"
+      - "games/rare-shift/v2.tsx"
+      - "games/rare-shift/tests/draft-pointer-core.test.ts"
+      - "scripts/v2-2e-pointer-browser.mjs"
+      - "package.json"
+      - "tsconfig.core.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify-pointer:
+    name: One-card pointer exact-path qualification
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --init
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      FRIENDSDK_ARCHIVE: vendor/rarefriends-friendsdk-0.1.2.tgz
+      FRIENDSDK_SHA256: a6352e187916089b6829c5387fe87f386c5774004f181990e4e3c8ae641cfe83
+      FRIENDSDK_URL: https://github.com/spokesz/friendsdk/releases/download/v0.1.2/rarefriends-friendsdk-0.1.2.tgz
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Fetch and verify FriendSDK v0.1.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p vendor
+          curl --fail --location --retry 5 --retry-all-errors --connect-timeout 20 --max-time 180 --output "$FRIENDSDK_ARCHIVE" "$FRIENDSDK_URL"
+          printf '%s  %s\n' "$FRIENDSDK_SHA256" "$FRIENDSDK_ARCHIVE" | sha256sum --check --strict
+
+      - name: Install project dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Pointer qualification syntax
+        run: node --check scripts/v2-2e-pointer-browser.mjs
+
+      - name: Draft pointer cardinality regression
+        run: npm run test:v2-2e-pointer
+
+      - name: TypeScript qualification
+        shell: bash
+        run: |
+          npm run typecheck:core
+          npm run typecheck
+
+      - name: FriendSDK check and build
+        shell: bash
+        run: |
+          npm run check
+          npm run build
+
+      - name: One-card pointer browser regression
+        run: npm run test:v2-2e-pointer-browser
+
+      - name: Upload pointer evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rare-shift-v2-2e-pointer-only-${{ github.run_id }}
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 14
