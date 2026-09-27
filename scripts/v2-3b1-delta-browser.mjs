@@ -57,7 +57,7 @@ function qualify(width) {
     let provedRank4Echo = false;
     let rank5Reached = false;
 
-    const deadline = Date.now() + 300_000;
+    const deadline = Date.now() + 330_000;
     while (Date.now() < deadline && !rank5Reached) {
       if (bool(await data("dead"))) throw new Error(`died before DELTA Rank V at level ${await data("level")}`);
 
@@ -69,19 +69,24 @@ function qualify(width) {
         const hp = Number(await data("hp"));
 
         let desired = "";
+        // Natural survival route: first prove Rank II, then take the qualified
+        // close-defense/wave-clear/memory families before pushing II -> V.
+        // This avoids making the browser proof intentionally stand still with a
+        // three-weapon hole while still using only rendered production choices.
         if (rank === 1 && ids.includes("DELTA_RANK")) desired = "DELTA_RANK";
-        else if (!acquiredEcho && ids.includes("ECHO_MINE")) desired = "ECHO_MINE";
-        else if (!acquiredSignal && ids.includes("SIGNAL_ARC")) desired = "SIGNAL_ARC";
         else if (!acquiredOrbit && ids.includes("ORBIT_NODES")) desired = "ORBIT_NODES";
-        else if (hp <= 28 && ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
+        else if (!acquiredSignal && ids.includes("SIGNAL_ARC")) desired = "SIGNAL_ARC";
+        else if (!acquiredEcho && ids.includes("ECHO_MINE")) desired = "ECHO_MINE";
+        else if (hp <= 65 && ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
         else if (ids.includes("DELTA_RANK")) desired = "DELTA_RANK";
+        else if (ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
         else desired = ids[0];
 
         const index = ids.indexOf(desired);
         assert.ok(index >= 0, `desired ${desired} missing from ${ids.join(",")}`);
         const beforeRank = rank;
         await clickDraft(canvas, index, count);
-        await page.waitForTimeout(260);
+        await page.waitForTimeout(220);
         assert.equal(await data("draft-open"), "false");
 
         if (desired === "ECHO_MINE") acquiredEcho = true;
@@ -120,11 +125,14 @@ function qualify(width) {
       }
 
       if (rank5Reached) break;
-      await canvas.press(route[routeIndex++ % route.length], { delay: 300 });
-      await page.waitForTimeout(560);
-      if (routeIndex % 5 === 0 && !bool(await data("draft-open"))) {
+      // Keep moving for almost the whole observation interval. Earlier proof
+      // revisions idled for >60% of each cycle and could die at level 4 even
+      // though the dedicated inherited gameplay routes were green.
+      await canvas.press(route[routeIndex++ % route.length], { delay: 620 });
+      await page.waitForTimeout(90);
+      if (routeIndex % 4 === 0 && !bool(await data("draft-open"))) {
         await shift(canvas, width);
-        await page.waitForTimeout(180);
+        await page.waitForTimeout(90);
       }
     }
 
@@ -132,6 +140,9 @@ function qualify(width) {
     assert.equal(provedRank4Echo, true, "Rank IV echo must be proven before Rank V");
     assert.equal(await data("delta-rank"), "5");
     assert.equal(await data("delta-damage"), "14");
+    assert.equal(acquiredOrbit, true, "natural qualification must include ORBIT close defense");
+    assert.equal(acquiredSignal, true, "natural qualification must include SIGNAL wave clear");
+    assert.equal(acquiredEcho, true, "natural qualification must include ECHO memory control");
 
     const staggerBefore = Number(await data("delta-staggers"));
     const staggerDeadline = Date.now() + 32_000;
@@ -142,10 +153,10 @@ function qualify(width) {
         const count = Number(await data("draft-count"));
         const heal = ids.indexOf("FIELD_REPAIR");
         await clickDraft(canvas, heal >= 0 ? heal : 0, count);
-        await page.waitForTimeout(180);
+        await page.waitForTimeout(160);
       } else {
-        await canvas.press(route[routeIndex++ % route.length], { delay: 260 });
-        await page.waitForTimeout(420);
+        await canvas.press(route[routeIndex++ % route.length], { delay: 560 });
+        await page.waitForTimeout(80);
       }
     }
     assert.ok(Number(await data("delta-staggers")) > staggerBefore, "Rank V matching-phase primary pulse must produce bounded normal-enemy stagger");
@@ -168,7 +179,7 @@ for (const width of [960, 390]) {
   await testGame(gameDirectory, {
     width,
     height: width === 960 ? 800 : 844,
-    timeout: 360_000,
+    timeout: 390_000,
     screenshot: resolve(`artifacts/rare-shift-v2-3b1-host-${width}.png`),
     check: qualify(width),
   });
