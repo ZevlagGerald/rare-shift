@@ -120,32 +120,29 @@ function qualify(width) {
       assert.equal(await data("draft-open"), "false", `${label} must resume combat after bounded legal draft resolution`);
     };
 
-    // V2-2D already proves the historical ORBIT -> ECHO -> SIGNAL onboarding
-    // sequence on this exact runtime. V2-2E's browser responsibility is the
-    // integrated 4/4 load, so its setup uses a natural V2-3-era survival route:
-    // DELTA II -> ECHO -> SIGNAL -> ORBIT. No state is injected and every choice
-    // is made through the real draft UI.
+    // V2-2E proves the inherited integrated Rank-I four-slot surface, not V2-3B1
+    // DELTA progression. Preserve the already-qualified onboarding route here:
+    // ORBIT -> ECHO -> SIGNAL. DELTA remains mandatory Rank I and occupies slot 1;
+    // the dedicated V2-3B1 proof owns DELTA II-V. No state is injected and every
+    // acquisition is made through the real draft UI.
     await moveUntilDraft(2, 58_000, "level-2 integrated-build draft");
     const level2Ids = list(await data("draft-ids"));
     assert.deepEqual(new Set(level2Ids), new Set(["ORBIT_NODES", "VECTOR_NEEDLE", "DELTA_RANK"]));
-    await chooseBuildCard("DELTA_RANK", "level-2 integrated-build draft");
-    assert.equal(await data("delta-rank"), "2");
-    assert.equal(await data("weapon-slots-used"), "1");
+    await chooseBuildCard("ORBIT_NODES", "level-2 integrated-build draft");
+    assert.equal(await data("delta-rank"), "1");
+    assert.equal(await data("orbit-owned"), "true");
+    assert.equal(await data("weapon-slots-used"), "2");
 
     await moveUntilDraft(3, 64_000, "level-3 integrated-build draft");
     await chooseBuildCard("ECHO_MINE", "level-3 integrated-build draft");
     assert.equal(await data("echo-owned"), "true");
-    assert.equal(await data("weapon-slots-used"), "2");
+    assert.equal(await data("weapon-slots-used"), "3");
 
     await moveUntilDraft(4, 76_000, "level-4 integrated-build draft");
     await chooseBuildCard("SIGNAL_ARC", "level-4 integrated-build draft");
     assert.equal(await data("signal-owned"), "true");
-    assert.equal(await data("weapon-slots-used"), "3");
-
-    await moveUntilDraft(5, 86_000, "level-5 integrated-build draft");
-    await chooseBuildCard("ORBIT_NODES", "level-5 integrated-build draft");
-
     assert.equal(await data("weapon-slots-used"), "4");
+
     assert.equal(await data("orbit-owned"), "true");
     assert.equal(await data("echo-owned"), "true");
     assert.equal(await data("signal-owned"), "true");
@@ -224,7 +221,7 @@ function qualify(width) {
     assertChainPhase(chainKinds, phase);
 
     assert.equal(await data("delta-fx"), "canonical-exclusive");
-    assert.equal(await data("delta-rank"), "2");
+    assert.equal(await data("delta-rank"), "1");
     assert.equal(await data("orbit-owned"), "true");
     assert.equal(await data("echo-owned"), "true");
     assert.equal(await data("signal-owned"), "true");
