@@ -21,13 +21,13 @@ function deterministicUnit(seed, index, channel = 0) {
   return mixed / 0x100000000;
 }
 
-function deltaChoiceKey(seed, level) {
+function deltaChoiceIndex(seed, level) {
   const ids = ["DELTA_RANK", "FIELD_REPAIR", "SIGNAL_MAGNET"];
   const rotate = Math.floor(deterministicUnit(seed, level, 41) * ids.length) % ids.length;
   const ordered = [...ids.slice(rotate), ...ids.slice(0, rotate)];
   const index = ordered.indexOf("DELTA_RANK");
   assert.notEqual(index, -1);
-  return String(index + 1);
+  return index;
 }
 
 async function screenshot(page, width, name) {
@@ -53,6 +53,18 @@ async function combatSnapshot(data) {
     qualified: datasetBoolean(await data("qualified")),
     dead: datasetBoolean(await data("dead")),
   };
+}
+
+async function clickDraftChoice(canvas, index) {
+  const box = await canvas.boundingBox();
+  assert.ok(box, "draft canvas must have a bounding box");
+  const centers = [220, 480, 740];
+  await canvas.click({
+    position: {
+      x: box.width * centers[index] / 960,
+      y: box.height * 320 / 640,
+    },
+  });
 }
 
 function qualifyV21(width) {
@@ -89,6 +101,10 @@ function qualifyV21(width) {
     assert.equal(await data("delta-fx"), "canonical-exclusive");
     assert.equal(await data("controls-dimmed"), "false");
 
+    const initialGuide = game.locator('[data-survival-guide="AUTO-FIRE"]');
+    await initialGuide.waitFor({ state: "visible" });
+    assert.match(await initialGuide.textContent(), /attacks automatically/i);
+
     await screenshot(page, width, "initial");
 
     const startX = Number(await data("x"));
@@ -110,6 +126,7 @@ function qualifyV21(width) {
     const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
     let routeIndex = 0;
     let draftCaptured = false;
+    let pointerDraftSelected = false;
     const deadline = Date.now() + 58_000;
 
     while (Date.now() < deadline) {
@@ -119,16 +136,23 @@ function qualifyV21(width) {
       if (before.draftOpen) {
         assert.equal(await data("draft-count"), "3");
         assert.equal(await data("controls-dimmed"), "true");
+        const guide = game.locator('[data-survival-guide="LEVEL UP"]');
+        await guide.waitFor({ state: "visible" });
+        assert.match(await guide.textContent(), /click\/tap a card/i);
         await screenshot(page, width, "draft");
         draftCaptured = true;
         const seed = Number(await data("seed"));
         const level = Number(await data("level"));
-        const key = deltaChoiceKey(seed, level);
-        await canvas.press(key);
-        await page.waitForTimeout(150);
-        assert.equal(await data("draft-open"), "false");
+        const deltaIndex = deltaChoiceIndex(seed, level);
+
+        // Mandatory pointer path: do not use keyboard 1–3 here. This reproduces the
+        // real FriendSDK preview interaction that owner review found broken.
+        await clickDraftChoice(canvas, deltaIndex);
+        await page.waitForTimeout(250);
+        assert.equal(await data("draft-open"), "false", "pointer click must close the draft");
         assert.equal(await data("controls-dimmed"), "false");
-        assert.ok(Number(await data("delta-rank")) >= 2);
+        assert.ok(Number(await data("delta-rank")) >= 2, "pointer-selected DELTA upgrade must apply");
+        pointerDraftSelected = true;
       }
 
       if (datasetBoolean(await data("qualified"))) break;
@@ -151,6 +175,7 @@ function qualifyV21(width) {
     console.log(`V2_1_FINAL_STATE_${width}=${JSON.stringify(finalState)}`);
 
     assert.equal(draftCaptured, true, `expected an actual level-up draft; final=${JSON.stringify(finalState)}`);
+    assert.equal(pointerDraftSelected, true, "actual mouse/touch pointer selection must be proven");
     assert.equal(finalState.qualified, true);
     assert.equal(finalState.dead, false);
     assert.ok(finalState.kills >= 3);
