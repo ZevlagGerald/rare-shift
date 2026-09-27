@@ -175,9 +175,18 @@ function qualify(width) {
     const phase = await data("signal-last-cast-phase");
     const chainIds = list(await data("signal-last-chain-ids"));
     const chainKinds = list(await data("signal-last-chain-kinds"));
-    assert.ok(chainIds.length >= 1 && chainIds.length <= 3);
-    assert.equal(new Set(chainIds).size, chainIds.length);
-    assertChainPhase(chainKinds, phase);
+    // SHIFT intentionally clears cached ARC path evidence. The activity counters above
+    // already prove real casts, hits and multi-target chains during this observation.
+    // If a cached path is present at this exact snapshot, validate it; an empty cache is
+    // legal after the already-proven graph invalidation and must not make the test race.
+    if (chainIds.length > 0) {
+      assert.ok(chainIds.length <= 3);
+      assert.equal(new Set(chainIds).size, chainIds.length);
+      assertChainPhase(chainKinds, phase);
+    } else {
+      assert.equal(chainKinds.length, 0, "cleared ARC id evidence must clear kind evidence too");
+      assert.ok(Number(await data("signal-shift-graph-invalidations")) > signalInvalidationsBefore);
+    }
 
     assert.equal(await data("delta-fx"), "canonical-exclusive");
     assert.equal(await data("orbit-owned"), "true");
