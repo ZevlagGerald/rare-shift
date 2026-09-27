@@ -1,0 +1,97 @@
+name: RARE SHIFT V2-1C Draft Validity Qualification
+
+on:
+  push:
+    branches:
+      - feature/v2-1c-draft-validity
+    paths:
+      - ".github/workflows/v2-1c-draft-validity-qualification.yml"
+      - "games/rare-shift/**"
+      - "scripts/v2-art00-generate.mjs"
+      - "scripts/v2-art00-browser.mjs"
+      - "scripts/v2-1-browser.mjs"
+      - "package.json"
+      - "tsconfig.core.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    name: FriendSDK + Chromium V2-1C qualification
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --init
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      FRIENDSDK_ARCHIVE: vendor/rarefriends-friendsdk-0.1.2.tgz
+      FRIENDSDK_SHA256: a6352e187916089b6829c5387fe87f386c5774004f181990e4e3c8ae641cfe83
+      FRIENDSDK_URL: https://github.com/spokesz/friendsdk/releases/download/v0.1.2/rarefriends-friendsdk-0.1.2.tgz
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Fetch and verify FriendSDK v0.1.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p vendor
+          curl --fail --location --retry 5 --retry-all-errors --connect-timeout 20 --max-time 180 --output "$FRIENDSDK_ARCHIVE" "$FRIENDSDK_URL"
+          printf '%s  %s\n' "$FRIENDSDK_SHA256" "$FRIENDSDK_ARCHIVE" | sha256sum --check --strict
+
+      - name: Install project dependencies
+        shell: bash
+        run: npm install --no-audit --no-fund
+
+      - name: Qualification script syntax
+        shell: bash
+        run: |
+          node --check scripts/v2-art00-generate.mjs
+          node --check scripts/v2-art00-browser.mjs
+          node --check scripts/v2-1-browser.mjs
+
+      - name: Inherited deterministic core tests
+        run: npm run test:core
+
+      - name: V2 combat and draft validity contracts
+        run: npm run test:v2-combat
+
+      - name: V2 ART 00 regression
+        shell: bash
+        run: |
+          npm run test:v2-art
+          npm run proof:v2-art
+          npm run test:v2-art-browser
+
+      - name: TypeScript qualification
+        shell: bash
+        run: |
+          npm run typecheck:core
+          npm run typecheck
+
+      - name: FriendSDK check build smoke
+        shell: bash
+        run: |
+          npm run check
+          npm run build
+          npm run test:sdk
+
+      - name: V2-1C desktop and narrow survival regression
+        run: npm run test:v2-1-browser
+
+      - name: Upload V2-1C evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rare-shift-v2-1c-evidence-${{ github.run_id }}
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 14
