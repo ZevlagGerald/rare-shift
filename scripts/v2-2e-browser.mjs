@@ -53,14 +53,10 @@ function qualify(width) {
     await canvas.waitFor({ state: "visible" });
     await canvas.focus();
     const data = name => canvas.getAttribute(`data-${name}`);
-    const route = [
-      "ArrowRight", "ArrowRight", "ArrowRight", "ArrowRight",
-      "ArrowDown", "ArrowDown", "ArrowDown",
-      "ArrowLeft", "ArrowLeft", "ArrowLeft", "ArrowLeft", "ArrowLeft", "ArrowLeft", "ArrowLeft",
-      "ArrowUp", "ArrowUp", "ArrowUp", "ArrowUp", "ArrowUp", "ArrowUp",
-      "ArrowRight", "ArrowRight", "ArrowRight", "ArrowRight", "ArrowRight", "ArrowRight", "ArrowRight",
-      "ArrowDown", "ArrowDown", "ArrowDown",
-    ];
+    // Reuse the exact four-direction movement discipline already qualified by
+    // V2-2D on both desktop and narrow viewports. V2-2E should test integrated
+    // weapon coexistence, not introduce a second survival-routing variable.
+    const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
     let routeIndex = 0;
 
     assert.equal(await data("stage"), "v2-survival");
