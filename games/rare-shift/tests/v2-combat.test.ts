@@ -14,6 +14,7 @@ import {
   v21QualificationReached,
   xpThreshold,
 } from "../src/survival-core.ts";
+import { acquireVectorTarget, isVectorTargetLegal, VECTOR_RANK_I } from "../src/vector-core.ts";
 import type { FrameRows } from "../src/types.ts";
 
 function rows(active: readonly [number, number][]): FrameRows {
@@ -87,7 +88,6 @@ test("DELTA Rank I-IV remains eligible while Rank V is absent rather than disabl
     const draft = buildV21Draft(13699, rank + 1, state);
     assert.ok(draft.some(choice => choice.id === "DELTA_RANK"));
   }
-
   const maxed = { deltaRank: 5, hp: 50, maxHp: 100, pickupRadius: 76 };
   const draft = buildV21Draft(13699, 6, maxed);
   assert.equal(draft.some(choice => choice.id === "DELTA_RANK"), false);
@@ -99,7 +99,6 @@ test("FIELD REPAIR and SIGNAL MAGNET are filtered when they would be no-ops", ()
   const fullHp = { deltaRank: 2, hp: 100, maxHp: 100, pickupRadius: 76 };
   assert.equal(buildV21Draft(13699, 3, fullHp).some(choice => choice.id === "FIELD_REPAIR"), false);
   assert.throws(() => applyV21Draft(fullHp, "FIELD_REPAIR"), /missing HP/u);
-
   const cappedMagnet = { deltaRank: 2, hp: 50, maxHp: 100, pickupRadius: 220 };
   assert.equal(buildV21Draft(13699, 3, cappedMagnet).some(choice => choice.id === "SIGNAL_MAGNET"), false);
   assert.throws(() => applyV21Draft(cappedMagnet, "SIGNAL_MAGNET"), /pickup-radius cap/u);
@@ -112,11 +111,8 @@ test("every rendered draft choice produces a real state change", () => {
     { deltaRank: 5, hp: 100, maxHp: 100, pickupRadius: 76 },
     { deltaRank: 2, hp: 50, maxHp: 100, pickupRadius: 220 },
   ];
-
   for (const [index, state] of states.entries()) {
-    for (const choice of buildV21Draft(13699, index + 2, state)) {
-      assert.notDeepEqual(applyV21Draft(state, choice.id), state, `${choice.id} must change state`);
-    }
+    for (const choice of buildV21Draft(13699, index + 2, state)) assert.notDeepEqual(applyV21Draft(state, choice.id), state, `${choice.id} must change state`);
   }
 });
 
@@ -126,10 +122,8 @@ test("partially exhausted draft pools remain deterministic and contain only vali
   const b = buildV21Draft(13699, 6, oneExhausted);
   assert.deepEqual(a, b);
   assert.deepEqual(new Set(a.map(choice => choice.id)), new Set(["FIELD_REPAIR", "SIGNAL_MAGNET"]));
-
   const multipleExhausted = { deltaRank: 5, hp: 100, maxHp: 100, pickupRadius: 76 };
-  const reduced = buildV21Draft(13699, 7, multipleExhausted);
-  assert.deepEqual(reduced.map(choice => choice.id), ["SIGNAL_MAGNET"]);
+  assert.deepEqual(buildV21Draft(13699, 7, multipleExhausted).map(choice => choice.id), ["SIGNAL_MAGNET"]);
 });
 
 test("fully exhausted draft pool returns no dead or fake cards", () => {
@@ -143,4 +137,66 @@ test("qualification gate requires the complete bounded V2-1 interaction", () => 
   assert.equal(v21QualificationReached({ ...base, shifts: 0 }), false);
   assert.equal(v21QualificationReached({ ...base, deltaRank: 1 }), false);
   assert.equal(v21QualificationReached({ ...base, hp: 0 }), false);
+});
+
+test("VECTOR Rank-I profile is exact and hard-capped", () => {
+  assert.deepEqual(VECTOR_RANK_I, { damage: 10, cooldownMs: 760, range: 560, speed: 960, hitRadius: 18, maxInFlight: 2 });
+});
+
+test("VECTOR target legality follows corporeal phase authority and range", () => {
+  const trace = { id: 1, kind: "TRACE" as const, active: true, x: 20, y: 0 };
+  const a = { id: 2, kind: "SPLIT_A" as const, active: true, x: 30, y: 0 };
+  const b = { id: 3, kind: "SPLIT_B" as const, active: true, x: 40, y: 0 };
+  assert.equal(isVectorTargetLegal(trace, "A", 0, 0), true);
+  assert.equal(isVectorTargetLegal(trace, "B", 0, 0), true);
+  assert.equal(isVectorTargetLegal(a, "A", 0, 0), true);
+  assert.equal(isVectorTargetLegal(a, "B", 0, 0), false);
+  assert.equal(isVectorTargetLegal(b, "A", 0, 0), false);
+  assert.equal(isVectorTargetLegal(b, "B", 0, 0), true);
+  assert.equal(isVectorTargetLegal({ ...trace, active: false }, "A", 0, 0), false);
+  assert.equal(isVectorTargetLegal({ ...trace, x: 561 }, "A", 0, 0), false);
+});
+
+test("VECTOR chooses nearest legal target and stable lower spawn id on ties", () => {
+  const targets = [
+    { id: 9, kind: "TRACE" as const, active: true, x: 100, y: 0 },
+    { id: 4, kind: "TRACE" as const, active: true, x: 40, y: 0 },
+    { id: 2, kind: "TRACE" as const, active: true, x: -40, y: 0 },
+  ];
+  assert.equal(acquireVectorTarget(targets, "A", 0, 0)?.id, 2);
+  assert.equal(acquireVectorTarget([...targets].reverse(), "A", 0, 0)?.id, 2);
+  assert.equal(acquireVectorTarget([{ ...targets[0], active: false }], "A", 0, 0), null);
+});
+
+test("VECTOR acquisition rewrites with phase authority", () => {
+  const targets = [
+    { id: 1, kind: "SPLIT_A" as const, active: true, x: 25, y: 0 },
+    { id: 2, kind: "SPLIT_B" as const, active: true, x: 20, y: 0 },
+    { id: 3, kind: "TRACE" as const, active: true, x: 80, y: 0 },
+  ];
+  assert.equal(acquireVectorTarget(targets, "A", 0, 0)?.id, 1);
+  assert.equal(acquireVectorTarget(targets, "B", 0, 0)?.id, 2);
+});
+
+test("V2-2A draft guarantees one actionable VECTOR acquisition and never duplicates it", () => {
+  const state = { deltaRank: 1, hp: 55, maxHp: 100, pickupRadius: 76, vectorEnabled: true, vectorOwned: false, weaponSlotsUsed: 1, weaponSlotCap: 4 };
+  const draft = buildV21Draft(13699, 2, state);
+  assert.equal(draft.length, 3);
+  assert.equal(draft[0].id, "VECTOR_NEEDLE");
+  assert.ok(draft.some(choice => choice.id === "DELTA_RANK"));
+  assert.equal(new Set(draft.map(choice => choice.id)).size, 3);
+  const acquired = applyV21Draft(state, "VECTOR_NEEDLE");
+  assert.equal(acquired.vectorOwned, true);
+  assert.equal(acquired.weaponSlotsUsed, 2);
+  assert.equal(buildV21Draft(13699, 3, acquired).some(choice => choice.id === "VECTOR_NEEDLE"), false);
+  assert.throws(() => applyV21Draft(acquired, "VECTOR_NEEDLE"), /already owned/u);
+});
+
+test("VECTOR acquisition is rejected when disabled or weapon slots are full", () => {
+  const disabled = { deltaRank: 1, hp: 50, maxHp: 100, pickupRadius: 76 };
+  assert.equal(isV21DraftChoiceValid(disabled, "VECTOR_NEEDLE"), false);
+  assert.throws(() => applyV21Draft(disabled, "VECTOR_NEEDLE"), /not enabled/u);
+  const full = { ...disabled, vectorEnabled: true, vectorOwned: false, weaponSlotsUsed: 4, weaponSlotCap: 4 };
+  assert.equal(isV21DraftChoiceValid(full, "VECTOR_NEEDLE"), false);
+  assert.throws(() => applyV21Draft(full, "VECTOR_NEEDLE"), /No active weapon slot/u);
 });
