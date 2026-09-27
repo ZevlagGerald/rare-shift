@@ -34,6 +34,11 @@ async function screenshot(page, width, name) {
   await page.locator(".rf-game-frame").screenshot({ path: resolve(`artifacts/rare-shift-v2-1-${name}-${width}.png`) });
 }
 
+function datasetBoolean(value) {
+  assert.ok(value === "true" || value === "false", `expected boolean dataset, received ${String(value)}`);
+  return value === "true";
+}
+
 async function combatSnapshot(data) {
   return {
     hp: Number(await data("hp")),
@@ -44,9 +49,9 @@ async function combatSnapshot(data) {
     deltaRank: Number(await data("delta-rank")),
     activeEnemies: Number(await data("active-enemies")),
     phase: await data("phase"),
-    draftOpen: await data("draft-open"),
-    qualified: await data("qualified"),
-    dead: await data("dead"),
+    draftOpen: datasetBoolean(await data("draft-open")),
+    qualified: datasetBoolean(await data("qualified")),
+    dead: datasetBoolean(await data("dead")),
   };
 }
 
@@ -112,7 +117,7 @@ function qualifyV21(width) {
       const before = await combatSnapshot(data);
       if (before.dead) throw new Error(`V2-1 browser route died before qualification: ${JSON.stringify(before)}`);
 
-      if (before.draftOpen === "true") {
+      if (before.draftOpen) {
         assert.equal(await data("draft-count"), "3");
         await screenshot(page, width, "draft");
         draftCaptured = true;
@@ -125,7 +130,7 @@ function qualifyV21(width) {
         assert.ok(Number(await data("delta-rank")) >= 2);
       }
 
-      if ((await data("qualified")) === "true") break;
+      if (datasetBoolean(await data("qualified"))) break;
 
       // Short reposition, then 1.4 s combat hold. The hold is intentional: this is
       // still natural play and gives auto-fire/pickup attraction time to operate.
@@ -135,7 +140,7 @@ function qualifyV21(width) {
 
       // Alternate phases often enough to exercise A/B authority and prevent a
       // permanently ghosted split population from starving the kill/XP loop.
-      if (routeIndex % 2 === 0 && (await data("draft-open")) !== "true") {
+      if (routeIndex % 2 === 0 && !datasetBoolean(await data("draft-open"))) {
         await canvas.press("Space");
         await page.waitForTimeout(120);
       }
@@ -149,8 +154,8 @@ function qualifyV21(width) {
     console.log(`V2_1_FINAL_STATE_${width}=${JSON.stringify(finalState)}`);
 
     assert.equal(draftCaptured, true, `expected an actual level-up draft; final=${JSON.stringify(finalState)}`);
-    assert.equal(finalState.qualified, "true");
-    assert.equal(finalState.dead, "false");
+    assert.equal(finalState.qualified, true);
+    assert.equal(finalState.dead, false);
     assert.ok(finalState.kills >= 3);
     assert.ok(finalState.shifts >= 1);
     assert.ok(finalState.level >= 2);
@@ -164,7 +169,7 @@ function qualifyV21(width) {
     const reduce = game.getByLabel("Reduce motion");
     await reduce.check();
     assert.equal(await reduce.isChecked(), true);
-    if ((await data("draft-open")) !== "true") await canvas.press("Space");
+    if (!datasetBoolean(await data("draft-open"))) await canvas.press("Space");
     assert.equal(await data("dead"), "false");
   };
 }
