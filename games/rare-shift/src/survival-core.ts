@@ -83,6 +83,13 @@ export function clampPlayerPosition(position: Vec2, radius = 24): Vec2 {
 }
 
 export function spawnKind(seed: number, spawnIndex: number, elapsedMs: number): V2EnemyKind {
+  // V2-1B onboarding contract: every player first sees an always-corporeal TRACE
+  // so auto-fire is observable, then a Phase-A split threat while the run begins
+  // in Phase B so SHIFT has an immediately legible purpose. Normal deterministic
+  // weighting resumes from spawn 2 onward.
+  if (spawnIndex === 0) return "TRACE";
+  if (spawnIndex === 1) return "SPLIT_A";
+
   const roll = deterministicUnit(seed, spawnIndex, 0);
   const splitWeight = elapsedMs < 12_000 ? 0.28 : elapsedMs < 30_000 ? 0.42 : 0.5;
   if (roll >= splitWeight) return "TRACE";
