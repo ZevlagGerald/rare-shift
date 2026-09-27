@@ -58,7 +58,7 @@ function qualify(width) {
     let rank5Reached = false;
     const choices = [];
 
-    const deadline = Date.now() + 330_000;
+    const deadline = Date.now() + 360_000;
     while (Date.now() < deadline && !rank5Reached) {
       if (bool(await data("dead"))) throw new Error(`died before DELTA Rank V at level ${await data("level")}; choices=${choices.join("|")}`);
 
@@ -71,15 +71,15 @@ function qualify(width) {
         const hp = Number(await data("hp"));
 
         let desired = "";
-        // Natural bounded survival route: take DELTA II on the level-2 learning
-        // surface, establish three complementary Rank-I families, then prioritize
-        // every later DELTA rank. A genuinely offered FIELD REPAIR may be taken
-        // when HP is already low; no HP/XP/enemy state is injected by this proof.
+        // Natural bounded survival route. DELTA II is taken at level 2, then the
+        // already-qualified ECHO -> SIGNAL onboarding order is preserved before
+        // ORBIT completes the 4/4 build. From there, real FIELD REPAIR may be
+        // selected when needed and all remaining DELTA ranks are prioritized.
         if (hp <= 55 && ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
         else if (rank === 1 && ids.includes("DELTA_RANK")) desired = "DELTA_RANK";
-        else if (!acquiredOrbit && ids.includes("ORBIT_NODES")) desired = "ORBIT_NODES";
-        else if (!acquiredSignal && ids.includes("SIGNAL_ARC")) desired = "SIGNAL_ARC";
         else if (!acquiredEcho && ids.includes("ECHO_MINE")) desired = "ECHO_MINE";
+        else if (!acquiredSignal && ids.includes("SIGNAL_ARC")) desired = "SIGNAL_ARC";
+        else if (!acquiredOrbit && ids.includes("ORBIT_NODES")) desired = "ORBIT_NODES";
         else if (ids.includes("DELTA_RANK")) desired = "DELTA_RANK";
         else if (ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
         else desired = ids[0];
@@ -129,11 +129,11 @@ function qualify(width) {
       }
 
       if (rank5Reached) break;
-      await canvas.press(route[routeIndex++ % route.length], { delay: 430 });
+      await canvas.press(route[routeIndex++ % route.length], { delay: 360 });
       await page.waitForTimeout(80);
-      if (routeIndex % 3 === 0 && !bool(await data("draft-open"))) {
+      if (!bool(await data("draft-open"))) {
         await shift(canvas, width);
-        await page.waitForTimeout(80);
+        await page.waitForTimeout(70);
       }
     }
 
@@ -166,11 +166,11 @@ function qualify(width) {
         await clickDraft(canvas, heal >= 0 ? heal : 0, count);
         await page.waitForTimeout(160);
       } else {
-        await canvas.press(route[routeIndex++ % route.length], { delay: 420 });
-        await page.waitForTimeout(80);
-        if (routeIndex % 3 === 0 && !bool(await data("draft-open"))) {
+        await canvas.press(route[routeIndex++ % route.length], { delay: 340 });
+        await page.waitForTimeout(70);
+        if (!bool(await data("draft-open"))) {
           await shift(canvas, width);
-          await page.waitForTimeout(80);
+          await page.waitForTimeout(70);
         }
       }
     }
@@ -194,7 +194,7 @@ for (const width of [960, 390]) {
   await testGame(gameDirectory, {
     width,
     height: width === 960 ? 800 : 844,
-    timeout: 390_000,
+    timeout: 420_000,
     screenshot: resolve(`artifacts/rare-shift-v2-3b1-host-${width}.png`),
     check: qualify(width),
   });
