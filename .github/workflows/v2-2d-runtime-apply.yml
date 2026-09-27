@@ -1,0 +1,40 @@
+name: RARE SHIFT V2-2D Runtime Apply
+
+on:
+  push:
+    branches:
+      - feature/v2-2d-signal-arc-rank1
+    paths:
+      - "scripts/apply-v2-2d-runtime.mjs"
+      - ".github/workflows/v2-2d-runtime-apply.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/v2-2d-signal-arc-rank1
+          fetch-depth: 0
+
+      - name: Apply bounded V2-2D runtime integration
+        run: node scripts/apply-v2-2d-runtime.mjs
+
+      - name: Commit runtime integration if changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- games/rare-shift/src/phaser-survival.ts; then
+            echo "V2_2D_RUNTIME_COMMIT=NO_CHANGE"
+            exit 0
+          fi
+          git config user.name "Zev"
+          git config user.email "214125688+ZevlagGerald@users.noreply.github.com"
+          git add games/rare-shift/src/phaser-survival.ts
+          git commit -m "feat(v2-2d): integrate Signal Arc Rank I runtime"
+          git push origin HEAD:feature/v2-2d-signal-arc-rank1
+          echo "V2_2D_RUNTIME_COMMIT=PUSHED"
