@@ -1,6 +1,6 @@
 import { deterministicUnit } from "./survival-core.ts";
 
-export type V21DraftId = "DELTA_RANK" | "VECTOR_NEEDLE" | "FIELD_REPAIR" | "SIGNAL_MAGNET";
+export type V21DraftId = "DELTA_RANK" | "VECTOR_NEEDLE" | "ORBIT_NODES" | "FIELD_REPAIR" | "SIGNAL_MAGNET";
 
 export interface V21DraftChoice {
   readonly id: V21DraftId;
@@ -17,6 +17,8 @@ export interface V21BuildState {
   readonly pickupRadius: number;
   readonly vectorEnabled?: boolean;
   readonly vectorOwned?: boolean;
+  readonly orbitEnabled?: boolean;
+  readonly orbitOwned?: boolean;
   readonly weaponSlotsUsed?: number;
   readonly weaponSlotCap?: number;
 }
@@ -28,11 +30,12 @@ export const V22_ACTIVE_WEAPON_SLOT_CAP = 4;
 const DEFINITIONS: Readonly<Record<V21DraftId, Omit<V21DraftChoice, "disabled">>> = Object.freeze({
   DELTA_RANK: Object.freeze({ id: "DELTA_RANK", name: "DELTA BURST", category: "WEAPON", description: "Rank up the canonical phase burst: more damage and faster cadence." }),
   VECTOR_NEEDLE: Object.freeze({ id: "VECTOR_NEEDLE", name: "VECTOR NEEDLE", category: "WEAPON", description: "Acquire Rank I precision auto-fire. SHIFT rewrites which corporeal threat it can target." }),
+  ORBIT_NODES: Object.freeze({ id: "ORBIT_NODES", name: "ORBIT NODES", category: "WEAPON", description: "Acquire one close-defense node. SHIFT reverses its phase-driven sweep without resetting position." }),
   FIELD_REPAIR: Object.freeze({ id: "FIELD_REPAIR", name: "FIELD REPAIR", category: "UTILITY", description: "Restore 25 HP immediately. Does not increase maximum HP." }),
   SIGNAL_MAGNET: Object.freeze({ id: "SIGNAL_MAGNET", name: "SIGNAL MAGNET", category: "UTILITY", description: "Increase Signal XP pickup radius for this run." }),
 });
 
-function vectorSlotAvailable(state: V21BuildState): boolean {
+function weaponSlotAvailable(state: V21BuildState): boolean {
   const used = state.weaponSlotsUsed ?? 1;
   const cap = state.weaponSlotCap ?? V22_ACTIVE_WEAPON_SLOT_CAP;
   return used < cap;
@@ -40,7 +43,8 @@ function vectorSlotAvailable(state: V21BuildState): boolean {
 
 export function isV21DraftChoiceValid(state: V21BuildState, id: V21DraftId): boolean {
   if (id === "DELTA_RANK") return state.deltaRank < V21_DELTA_MAX_RANK;
-  if (id === "VECTOR_NEEDLE") return state.vectorEnabled === true && state.vectorOwned !== true && vectorSlotAvailable(state);
+  if (id === "VECTOR_NEEDLE") return state.vectorEnabled === true && state.vectorOwned !== true && weaponSlotAvailable(state);
+  if (id === "ORBIT_NODES") return state.orbitEnabled === true && state.orbitOwned !== true && weaponSlotAvailable(state);
   if (id === "FIELD_REPAIR") return state.hp < state.maxHp;
   return state.pickupRadius < V21_SIGNAL_MAGNET_MAX_RADIUS;
 }
@@ -56,18 +60,23 @@ export function buildV21Draft(seed: number, level: number, state: V21BuildState)
 
   const baseIds: V21DraftId[] = ["DELTA_RANK", "FIELD_REPAIR", "SIGNAL_MAGNET"];
   const validBase = rotateDeterministically(seed, level, baseIds).filter(id => isV21DraftChoiceValid(state, id));
+  const acquisitions: V21DraftId[] = [];
+
+  // V2-2B bounded discovery order. ORBIT is first so the new tranche can be
+  // reached deterministically, while VECTOR remains present/actionable when
+  // legal so the inherited V2-2A browser qualification remains valid.
+  if (isV21DraftChoiceValid(state, "ORBIT_NODES")) acquisitions.push("ORBIT_NODES");
+  if (isV21DraftChoiceValid(state, "VECTOR_NEEDLE")) acquisitions.push("VECTOR_NEEDLE");
 
   let selected: V21DraftId[];
-  if (isV21DraftChoiceValid(state, "VECTOR_NEEDLE")) {
-    // V2-2A discovery guarantee: expose VECTOR immediately while keeping DELTA
-    // visible when it is still actionable, then fill the remaining slot
-    // deterministically. This is a bounded qualification rule, not V2-3 weighting.
-    selected = ["VECTOR_NEEDLE"];
-    if (isV21DraftChoiceValid(state, "DELTA_RANK")) selected.push("DELTA_RANK");
+  if (acquisitions.length > 0) {
+    selected = [...acquisitions];
+    if (selected.length < 3 && isV21DraftChoiceValid(state, "DELTA_RANK")) selected.push("DELTA_RANK");
     for (const id of validBase) {
       if (selected.length >= 3) break;
       if (!selected.includes(id)) selected.push(id);
     }
+    selected = selected.slice(0, 3);
   } else {
     selected = validBase.slice(0, 3);
   }
@@ -83,6 +92,11 @@ export function applyV21Draft(state: V21BuildState, id: V21DraftId): V21BuildSta
       if (state.vectorOwned === true) throw new Error("VECTOR NEEDLE is already owned.");
       throw new Error("No active weapon slot is available for VECTOR NEEDLE.");
     }
+    if (id === "ORBIT_NODES") {
+      if (state.orbitEnabled !== true) throw new Error("ORBIT NODES is not enabled in this tranche.");
+      if (state.orbitOwned === true) throw new Error("ORBIT NODES is already owned.");
+      throw new Error("No active weapon slot is available for ORBIT NODES.");
+    }
     if (id === "FIELD_REPAIR") throw new Error("FIELD REPAIR requires missing HP.");
     throw new Error("SIGNAL MAGNET is already at its V2-1 pickup-radius cap.");
   }
@@ -92,6 +106,13 @@ export function applyV21Draft(state: V21BuildState, id: V21DraftId): V21BuildSta
     return Object.freeze({
       ...state,
       vectorOwned: true,
+      weaponSlotsUsed: (state.weaponSlotsUsed ?? 1) + 1,
+    });
+  }
+  if (id === "ORBIT_NODES") {
+    return Object.freeze({
+      ...state,
+      orbitOwned: true,
       weaponSlotsUsed: (state.weaponSlotsUsed ?? 1) + 1,
     });
   }
