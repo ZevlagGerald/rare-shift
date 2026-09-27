@@ -74,7 +74,9 @@ function qualify(width) {
     const moveUntilDraft = async (minimumLevel, deadlineMs, label) => {
       const deadline = Date.now() + deadlineMs;
       while (Date.now() < deadline && !(bool(await data("draft-open")) && Number(await data("level")) >= minimumLevel)) {
-        if (bool(await data("dead"))) throw new Error(`died before ${label}`);
+        if (bool(await data("dead"))) {
+          throw new Error(`died before ${label}; level=${await data("level")}; hp=${await data("hp")}; kills=${await data("kills")}; deltaRank=${await data("delta-rank")}; slots=${await data("weapon-slots-used")}`);
+        }
         if (!bool(await data("draft-open"))) {
           await canvas.press(route[routeIndex++ % route.length], { delay: minimumLevel >= 4 ? 300 : 390 });
           await page.waitForTimeout(minimumLevel >= 4 ? 650 : 900);
@@ -88,6 +90,17 @@ function qualify(width) {
       assert.ok(Number(await data("level")) >= minimumLevel, `${label} must be level ${minimumLevel}+`);
     };
 
+    const chooseBuildCard = async (expectedId, label) => {
+      const ids = list(await data("draft-ids"));
+      const count = Number(await data("draft-count"));
+      assert.equal(ids.length, count, `${label} draft ids/count must agree`);
+      const index = ids.indexOf(expectedId);
+      assert.ok(index >= 0, `${label} requires ${expectedId}: ${ids.join(",")}`);
+      console.log(`V2_2E_BUILD_DRAFT_${width}=L${await data("level")}:HP${await data("hp")}:${ids.join(",")}=>${expectedId}`);
+      await clickDraft(canvas, index, count);
+      await page.waitForTimeout(220);
+    };
+
     const resolvePostBuildDrafts = async label => {
       let resolved = 0;
       while (bool(await data("draft-open")) && resolved < 8) {
@@ -99,7 +112,7 @@ function qualify(width) {
         if (index < 0) index = ids.indexOf("SIGNAL_MAGNET");
         if (index < 0) index = ids.indexOf("DELTA_RANK");
         if (index < 0) index = 0;
-        console.log(`V2_2E_SURVIVAL_DRAFT_${width}=L${await data("level")}:${ids.join(",")}=>${ids[index]}`);
+        console.log(`V2_2E_SURVIVAL_DRAFT_${width}=L${await data("level")}:HP${await data("hp")}:${ids.join(",")}=>${ids[index]}`);
         await clickDraft(canvas, index, count);
         await page.waitForTimeout(180);
         resolved += 1;
@@ -107,33 +120,30 @@ function qualify(width) {
       assert.equal(await data("draft-open"), "false", `${label} must resume combat after bounded legal draft resolution`);
     };
 
-    // Representative closeout path: DELTA + ORBIT + ECHO + SIGNAL ARC.
-    await moveUntilDraft(2, 58_000, "level-2 cross-weapon draft");
+    // V2-2D already proves the historical ORBIT -> ECHO -> SIGNAL onboarding
+    // sequence on this exact runtime. V2-2E's browser responsibility is the
+    // integrated 4/4 load, so its setup uses a natural V2-3-era survival route:
+    // DELTA II -> ECHO -> SIGNAL -> ORBIT. No state is injected and every choice
+    // is made through the real draft UI.
+    await moveUntilDraft(2, 58_000, "level-2 integrated-build draft");
     const level2Ids = list(await data("draft-ids"));
     assert.deepEqual(new Set(level2Ids), new Set(["ORBIT_NODES", "VECTOR_NEEDLE", "DELTA_RANK"]));
-    await clickDraft(canvas, level2Ids.indexOf("ORBIT_NODES"), level2Ids.length);
-    await page.waitForTimeout(220);
-    assert.equal(await data("orbit-owned"), "true");
+    await chooseBuildCard("DELTA_RANK", "level-2 integrated-build draft");
+    assert.equal(await data("delta-rank"), "2");
+    assert.equal(await data("weapon-slots-used"), "1");
+
+    await moveUntilDraft(3, 64_000, "level-3 integrated-build draft");
+    await chooseBuildCard("ECHO_MINE", "level-3 integrated-build draft");
+    assert.equal(await data("echo-owned"), "true");
     assert.equal(await data("weapon-slots-used"), "2");
 
-    await moveUntilDraft(3, 64_000, "level-3 cross-weapon draft");
-    const level3Ids = list(await data("draft-ids"));
-    const echoIndex = level3Ids.indexOf("ECHO_MINE");
-    assert.ok(echoIndex >= 0, `ECHO must remain available: ${level3Ids.join(",")}`);
-    await clickDraft(canvas, echoIndex, level3Ids.length);
-    await page.waitForTimeout(240);
-    assert.equal(await data("echo-owned"), "true");
+    await moveUntilDraft(4, 76_000, "level-4 integrated-build draft");
+    await chooseBuildCard("SIGNAL_ARC", "level-4 integrated-build draft");
+    assert.equal(await data("signal-owned"), "true");
     assert.equal(await data("weapon-slots-used"), "3");
 
-    await moveUntilDraft(4, 76_000, "level-4 cross-weapon draft");
-    const level4Ids = list(await data("draft-ids"));
-    assert.equal(level4Ids.length, 3, "representative level-4 route must retain exactly three actionable choices");
-    assert.equal(new Set(level4Ids).size, 3);
-    assert.equal(level4Ids.includes("VECTOR_NEEDLE"), true, "alternative final-slot VECTOR path must remain visible");
-    const signalIndex = level4Ids.indexOf("SIGNAL_ARC");
-    assert.ok(signalIndex >= 0, `SIGNAL ARC final-slot path missing: ${level4Ids.join(",")}`);
-    await clickDraft(canvas, signalIndex, level4Ids.length);
-    await page.waitForTimeout(260);
+    await moveUntilDraft(5, 86_000, "level-5 integrated-build draft");
+    await chooseBuildCard("ORBIT_NODES", "level-5 integrated-build draft");
 
     assert.equal(await data("weapon-slots-used"), "4");
     assert.equal(await data("orbit-owned"), "true");
@@ -214,6 +224,7 @@ function qualify(width) {
     assertChainPhase(chainKinds, phase);
 
     assert.equal(await data("delta-fx"), "canonical-exclusive");
+    assert.equal(await data("delta-rank"), "2");
     assert.equal(await data("orbit-owned"), "true");
     assert.equal(await data("echo-owned"), "true");
     assert.equal(await data("signal-owned"), "true");
@@ -237,7 +248,7 @@ for (const width of [960, 390]) {
   await testGame(gameDirectory, {
     width,
     height: width === 960 ? 800 : 844,
-    timeout: 250_000,
+    timeout: 280_000,
     screenshot: resolve(`artifacts/rare-shift-v2-2e-host-${width}.png`),
     check: qualify(width),
   });
