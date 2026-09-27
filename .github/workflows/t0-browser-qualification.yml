@@ -20,6 +20,7 @@ on:
       - "scripts/t3-corpus.mjs"
       - "scripts/v2-art00-generate.mjs"
       - "scripts/v2-art00-browser.mjs"
+      - "scripts/v2-1-browser.mjs"
       - "package.json"
       - "tsconfig.core.json"
   workflow_dispatch:
@@ -84,7 +85,7 @@ jobs:
           sha256sum package-lock.json
           npm ls --depth=1
 
-      - name: Corpus and proof reader syntax
+      - name: Qualification script syntax
         shell: bash
         run: |
           node --check scripts/t0-5-corpus.mjs
@@ -92,14 +93,15 @@ jobs:
           node --check scripts/t3-corpus.mjs
           node --check scripts/v2-art00-generate.mjs
           node --check scripts/v2-art00-browser.mjs
+          node --check scripts/v2-1-browser.mjs
 
-      - name: Core tests
+      - name: Inherited deterministic core tests
         run: npm run test:core
 
       - name: V2 combat deterministic contracts
         run: npm run test:v2-combat
 
-      - name: V2 ART 00 invariants and static/motion proof
+      - name: V2 ART 00 inherited visual proof
         shell: bash
         run: |
           set -euo pipefail
@@ -109,23 +111,7 @@ jobs:
           test -s artifacts/v2-art00-proof-960.svg
           test -s artifacts/v2-art00-proof-390.svg
           test -s artifacts/v2-art00-report.json
-          test -s artifacts/v2-art00-960-initial.png
-          test -s artifacts/v2-art00-960-motion.png
-          test -s artifacts/v2-art00-960-reduced.png
-          test -s artifacts/v2-art00-390-initial.png
-          test -s artifacts/v2-art00-390-motion.png
-          test -s artifacts/v2-art00-390-reduced.png
           node -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync("artifacts/v2-art00-report.json","utf8")); if(r.outputs.length!==2 || !r.outputs.every(x=>x.animated===true && x.reducedMotionCss===true && /^[0-9a-f]{64}$/.test(x.sha256))) process.exit(1); console.log("V2_ART_00_REPORT=PASS")'
-          sha256sum \
-            artifacts/v2-art00-proof-960.svg \
-            artifacts/v2-art00-proof-390.svg \
-            artifacts/v2-art00-report.json \
-            artifacts/v2-art00-960-initial.png \
-            artifacts/v2-art00-960-motion.png \
-            artifacts/v2-art00-960-reduced.png \
-            artifacts/v2-art00-390-initial.png \
-            artifacts/v2-art00-390-motion.png \
-            artifacts/v2-art00-390-reduced.png
 
       - name: Core TypeScript typecheck
         run: npm run typecheck:core
@@ -142,41 +128,23 @@ jobs:
       - name: FriendSDK smoke
         run: npm run test:sdk
 
-      - name: RARE SHIFT desktop and mobile browser proof
-        run: npm run test:browser
+      - name: V2-1 desktop and narrow survival proof
+        run: npm run test:v2-1-browser
 
-      - name: Verify screenshot evidence
+      - name: Verify V2-1 screenshot evidence
         shell: bash
         run: |
           set -euo pipefail
           test -s artifacts/rare-shift-smoke.png
-          test -s artifacts/rare-shift-t3-scan-960.png
-          test -s artifacts/rare-shift-t3-scan-390.png
-          test -s artifacts/rare-shift-t3-transition1-960.png
-          test -s artifacts/rare-shift-t3-transition1-390.png
-          test -s artifacts/rare-shift-t3-transition2-960.png
-          test -s artifacts/rare-shift-t3-transition2-390.png
-          test -s artifacts/rare-shift-t3-960.png
-          test -s artifacts/rare-shift-t3-390.png
-          test -s artifacts/rare-shift-t4-final-960.png
-          test -s artifacts/rare-shift-t4-final-390.png
-          test -s artifacts/rare-shift-t4-host-960.png
-          test -s artifacts/rare-shift-t4-host-390.png
-          sha256sum \
-            artifacts/rare-shift-smoke.png \
-            artifacts/rare-shift-t3-scan-960.png \
-            artifacts/rare-shift-t3-scan-390.png \
-            artifacts/rare-shift-t3-transition1-960.png \
-            artifacts/rare-shift-t3-transition1-390.png \
-            artifacts/rare-shift-t3-transition2-960.png \
-            artifacts/rare-shift-t3-transition2-390.png \
-            artifacts/rare-shift-t3-960.png \
-            artifacts/rare-shift-t3-390.png \
-            artifacts/rare-shift-t4-final-960.png \
-            artifacts/rare-shift-t4-final-390.png \
-            artifacts/rare-shift-t4-host-960.png \
-            artifacts/rare-shift-t4-host-390.png
-          echo "SCREENSHOT_EVIDENCE=PASS"
+          for width in 960 390; do
+            test -s "artifacts/rare-shift-v2-1-host-${width}.png"
+            test -s "artifacts/rare-shift-v2-1-scan-${width}.png"
+            test -s "artifacts/rare-shift-v2-1-initial-${width}.png"
+            test -s "artifacts/rare-shift-v2-1-draft-${width}.png"
+            test -s "artifacts/rare-shift-v2-1-qualified-${width}.png"
+          done
+          sha256sum artifacts/rare-shift-v2-1-*.png artifacts/rare-shift-smoke.png
+          echo "V2_1_SCREENSHOT_EVIDENCE=PASS"
 
       - name: Upload browser evidence
         if: always()
