@@ -102,10 +102,14 @@ test("utilities with no remaining effect are also removed from draft", () => {
   assert.throws(() => applyV21Draft(maxMagnet, "SIGNAL_MAGNET"), /maximum pickup radius/u);
 });
 
-test("fully exhausted V2-1 sandbox draft returns no fake choices", () => {
+test("fully exhausted V2-1 sandbox gets one useful RUN BONUS fallback", () => {
   const exhausted = { deltaRank: 5, hp: 100, maxHp: 100, pickupRadius: 220 };
   const draft = buildV21Draft(13699, 9, exhausted);
-  assert.deepEqual(draft, []);
+  assert.equal(draft.length, 1);
+  assert.equal(draft[0].id, "RUN_BONUS");
+  assert.equal(draft[0].disabled, false);
+  const next = applyV21Draft(exhausted, "RUN_BONUS");
+  assert.equal(next.pickupRadius, 240);
 });
 
 test("qualification gate requires the complete bounded V2-1 interaction", () => {
