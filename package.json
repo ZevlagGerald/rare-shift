@@ -20,6 +20,7 @@
     "test:v2-2c-browser": "node --experimental-strip-types scripts/v2-2c-browser.mjs",
     "test:v2-2d-browser": "node --experimental-strip-types scripts/v2-2d-browser.mjs",
     "test:v2-2e-browser": "node --experimental-strip-types scripts/v2-2e-browser.mjs",
+    "test:v2-2e-pointer-browser": "node --experimental-strip-types scripts/v2-2e-pointer-browser.mjs",
     "typecheck:core": "tsc -p tsconfig.core.json",
     "typecheck": "tsc -p games/rare-shift/tsconfig.json --noEmit",
     "dev": "friendsdk dev ./games/rare-shift",
