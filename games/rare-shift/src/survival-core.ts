@@ -5,7 +5,10 @@ export const V21_WORLD_WIDTH = 1800 as const;
 export const V21_WORLD_HEIGHT = 1200 as const;
 export const V21_PLAYER_MAX_HP: number = 100;
 export const V21_CONTACT_INVULN_MS = 900 as const;
-export const V21_SPAWN_INTERVAL_MS = 700 as const;
+// V2-1 is the learning slice. A slower fixed cadence prevents the first 30–40 s
+// from saturating the safety pool before the player reaches their first draft.
+// Later tranches may replace this with a measured run-pacing curve.
+export const V21_SPAWN_INTERVAL_MS = 1100 as const;
 export const V21_MAX_ACTIVE_ENEMIES = 48 as const;
 
 export interface Vec2 {
