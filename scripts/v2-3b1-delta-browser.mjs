@@ -43,9 +43,6 @@ function qualify(width) {
     await canvas.waitFor({ state: "visible" });
     await canvas.focus();
     const data = name => canvas.getAttribute(`data-${name}`);
-    // Wide perimeter route instead of a tiny four-step square around spawn. This
-    // remains ordinary keyboard movement but avoids making the qualification bot
-    // repeatedly turn back into the same local swarm.
     const route = [
       "ArrowRight", "ArrowRight", "ArrowRight", "ArrowRight",
       "ArrowDown", "ArrowDown", "ArrowDown",
@@ -64,13 +61,31 @@ function qualify(width) {
     let acquiredSignal = false;
     let acquiredEcho = false;
     let provedRank4Echo = false;
+    let rank4EchoProofPending = false;
     let rank5Reached = false;
     let expectedDraftLevel = 2;
     const choices = [];
 
+    const proveRank4Echo = async () => {
+      assert.equal(bool(await data("draft-open")), false, "Rank-IV PHASE ECHO proof requires resumed combat");
+      const schedulesBefore = Number(await data("delta-echo-schedules"));
+      const firesBefore = Number(await data("delta-echo-fires"));
+      await shift(canvas, width);
+      await page.waitForTimeout(240);
+      assert.ok(Number(await data("delta-echo-schedules")) > schedulesBefore, "Rank IV SHIFT must schedule PHASE ECHO");
+      assert.ok(Number(await data("delta-echo-fires")) > firesBefore, "Rank IV PHASE ECHO must fire after its bounded delay");
+      provedRank4Echo = true;
+      rank4EchoProofPending = false;
+    };
+
     const deadline = Date.now() + 360_000;
     while (Date.now() < deadline && !rank5Reached) {
       if (bool(await data("dead"))) throw new Error(`died before DELTA Rank V at level ${await data("level")}; choices=${choices.join("|")}`);
+
+      // If clustered Signal pickups immediately opened the next legitimate draft
+      // after Rank IV, preserve that decision first. The first resumed combat
+      // frame after the cluster clears is where Rank-IV PHASE ECHO is proven.
+      if (rank4EchoProofPending && !bool(await data("draft-open"))) await proveRank4Echo();
 
       if (bool(await data("draft-open"))) {
         const ids = list(await data("draft-ids"));
@@ -80,18 +95,18 @@ function qualify(width) {
         const level = Number(await data("level"));
         const hp = Number(await data("hp"));
 
-        // Progression-integrity regression: every visible draft must correspond
-        // to exactly the next earned level. The first one must be Level 2; a
-        // clustered pickup frame may not skip directly to Level 3 or later.
         assert.equal(level, expectedDraftLevel, `draft level sequence skipped: expected L${expectedDraftLevel}, got L${level}`);
         expectedDraftLevel += 1;
 
         let desired = "";
-        // DELTA-specific natural route. V2-2E separately proves the real 4/4
-        // build, so this proof preserves ECHO and SIGNAL onboarding but spends
-        // later legal decisions on DELTA itself: II -> ECHO -> SIGNAL -> III ->
-        // IV -> V. No XP, HP, enemy, rank or phase state is injected.
-        if (rank === 1 && ids.includes("DELTA_RANK")) desired = "DELTA_RANK";
+        // If the next draft opened immediately after Rank IV, do not consume
+        // DELTA V before PHASE ECHO can be observed in resumed combat. Pick one
+        // legal non-DELTA decision, then prove the echo before later taking V.
+        if (rank === 4 && rank4EchoProofPending) {
+          if (hp <= 55 && ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
+          else desired = ids.find(id => id !== "DELTA_RANK") ?? "";
+          assert.ok(desired, `Rank-IV echo proof requires a legal non-DELTA bridge choice: ${ids.join(",")}`);
+        } else if (rank === 1 && ids.includes("DELTA_RANK")) desired = "DELTA_RANK";
         else if (!acquiredEcho && ids.includes("ECHO_MINE")) desired = "ECHO_MINE";
         else if (!acquiredSignal && ids.includes("SIGNAL_ARC")) desired = "SIGNAL_ARC";
         else if (ids.includes("DELTA_RANK")) desired = "DELTA_RANK";
@@ -105,7 +120,15 @@ function qualify(width) {
         const beforeRank = rank;
         await clickDraft(canvas, index, count);
         await page.waitForTimeout(220);
-        assert.equal(await data("draft-open"), "false");
+
+        // A clustered pickup left active by the integrity repair may legitimately
+        // open the next level's draft on the first resumed update. That is valid
+        // only when it is exactly the next sequential level; staying on the same
+        // level or jumping farther remains a hard failure.
+        if (bool(await data("draft-open"))) {
+          assert.equal(Number(await data("level")), expectedDraftLevel,
+            `immediate reopened draft must be exactly L${expectedDraftLevel}`);
+        }
 
         if (desired === "SIGNAL_ARC") acquiredSignal = true;
         if (desired === "ECHO_MINE") acquiredEcho = true;
@@ -125,15 +148,11 @@ function qualify(width) {
             assert.equal(await data("delta-world-scale"), "9.5");
           }
           if (afterRank === 4) {
-            const schedulesBefore = Number(await data("delta-echo-schedules"));
-            const firesBefore = Number(await data("delta-echo-fires"));
-            await shift(canvas, width);
-            await page.waitForTimeout(240);
-            assert.ok(Number(await data("delta-echo-schedules")) > schedulesBefore, "Rank IV SHIFT must schedule PHASE ECHO");
-            assert.ok(Number(await data("delta-echo-fires")) > firesBefore, "Rank IV PHASE ECHO must fire after its bounded delay");
-            provedRank4Echo = true;
+            rank4EchoProofPending = true;
+            if (!bool(await data("draft-open"))) await proveRank4Echo();
           }
           if (afterRank === 5) {
+            assert.equal(provedRank4Echo, true, "Rank IV PHASE ECHO must be proven before DELTA V");
             assert.equal(await data("delta-damage"), "14");
             assert.equal(await data("delta-cooldown-ms"), "720");
             assert.equal(await data("delta-world-scale"), "9.5");
@@ -183,6 +202,10 @@ function qualify(width) {
         const heal = ids.indexOf("FIELD_REPAIR");
         await clickDraft(canvas, heal >= 0 ? heal : 0, count);
         await page.waitForTimeout(160);
+        if (bool(await data("draft-open"))) {
+          assert.equal(Number(await data("level")), expectedDraftLevel,
+            `post-Rank-V immediate draft must be exactly L${expectedDraftLevel}`);
+        }
       } else {
         await canvas.press(route[routeIndex++ % route.length], { delay: 340 });
         await page.waitForTimeout(70);
