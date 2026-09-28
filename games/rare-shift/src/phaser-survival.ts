@@ -28,10 +28,15 @@ import {
 } from "./phase-combat-core.ts";
 import {
   advanceOrbitAngle,
+  buildOrbitProfile,
+  canEmitOrbitShear,
   isOrbitContactLegal,
   orbitDirectionForPhase,
-  orbitNodePosition,
+  orbitNodeAngles,
+  orbitNodePositions,
+  planOrbitShearTargetIds,
   ORBIT_RANK_I,
+  type OrbitRankProfile,
 } from "./orbit-core.ts";
 import {
   addSignalXp,
@@ -134,6 +139,7 @@ interface PendingDeltaEchoRuntime {
 }
 
 type VectorQualificationWindow = Window & { __RARE_SHIFT_V23B2_VECTOR_RANK__?: unknown };
+type OrbitQualificationWindow = Window & { __RARE_SHIFT_V23B3_ORBIT_RANK__?: unknown };
 
 const VIEW_W = 960;
 const VIEW_H = 640;
@@ -202,11 +208,17 @@ class SurvivalScene extends Phaser.Scene {
   private vectorQualificationFixture = "";
 
   private orbitOwned = false;
+  private orbitRank = 1;
   private orbitAngle = 0;
   private orbitHits = 0;
   private orbitReversals = 0;
   private orbitLastShiftAnchor: number | null = null;
   private readonly orbitLastHitAt = new Map<number, number>();
+  private orbitShearLastEmittedAt: number | null = null;
+  private orbitShearEvents = 0;
+  private orbitShearHits = 0;
+  private orbitShearRearmBlocks = 0;
+  private orbitQualificationFixture = "";
 
   private echoOwned = false;
   private echoPlacementAccumulator = 0;
@@ -285,6 +297,7 @@ class SurvivalScene extends Phaser.Scene {
     this.signalFx = this.add.graphics().setDepth(29).setVisible(false);
     this.buildPools();
     this.applyVectorQualificationFixture();
+    this.applyOrbitQualificationFixture();
     this.buildHud();
     this.installKeyboard();
     this.installTouch();
@@ -302,6 +315,17 @@ class SurvivalScene extends Phaser.Scene {
     this.vectorTransferState = emptyVectorTransfer();
     this.vectorLockState = initialVectorLockState();
     this.vectorQualificationFixture = `VECTOR_RANK_${this.vectorRank}`;
+  }
+
+  private applyOrbitQualificationFixture(): void {
+    const raw = (window as OrbitQualificationWindow).__RARE_SHIFT_V23B3_ORBIT_RANK__;
+    if (!Number.isInteger(raw) || (raw as number) < 1 || (raw as number) > 5) return;
+    this.orbitOwned = true;
+    this.orbitRank = raw as number;
+    this.weaponSlotsUsed = Math.max(this.weaponSlotsUsed, 2);
+    this.orbitShearLastEmittedAt = null;
+    this.orbitQualificationFixture = `ORBIT_RANK_${this.orbitRank}`;
+    this.syncOrbitNodeView();
   }
 
   update(_time: number, delta: number): void {
@@ -342,7 +366,7 @@ class SurvivalScene extends Phaser.Scene {
     }
 
     if (this.orbitOwned) this.updateOrbit(dt);
-    else this.orbitNode.setVisible(false);
+    else this.orbitNode.clear().setVisible(false);
 
     if (this.echoOwned) this.updateEcho(dt);
     else this.hideEchoViews();
@@ -477,7 +501,7 @@ class SurvivalScene extends Phaser.Scene {
     this.xpBar.clear().fillStyle(0x202832, 1).fillRect(310, 48, 240, 8);
     this.xpBar.fillStyle(0x7ee787, 1).fillRect(310, 48, 240 * this.xp / xpThreshold(this.level), 8);
     this.hudText.setText(`HP ${Math.max(0, this.hp)}/${V21_PLAYER_MAX_HP}   LV ${this.level}   XP ${this.xp}/${xpThreshold(this.level)}`);
-    this.buildText.setText(`K ${this.kills} · Δ ${romanRank(this.deltaRank)} · V ${this.vectorOwned ? romanRank(this.vectorRank) : "--"} · O ${this.orbitOwned ? "I" : "--"} · E ${this.echoOwned ? "I" : "--"} · S ${this.signalOwned ? "I" : "--"}`);
+    this.buildText.setText(`K ${this.kills} · Δ ${romanRank(this.deltaRank)} · V ${this.vectorOwned ? romanRank(this.vectorRank) : "--"} · O ${this.orbitOwned ? romanRank(this.orbitRank) : "--"} · E ${this.echoOwned ? "I" : "--"} · S ${this.signalOwned ? "I" : "--"}`);
     this.phaseText.setColor(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB).setText(`PHASE ${this.phase}\nFRAME ${this.phase === "A" ? this.pair.a.index : this.pair.b.index}`);
     if (this.shiftButton) this.shiftButton.setStrokeStyle(2, hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB));
   }
@@ -764,37 +788,89 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private updateOrbit(dtMs: number): void {
-    this.orbitAngle = advanceOrbitAngle(this.orbitAngle, this.phase, dtMs);
-    const point = this.syncOrbitNodeView();
+    const profile = buildOrbitProfile(this.orbitRank);
+    this.orbitAngle = advanceOrbitAngle(this.orbitAngle, this.phase, dtMs, profile.angularSpeed);
+    const points = this.syncOrbitNodeView(profile);
     for (const enemy of this.enemies) {
       if (!enemy.active) continue;
       const lastHitAt = this.orbitLastHitAt.get(enemy.id) ?? null;
-      if (!isOrbitContactLegal(enemy, this.phase, point.x, point.y, lastHitAt, this.elapsedActiveMs)) continue;
+      const legal = points.some(point => isOrbitContactLegal(enemy, this.phase, point.x, point.y, lastHitAt, this.elapsedActiveMs, profile));
+      if (!legal) continue;
       this.orbitLastHitAt.set(enemy.id, this.elapsedActiveMs);
-      enemy.hp -= ORBIT_RANK_I.damage;
+      enemy.hp -= profile.damage;
       this.orbitHits += 1;
       this.emitOrbitHitFx(enemy.x, enemy.y);
       if (enemy.hp <= 0) this.killEnemy(enemy);
     }
   }
 
-  private syncOrbitNodeView(): { x: number; y: number } {
-    const point = orbitNodePosition(this.friend.x, this.friend.y, this.orbitAngle);
-    if (!this.orbitOwned) { this.orbitNode.setVisible(false); return point; }
+  private syncOrbitNodeView(profile: OrbitRankProfile = buildOrbitProfile(this.orbitRank)): readonly { x: number; y: number }[] {
+    const points = orbitNodePositions(this.friend.x, this.friend.y, this.orbitAngle, profile);
+    if (!this.orbitOwned) { this.orbitNode.clear().setVisible(false); return points; }
     const direction = orbitDirectionForPhase(this.phase);
     const tone = hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB);
-    this.orbitNode.clear().setVisible(true).setPosition(point.x, point.y).setRotation(this.orbitAngle + direction * Math.PI / 2);
-    this.orbitNode.lineStyle(1, tone, 0.68).strokeCircle(0, 0, 11);
-    this.orbitNode.fillStyle(tone, 0.95).fillRect(-5, -5, 10, 10);
-    this.orbitNode.fillStyle(hex(V2_PALETTE.common), 0.72).fillRect(-18, -2, 12, 4);
-    return point;
+    const angles = orbitNodeAngles(this.orbitAngle, profile.nodeCount);
+    this.orbitNode.clear().setVisible(true).setPosition(this.friend.x, this.friend.y).setRotation(0);
+    this.orbitNode.lineStyle(1, tone, 0.22).strokeCircle(0, 0, profile.radius);
+    for (let index = 0; index < points.length; index += 1) {
+      const localX = points[index].x - this.friend.x;
+      const localY = points[index].y - this.friend.y;
+      const tangent = angles[index] + direction * Math.PI / 2;
+      this.orbitNode.lineStyle(1, tone, 0.68).strokeCircle(localX, localY, 11);
+      this.orbitNode.fillStyle(tone, 0.95).fillRect(localX - 5, localY - 5, 10, 10);
+      this.orbitNode.lineStyle(2, hex(V2_PALETTE.common), 0.72).lineBetween(localX, localY, localX + Math.cos(tangent) * 12, localY + Math.sin(tangent) * 12);
+    }
+    return points;
   }
 
-  private emitOrbitHitFx(x: number, y: number): void {
+  private tryEmitOrbitShear(anchorAngle: number): void {
+    const profile = buildOrbitProfile(this.orbitRank);
+    if (profile.rank < 4) return;
+    if (!canEmitOrbitShear(profile.rank, this.orbitShearLastEmittedAt, this.elapsedActiveMs)) {
+      this.orbitShearRearmBlocks += 1;
+      return;
+    }
+
+    this.orbitShearLastEmittedAt = this.elapsedActiveMs;
+    this.orbitShearEvents += 1;
+    const ids = planOrbitShearTargetIds(this.enemies, this.phase, this.friend.x, this.friend.y, anchorAngle, profile);
+    this.emitOrbitShearFx(anchorAngle, profile);
+    for (const id of ids) {
+      const enemy = this.enemies.find(item => item.active && item.id === id) ?? null;
+      if (!enemy || !isEnemyCorporeal(enemy.kind, this.phase)) continue;
+      enemy.hp -= profile.shearDamage;
+      this.orbitShearHits += 1;
+      this.emitOrbitHitFx(enemy.x, enemy.y, true);
+      if (enemy.hp <= 0) this.killEnemy(enemy);
+    }
+  }
+
+  private emitOrbitShearFx(anchorAngle: number, profile: OrbitRankProfile): void {
     const tone = hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB);
-    const fx = this.add.graphics().setPosition(x, y).setDepth(29).lineStyle(2, tone, 0.78);
-    fx.strokeCircle(0, 0, 9);
-    this.time.delayedCall(this.reduced ? 45 : 85, () => fx.destroy());
+    const direction = orbitDirectionForPhase(this.phase);
+    const fx = this.add.graphics().setPosition(this.friend.x, this.friend.y).setDepth(29);
+    fx.lineStyle(this.reduced ? 1 : 2, tone, this.reduced ? 0.68 : 0.9);
+    for (const startAngle of orbitNodeAngles(anchorAngle, profile.nodeCount)) {
+      let previousX = Math.cos(startAngle) * profile.radius;
+      let previousY = Math.sin(startAngle) * profile.radius;
+      for (let step = 1; step <= 8; step += 1) {
+        const angle = startAngle + direction * profile.shearArcRad * step / 8;
+        const x = Math.cos(angle) * profile.radius;
+        const y = Math.sin(angle) * profile.radius;
+        fx.lineBetween(previousX, previousY, x, y);
+        previousX = x;
+        previousY = y;
+      }
+    }
+    this.time.delayedCall(this.reduced ? 65 : profile.shearDurationMs, () => fx.destroy());
+  }
+
+  private emitOrbitHitFx(x: number, y: number, shear = false): void {
+    const tone = hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB);
+    const fx = this.add.graphics().setPosition(x, y).setDepth(29).lineStyle(shear ? 3 : 2, tone, shear ? 0.94 : 0.78);
+    fx.strokeCircle(0, 0, shear ? 12 : 9);
+    if (shear) fx.lineBetween(-10, 0, 10, 0);
+    this.time.delayedCall(this.reduced ? 45 : shear ? 100 : 85, () => fx.destroy());
   }
 
   private updateEcho(dtMs: number): void {
@@ -995,6 +1071,8 @@ class SurvivalScene extends Phaser.Scene {
       vectorRank: this.vectorRank,
       orbitEnabled: true,
       orbitOwned: this.orbitOwned,
+      orbitRankEnabled: true,
+      orbitRank: this.orbitRank,
       echoEnabled: this.level >= 3,
       echoOwned: this.echoOwned,
       signalEnabled: this.level >= 4,
@@ -1025,24 +1103,31 @@ class SurvivalScene extends Phaser.Scene {
     const isVectorAcquire = choice.id === "VECTOR_NEEDLE";
     const isVectorRank = choice.id === "VECTOR_RANK";
     const isVector = isVectorAcquire || isVectorRank;
-    const isOrbit = choice.id === "ORBIT_NODES", isEcho = choice.id === "ECHO_MINE", isSignal = choice.id === "SIGNAL_ARC";
+    const isOrbitAcquire = choice.id === "ORBIT_NODES";
+    const isOrbitRank = choice.id === "ORBIT_RANK";
+    const isOrbit = isOrbitAcquire || isOrbitRank;
+    const isEcho = choice.id === "ECHO_MINE", isSignal = choice.id === "SIGNAL_ARC";
     const isPhaseWeapon = isDelta || isVector || isOrbit || isEcho || isSignal;
     const border = isPhaseWeapon ? hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB) : 0x657383;
     const bg = this.add.rectangle(0, 0, 220, 230, 0x11151b, 0.99).setStrokeStyle(isPhaseWeapon ? 3 : 2, border).setInteractive({ useHandCursor: true });
     const tag = this.add.text(0, -91, `${index + 1} // ${choice.category}`, { fontFamily: "monospace", fontSize: "11px", color: "#8b98a7" }).setOrigin(0.5);
     const nextDeltaRank = Math.min(5, this.deltaRank + 1);
     const nextVectorRank = Math.min(5, this.vectorRank + 1);
-    const titleText = isDelta ? `${choice.name} ${romanRank(nextDeltaRank)}` : isVectorRank ? `${choice.name} ${romanRank(nextVectorRank)}` : choice.name;
+    const nextOrbitRank = Math.min(5, this.orbitRank + 1);
+    const titleText = isDelta ? `${choice.name} ${romanRank(nextDeltaRank)}` : isVectorRank ? `${choice.name} ${romanRank(nextVectorRank)}` : isOrbitRank ? `${choice.name} ${romanRank(nextOrbitRank)}` : choice.name;
     const title = this.add.text(0, -54, titleText, { fontFamily: "monospace", fontSize: "17px", color: V2_PALETTE.common, fontStyle: "bold", align: "center", wordWrap: { width: 190 } }).setOrigin(0.5);
     const detailText = isDelta
       ? `RANK ${romanRank(this.deltaRank)} → ${romanRank(nextDeltaRank)}`
       : isVectorRank
         ? `RANK ${romanRank(this.vectorRank)} → ${romanRank(nextVectorRank)}`
-        : (isVectorAcquire || isOrbit || isEcho || isSignal) ? "ACQUIRE · RANK I" : "RUN UTILITY";
+        : isOrbitRank
+          ? `RANK ${romanRank(this.orbitRank)} → ${romanRank(nextOrbitRank)}`
+          : (isVectorAcquire || isOrbitAcquire || isEcho || isSignal) ? "ACQUIRE · RANK I" : "RUN UTILITY";
     const detail = this.add.text(0, -27, detailText, { fontFamily: "monospace", fontSize: "9px", color: isPhaseWeapon ? (this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB) : "#748392", letterSpacing: 1 }).setOrigin(0.5);
     const deltaDescription = nextDeltaRank === 2 ? "DENSE SAMPLE · cadence tightens to 720ms." : nextDeltaRank === 3 ? "FIELD SCALE · canonical mask expands in world-space." : nextDeltaRank === 4 ? "PHASE ECHO · SHIFT leaves one bounded previous-phase echo." : "LOCKED IDENTITY · matching-phase pulse gains bounded stagger.";
     const vectorDescription = nextVectorRank === 2 ? "CLEAN LINE · fixed ray penetrates one aligned target." : nextVectorRank === 3 ? "PRIORITY TRACE · focus high-value corporeal threats in-band." : nextVectorRank === 4 ? "PHASE TRANSFER · first valid post-SHIFT launch gains a third line hit." : "VECTOR LOCK · repeated priority hits build bounded primary damage.";
-    const desc = this.add.text(0, 61, isDelta ? deltaDescription : isVectorRank ? vectorDescription : choice.description, { fontFamily: "monospace", fontSize: "11px", color: "#bac5d0", align: "center", wordWrap: { width: 178 } }).setOrigin(0.5);
+    const orbitDescription = nextOrbitRank === 2 ? "SECOND NODE · two nodes share one target-hit ledger." : nextOrbitRank === 3 ? "STABLE ORBIT · wider, faster close-defense geometry." : nextOrbitRank === 4 ? "PHASE SHEAR · SHIFT reversal emits one bounded post-phase sweep." : "SYNCHRONIZED RING · three equally spaced nodes share one ledger.";
+    const desc = this.add.text(0, 61, isDelta ? deltaDescription : isVectorRank ? vectorDescription : isOrbitRank ? orbitDescription : choice.description, { fontFamily: "monospace", fontSize: "11px", color: "#bac5d0", align: "center", wordWrap: { width: 178 } }).setOrigin(0.5);
     container.add([bg, tag, title, detail]);
     if (isDelta) {
       const preview = this.add.graphics(), previewProfile = buildDeltaProfile(this.pair.a.rows, this.pair.b.rows, this.phase, nextDeltaRank);
@@ -1054,8 +1139,15 @@ class SurvivalScene extends Phaser.Scene {
       if (isVectorRank && nextVectorRank >= 2) glyph.lineStyle(1, hex(V2_PALETTE.common), 0.7).lineBetween(-24, 13, 29, -2);
       glyph.setPosition(0, 2); container.add(glyph);
     } else if (isOrbit) {
+      const previewRank = isOrbitRank ? nextOrbitRank : 1;
+      const previewProfile = buildOrbitProfile(previewRank);
       const glyph = this.add.graphics().lineStyle(2, border, 0.78);
-      glyph.strokeCircle(0, 2, 27); glyph.fillStyle(border, 0.95).fillRect(22, -3, 10, 10); glyph.fillStyle(hex(V2_PALETTE.common), 0.65).fillRect(12, 1, 9, 3);
+      glyph.strokeCircle(0, 2, 27);
+      for (const angle of orbitNodeAngles(0, previewProfile.nodeCount)) {
+        const nodeX = Math.cos(angle) * 27;
+        const nodeY = 2 + Math.sin(angle) * 27;
+        glyph.fillStyle(border, 0.95).fillRect(nodeX - 5, nodeY - 5, 10, 10);
+      }
       container.add(glyph);
     } else if (isEcho) {
       const glyph = this.add.graphics().lineStyle(2, border, 0.78);
@@ -1079,6 +1171,7 @@ class SurvivalScene extends Phaser.Scene {
     const wasEchoOwned = this.echoOwned;
     const oldDeltaRank = this.deltaRank;
     const oldVectorRank = this.vectorRank;
+    const oldOrbitRank = this.orbitRank;
     const next = applyV21Draft(this.buildState(), choice.id as V21DraftId);
     this.deltaRank = next.deltaRank;
     if (this.deltaRank !== oldDeltaRank) this.attackAccumulator = migrateDeltaCooldownAccumulator(this.attackAccumulator, oldDeltaRank, this.deltaRank);
@@ -1090,6 +1183,12 @@ class SurvivalScene extends Phaser.Scene {
       if (this.vectorRank >= 5) this.vectorLockState = initialVectorLockState();
     }
     this.orbitOwned = next.orbitOwned === true;
+    this.orbitRank = next.orbitRank ?? (this.orbitOwned ? 1 : this.orbitRank);
+    if (this.orbitRank !== oldOrbitRank) {
+      // Rank migration is geometry-only while paused: preserve anchor angle,
+      // normal hit ledger and existing shear rearm. No rank-up emits shear.
+      this.orbitAngle = this.orbitAngle;
+    }
     this.echoOwned = next.echoOwned === true;
     this.signalOwned = next.signalOwned === true;
     this.weaponSlotsUsed = next.weaponSlotsUsed ?? this.weaponSlotsUsed;
@@ -1111,8 +1210,10 @@ class SurvivalScene extends Phaser.Scene {
     if (this.dead || this.draftOpen) return;
     const nextPhase: Phase = this.phase === "A" ? "B" : "A";
     this.invalidateVectorForShift(nextPhase);
+    let orbitShiftAnchor: number | null = null;
     if (this.orbitOwned) {
-      this.orbitLastShiftAnchor = this.orbitAngle;
+      orbitShiftAnchor = this.orbitAngle;
+      this.orbitLastShiftAnchor = orbitShiftAnchor;
       this.orbitReversals += 1;
     }
     if (this.signalOwned) {
@@ -1125,7 +1226,10 @@ class SurvivalScene extends Phaser.Scene {
     if (this.echoOwned) this.transitionEchoMinesForShift(nextPhase);
     this.scheduleDeltaEcho(this.phase);
     this.phase = nextPhase; this.shifts += 1; this.paintFriend();
-    if (this.orbitOwned) this.syncOrbitNodeView();
+    if (this.orbitOwned) {
+      this.syncOrbitNodeView();
+      if (orbitShiftAnchor !== null) this.tryEmitOrbitShear(orbitShiftAnchor);
+    }
     for (const enemy of this.enemies) if (enemy.active) enemy.view.setAlpha(isEnemyCorporeal(enemy.kind, this.phase) ? 1 : 0.22);
     this.updateHud(); this.statusText.setText(`SHIFT → Phase ${this.phase} // threat authority rewritten.`); this.emitShiftFx(); this.syncTestState();
   }
@@ -1220,14 +1324,24 @@ class SurvivalScene extends Phaser.Scene {
     canvas.dataset.vectorQualificationFixture = this.vectorQualificationFixture;
     canvas.dataset.vectorInFlightRanks = this.vectorProjectiles.filter(projectile => projectile.active && projectile.profile).map(projectile => String(projectile.profile?.rank ?? 0)).join(",");
     canvas.dataset.vectorInFlightTransfer = this.vectorProjectiles.some(projectile => projectile.active && projectile.transferShot) ? "true" : "false";
+    const orbitProfile = buildOrbitProfile(this.orbitRank);
     canvas.dataset.orbitOwned = this.orbitOwned ? "true" : "false";
-    canvas.dataset.orbitProfile = "rank1-phase-reversal";
+    canvas.dataset.orbitRank = String(this.orbitRank);
+    canvas.dataset.orbitProfile = `rank${this.orbitRank}-phase-reversal`;
     canvas.dataset.orbitAngle = this.orbitAngle.toFixed(6);
     canvas.dataset.orbitDirection = String(orbitDirectionForPhase(this.phase));
     canvas.dataset.orbitHits = String(this.orbitHits);
     canvas.dataset.orbitReversals = String(this.orbitReversals);
     canvas.dataset.orbitLastShiftAnchor = this.orbitLastShiftAnchor === null ? "" : this.orbitLastShiftAnchor.toFixed(6);
     canvas.dataset.orbitCooldownEntries = String(this.orbitLastHitAt.size);
+    canvas.dataset.orbitNodeCount = String(orbitProfile.nodeCount);
+    canvas.dataset.orbitNodeAngles = orbitNodeAngles(this.orbitAngle, orbitProfile.nodeCount).map(angle => angle.toFixed(6)).join(",");
+    canvas.dataset.orbitShearReady = canEmitOrbitShear(this.orbitRank, this.orbitShearLastEmittedAt, this.elapsedActiveMs) ? "true" : "false";
+    canvas.dataset.orbitShearEvents = String(this.orbitShearEvents);
+    canvas.dataset.orbitShearHits = String(this.orbitShearHits);
+    canvas.dataset.orbitShearLastEmittedAt = this.orbitShearLastEmittedAt === null ? "" : String(this.orbitShearLastEmittedAt);
+    canvas.dataset.orbitShearRearmBlocks = String(this.orbitShearRearmBlocks);
+    canvas.dataset.orbitQualificationFixture = this.orbitQualificationFixture;
     const activeMines = this.echoMines
       .filter((runtime): runtime is EchoMineRuntime & { mine: EchoMineCore } => runtime.active && runtime.mine !== null)
       .sort((a, b) => a.mine.id - b.mine.id);
