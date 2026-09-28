@@ -53,9 +53,6 @@ function qualify(width) {
     await canvas.waitFor({ state: "visible" });
     await canvas.focus();
     const data = name => canvas.getAttribute(`data-${name}`);
-    // Reuse the exact four-direction movement discipline already qualified by
-    // V2-2D on both desktop and narrow viewports. V2-2E should test integrated
-    // weapon coexistence, not introduce a second survival-routing variable.
     const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
     let routeIndex = 0;
 
@@ -74,8 +71,15 @@ function qualify(width) {
           throw new Error(`died before ${label}; level=${await data("level")}; hp=${await data("hp")}; kills=${await data("kills")}; deltaRank=${await data("delta-rank")}; slots=${await data("weapon-slots-used")}`);
         }
         if (!bool(await data("draft-open"))) {
-          await canvas.press(route[routeIndex++ % route.length], { delay: minimumLevel >= 4 ? 300 : 390 });
-          await page.waitForTimeout(minimumLevel >= 4 ? 650 : 900);
+          // The previous inherited route spent most pre-build time stationary
+          // (390ms move / 900ms idle, then 300ms / 650ms at Level 4). Repeated
+          // exact-head runs reached the required Level-4 full-build draft at
+          // critically low HP before the integrated assertions could execute.
+          // Keep the same four-direction route, real SHIFT cadence and natural
+          // pickups, but use a movement-dominant duty cycle. No game state is
+          // injected and no combat/progression values are changed.
+          await canvas.press(route[routeIndex++ % route.length], { delay: 520 });
+          await page.waitForTimeout(160);
           if (routeIndex % 5 === 0 && !bool(await data("draft-open"))) {
             await shift(canvas, width);
             await page.waitForTimeout(95);
@@ -185,12 +189,6 @@ function qualify(width) {
         && list(await data("signal-last-chain-ids")).length >= 1;
       if (integrated) break;
 
-      // Keep the exact four-direction route and SHIFT schedule, but do not leave
-      // the bot stationary for most of the full-build observation. The prior
-      // 220ms move / 360ms idle cadence repeatedly died at low natural HP before
-      // the unchanged coexistence assertions could be observed. This harness-only
-      // duty-cycle repair changes no gameplay state, damage, HP, XP, spawns, ranks,
-      // or evidence requirements.
       await canvas.press(route[routeIndex++ % route.length], { delay: 420 });
       await page.waitForTimeout(120);
       cycles += 1;
