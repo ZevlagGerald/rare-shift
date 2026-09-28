@@ -59,8 +59,12 @@ function qualify(width) {
       while (Date.now() < deadline && !(bool(await data("draft-open")) && Number(await data("level")) >= minimumLevel)) {
         if (bool(await data("dead"))) throw new Error(`died before ${label}`);
         if (!bool(await data("draft-open"))) {
-          await canvas.press(route[routeIndex++ % route.length], { delay: minimumLevel >= 4 ? 300 : 390 });
-          await page.waitForTimeout(minimumLevel >= 4 ? 650 : 900);
+          // Keep the qualified deterministic route and SHIFT cadence while removing
+          // the idle-heavy survival driver. This changes only harness movement duty
+          // cycle; no HP, XP, spawns, enemy stats, weapon values, draft state or
+          // SIGNAL assertions are modified.
+          await canvas.press(route[routeIndex++ % route.length], { delay: 520 });
+          await page.waitForTimeout(160);
           if (routeIndex % 5 === 0 && !bool(await data("draft-open"))) {
             await shift(canvas, width);
             await page.waitForTimeout(95);
@@ -108,8 +112,8 @@ function qualify(width) {
     const chainDeadline = Date.now() + 24_000;
     while (Date.now() < chainDeadline && Number(await data("signal-multi-target-casts")) < 1) {
       if (bool(await data("dead"))) throw new Error("died before SIGNAL ARC produced a natural multi-target cast");
-      await canvas.press(route[routeIndex++ % route.length], { delay: 220 });
-      await page.waitForTimeout(360);
+      await canvas.press(route[routeIndex++ % route.length], { delay: 420 });
+      await page.waitForTimeout(120);
     }
     assert.ok(Number(await data("signal-casts")) >= 1, "SIGNAL ARC must cast automatically");
     assert.ok(Number(await data("signal-hits")) >= 1, "SIGNAL ARC must deal real damage");
@@ -135,8 +139,8 @@ function qualify(width) {
     const postShiftDeadline = Date.now() + 12_000;
     while (Date.now() < postShiftDeadline && Number(await data("signal-casts")) <= castsBeforeShift) {
       if (bool(await data("dead"))) throw new Error("died before post-SHIFT SIGNAL ARC cast");
-      await canvas.press(route[routeIndex++ % route.length], { delay: 180 });
-      await page.waitForTimeout(300);
+      await canvas.press(route[routeIndex++ % route.length], { delay: 420 });
+      await page.waitForTimeout(120);
     }
     assert.ok(Number(await data("signal-casts")) > castsBeforeShift, "SIGNAL ARC must cast again after SHIFT");
     assert.equal(await data("signal-last-cast-phase"), phaseAfter, "post-SHIFT ARC cast must use rewritten phase authority");
