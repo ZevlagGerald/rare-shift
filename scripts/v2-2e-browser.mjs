@@ -185,8 +185,14 @@ function qualify(width) {
         && list(await data("signal-last-chain-ids")).length >= 1;
       if (integrated) break;
 
-      await canvas.press(route[routeIndex++ % route.length], { delay: 220 });
-      await page.waitForTimeout(360);
+      // Keep the exact four-direction route and SHIFT schedule, but do not leave
+      // the bot stationary for most of the full-build observation. The prior
+      // 220ms move / 360ms idle cadence repeatedly died at low natural HP before
+      // the unchanged coexistence assertions could be observed. This harness-only
+      // duty-cycle repair changes no gameplay state, damage, HP, XP, spawns, ranks,
+      // or evidence requirements.
+      await canvas.press(route[routeIndex++ % route.length], { delay: 420 });
+      await page.waitForTimeout(120);
       cycles += 1;
       if (cycles % 4 === 0 && !bool(await data("draft-open"))) {
         await shift(canvas, width);
