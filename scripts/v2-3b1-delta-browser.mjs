@@ -54,6 +54,7 @@ function qualify(width) {
     assert.equal(await data("delta-cooldown-ms"), "860");
     assert.equal(await data("delta-world-scale"), "8");
 
+    let acquiredOrbit = false;
     let acquiredSignal = false;
     let acquiredEcho = false;
     let provedRank4Echo = false;
@@ -96,12 +97,12 @@ function qualify(width) {
           if (hp <= 55 && ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
           else desired = ids.find(id => id !== "DELTA_RANK") ?? "";
           assert.ok(desired, `Rank-IV echo proof requires a legal non-DELTA bridge choice: ${ids.join(",")}`);
-        } else if (rank === 1 && ids.includes("DELTA_RANK")) desired = "DELTA_RANK";
-        else if (hp <= 55 && ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
-        // The legacy live V2-2 draft fills Level 3/4 with acquisition cards, so
-        // FIELD REPAIR cannot appear there. When critical, take ORBIT before the
-        // forced ECHO/SIGNAL acquisitions; its locked role is close defense.
-        else if (hp <= 55 && ids.includes("ORBIT_NODES")) desired = "ORBIT_NODES";
+        } else if (hp <= 55 && ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
+        // Qualify DELTA ranks after the already-proven survival onboarding.
+        // ORBIT -> ECHO -> SIGNAL is the inherited safe 4/4 route; the rank
+        // tranche must not require DELTA II at Level 2 or tune combat around
+        // an intentionally fragile build order.
+        else if (!acquiredOrbit && ids.includes("ORBIT_NODES")) desired = "ORBIT_NODES";
         else if (!acquiredEcho && ids.includes("ECHO_MINE")) desired = "ECHO_MINE";
         else if (!acquiredSignal && ids.includes("SIGNAL_ARC")) desired = "SIGNAL_ARC";
         else if (ids.includes("DELTA_RANK")) desired = "DELTA_RANK";
@@ -120,6 +121,7 @@ function qualify(width) {
             `immediate reopened draft must be exactly L${expectedDraftLevel}`);
         }
 
+        if (desired === "ORBIT_NODES") acquiredOrbit = true;
         if (desired === "SIGNAL_ARC") acquiredSignal = true;
         if (desired === "ECHO_MINE") acquiredEcho = true;
 
@@ -127,7 +129,10 @@ function qualify(width) {
         if (desired === "DELTA_RANK") {
           assert.equal(afterRank, beforeRank + 1);
           if (afterRank === 2) {
-            assert.equal(level, 2, "DELTA II must be earned from the Level-2 draft");
+            assert.equal(acquiredOrbit, true, "DELTA II proof begins after ORBIT onboarding");
+            assert.equal(acquiredEcho, true, "DELTA II proof begins after ECHO onboarding");
+            assert.equal(acquiredSignal, true, "DELTA II proof begins after SIGNAL onboarding");
+            assert.equal(await data("weapon-slots-used"), "4");
             assert.equal(await data("delta-damage"), "12");
             assert.equal(await data("delta-cooldown-ms"), "720");
             assert.equal(await data("delta-world-scale"), "8");
@@ -176,9 +181,10 @@ function qualify(width) {
     assert.equal(provedRank4Echo, true, "Rank IV echo must be proven before Rank V");
     assert.equal(await data("delta-rank"), "5");
     assert.equal(await data("delta-damage"), "14");
+    assert.equal(acquiredOrbit, true, "natural qualification must include ORBIT close defense");
     assert.equal(acquiredSignal, true, "natural qualification must include SIGNAL wave clear");
     assert.equal(acquiredEcho, true, "natural qualification must include ECHO route control");
-    assert.ok(expectedDraftLevel >= 8, "draft sequence must prove Level 2 through Level 7 without skipping");
+    assert.ok(expectedDraftLevel >= 9, "draft sequence must prove Level 2 through Level 8 without skipping");
 
     const staggerBefore = Number(await data("delta-staggers"));
     const staggerDeadline = Date.now() + 32_000;
