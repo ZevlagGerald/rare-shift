@@ -1,0 +1,52 @@
+name: RARE SHIFT V2-3B2 VECTOR Core Qualification
+
+on:
+  push:
+    branches:
+      - feature/v2-3b2-vector-ranks-clean
+    paths:
+      - ".github/workflows/v2-3b2-vector-core-qualification.yml"
+      - "games/rare-shift/src/vector-core.ts"
+      - "games/rare-shift/src/phase-combat-core.ts"
+      - "games/rare-shift/tests/v2-3b2-vector-ranks.test.ts"
+      - "package.json"
+      - "tsconfig.core.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify-core:
+    name: V2-3B2 deterministic VECTOR contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install TypeScript only
+        run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
+
+      - name: Inherited deterministic core
+        run: npm run test:core
+
+      - name: Inherited V2 combat contracts
+        run: npm run test:v2-combat
+
+      - name: V2-3A progression contracts
+        run: npm run test:v2-3a
+
+      - name: V2-3B1 DELTA contracts
+        run: npm run test:v2-3b1-delta
+
+      - name: V2-3B2 VECTOR Rank II-V contracts
+        run: npm run test:v2-3b2-vector
+
+      - name: Core TypeScript qualification
+        run: npm run typecheck:core
