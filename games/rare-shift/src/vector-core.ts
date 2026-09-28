@@ -162,8 +162,8 @@ export function planVectorLineHits(
   originY: number,
   primary: VectorTargetCandidate,
   maxHits: 2 | 3,
-  range = VECTOR_RANK_I.range,
-  corridorRadius = VECTOR_LINE_CORRIDOR_RADIUS,
+  range: number = VECTOR_RANK_I.range,
+  corridorRadius: number = VECTOR_LINE_CORRIDOR_RADIUS,
 ): readonly VectorLineHit[] {
   if (!isVectorTargetLegal(primary, phase, originX, originY, range)) return Object.freeze([]);
   const vx = primary.x - originX;
