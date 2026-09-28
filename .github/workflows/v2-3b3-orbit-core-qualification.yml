@@ -1,0 +1,70 @@
+name: RARE SHIFT V2-3B3 ORBIT Core Qualification
+
+on:
+  push:
+    branches:
+      - feature/v2-3b3-orbit-ranks-clean
+    paths:
+      - ".github/workflows/v2-3b3-orbit-core-qualification.yml"
+      - "games/rare-shift/src/orbit-core.ts"
+      - "games/rare-shift/src/draft-core.ts"
+      - "games/rare-shift/tests/v2-3b3-orbit-ranks.test.ts"
+      - "package.json"
+      - "tsconfig.core.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify-core:
+    name: V2-3B3 deterministic ORBIT contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FRIENDSDK_ARCHIVE: vendor/rarefriends-friendsdk-0.1.2.tgz
+      FRIENDSDK_SHA256: a6352e187916089b6829c5387fe87f386c5774004f181990e4e3c8ae641cfe83
+      FRIENDSDK_URL: https://github.com/spokesz/friendsdk/releases/download/v0.1.2/rarefriends-friendsdk-0.1.2.tgz
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Fetch and verify FriendSDK v0.1.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p vendor
+          curl --fail --location --retry 5 --retry-all-errors --connect-timeout 20 --max-time 180 --output "$FRIENDSDK_ARCHIVE" "$FRIENDSDK_URL"
+          printf '%s  %s\n' "$FRIENDSDK_SHA256" "$FRIENDSDK_ARCHIVE" | sha256sum --check --strict
+
+      - name: Install project dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Inherited deterministic core
+        run: npm run test:core
+
+      - name: Inherited V2 combat contracts
+        run: npm run test:v2-combat
+
+      - name: V2-3A progression contracts
+        run: npm run test:v2-3a
+
+      - name: V2-3B1 DELTA contracts
+        run: npm run test:v2-3b1-delta
+
+      - name: V2-3B2 VECTOR contracts
+        run: npm run test:v2-3b2-vector
+
+      - name: V2-3B3 ORBIT Rank II-V contracts
+        run: npm run test:v2-3b3-orbit
+
+      - name: TypeScript qualification
+        shell: bash
+        run: |
+          npm run typecheck:core
+          npm run typecheck

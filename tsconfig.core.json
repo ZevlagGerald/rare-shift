@@ -13,6 +13,7 @@
     "games/rare-shift/src/phase-core.ts",
     "games/rare-shift/src/phase-combat-core.ts",
     "games/rare-shift/src/vector-core.ts",
+    "games/rare-shift/src/orbit-core.ts",
     "games/rare-shift/src/solver.ts",
     "games/rare-shift/src/timing-core.ts",
     "games/rare-shift/src/timing-solver.ts",

@@ -1,6 +1,6 @@
 import { deterministicUnit } from "./survival-core.ts";
 
-export type V21DraftId = "DELTA_RANK" | "VECTOR_NEEDLE" | "VECTOR_RANK" | "ORBIT_NODES" | "ECHO_MINE" | "SIGNAL_ARC" | "FIELD_REPAIR" | "SIGNAL_MAGNET";
+export type V21DraftId = "DELTA_RANK" | "VECTOR_NEEDLE" | "VECTOR_RANK" | "ORBIT_NODES" | "ORBIT_RANK" | "ECHO_MINE" | "SIGNAL_ARC" | "FIELD_REPAIR" | "SIGNAL_MAGNET";
 
 export interface V21DraftChoice {
   readonly id: V21DraftId;
@@ -21,6 +21,8 @@ export interface V21BuildState {
   readonly vectorRank?: number;
   readonly orbitEnabled?: boolean;
   readonly orbitOwned?: boolean;
+  readonly orbitRankEnabled?: boolean;
+  readonly orbitRank?: number;
   readonly echoEnabled?: boolean;
   readonly echoOwned?: boolean;
   readonly signalEnabled?: boolean;
@@ -31,6 +33,7 @@ export interface V21BuildState {
 
 export const V21_DELTA_MAX_RANK = 5;
 export const V21_VECTOR_MAX_RANK = 5;
+export const V21_ORBIT_MAX_RANK = 5;
 export const V21_SIGNAL_MAGNET_MAX_RADIUS = 220;
 export const V22_ACTIVE_WEAPON_SLOT_CAP = 4;
 export const V22C_ECHO_DISCOVERY_LEVEL = 3;
@@ -41,6 +44,7 @@ const DEFINITIONS: Readonly<Record<V21DraftId, Omit<V21DraftChoice, "disabled">>
   VECTOR_NEEDLE: Object.freeze({ id: "VECTOR_NEEDLE", name: "VECTOR NEEDLE", category: "WEAPON", description: "Acquire Rank I precision auto-fire. SHIFT rewrites which corporeal threat it can target." }),
   VECTOR_RANK: Object.freeze({ id: "VECTOR_RANK", name: "VECTOR NEEDLE", category: "WEAPON", description: "Advance VECTOR NEEDLE to its next deterministic phase-aware behavior rank." }),
   ORBIT_NODES: Object.freeze({ id: "ORBIT_NODES", name: "ORBIT NODES", category: "WEAPON", description: "Acquire one close-defense node. SHIFT reverses its phase-driven sweep without resetting position." }),
+  ORBIT_RANK: Object.freeze({ id: "ORBIT_RANK", name: "ORBIT NODES", category: "WEAPON", description: "Advance ORBIT NODES to its next deterministic phase-aware behavior rank." }),
   ECHO_MINE: Object.freeze({ id: "ECHO_MINE", name: "ECHO MINE", category: "WEAPON", description: "Leave phase-memory mines on your path. Leave their reality, then return to make them live." }),
   SIGNAL_ARC: Object.freeze({ id: "SIGNAL_ARC", name: "SIGNAL ARC", category: "WEAPON", description: "Chain through the current corporeal graph. SHIFT rewrites which clusters and COMMON relays are legal." }),
   FIELD_REPAIR: Object.freeze({ id: "FIELD_REPAIR", name: "FIELD REPAIR", category: "UTILITY", description: "Restore 25 HP immediately. Does not increase maximum HP." }),
@@ -58,11 +62,17 @@ function vectorRank(state: V21BuildState): number {
   return state.vectorRank ?? 1;
 }
 
+function orbitRank(state: V21BuildState): number {
+  if (state.orbitOwned !== true) return 0;
+  return state.orbitRank ?? 1;
+}
+
 export function isV21DraftChoiceValid(state: V21BuildState, id: V21DraftId): boolean {
   if (id === "DELTA_RANK") return state.deltaRank < V21_DELTA_MAX_RANK;
   if (id === "VECTOR_NEEDLE") return state.vectorEnabled === true && state.vectorOwned !== true && weaponSlotAvailable(state);
   if (id === "VECTOR_RANK") return state.vectorRankEnabled === true && state.vectorOwned === true && vectorRank(state) < V21_VECTOR_MAX_RANK;
   if (id === "ORBIT_NODES") return state.orbitEnabled === true && state.orbitOwned !== true && weaponSlotAvailable(state);
+  if (id === "ORBIT_RANK") return state.orbitRankEnabled === true && state.orbitOwned === true && orbitRank(state) < V21_ORBIT_MAX_RANK;
   if (id === "ECHO_MINE") return state.echoEnabled === true && state.echoOwned !== true && weaponSlotAvailable(state);
   if (id === "SIGNAL_ARC") return state.signalEnabled === true && state.signalOwned !== true && weaponSlotAvailable(state);
   if (id === "FIELD_REPAIR") return state.hp < state.maxHp;
@@ -80,14 +90,15 @@ export function buildV21Draft(seed: number, level: number, state: V21BuildState)
 
   const baseIds: V21DraftId[] = ["DELTA_RANK"];
   if (state.vectorRankEnabled === true) baseIds.push("VECTOR_RANK");
+  if (state.orbitRankEnabled === true) baseIds.push("ORBIT_RANK");
   baseIds.push("FIELD_REPAIR", "SIGNAL_MAGNET");
   const validBase = rotateDeterministically(seed, level, baseIds).filter(id => isV21DraftChoiceValid(state, id));
   const acquisitions: V21DraftId[] = [];
 
   // V2-2D bounded onboarding/discovery order. SIGNAL ARC begins at level 4,
   // preserving the already-qualified level-2 ORBIT/VECTOR/DELTA surface and
-  // the level-3 ECHO introduction. VECTOR_RANK is a separately gated V2-3B2
-  // bridge and never changes legacy behavior unless vectorRankEnabled=true.
+  // the level-3 ECHO introduction. Rank bridges are separately gated V2-3B
+  // adapters and never change legacy behavior unless their *RankEnabled flag is true.
   if (level >= V22D_SIGNAL_DISCOVERY_LEVEL && isV21DraftChoiceValid(state, "SIGNAL_ARC")) acquisitions.push("SIGNAL_ARC");
   if (level >= V22C_ECHO_DISCOVERY_LEVEL && isV21DraftChoiceValid(state, "ECHO_MINE")) acquisitions.push("ECHO_MINE");
   if (isV21DraftChoiceValid(state, "ORBIT_NODES")) acquisitions.push("ORBIT_NODES");
@@ -127,6 +138,11 @@ export function applyV21Draft(state: V21BuildState, id: V21DraftId): V21BuildSta
       if (state.orbitOwned === true) throw new Error("ORBIT NODES is already owned.");
       throw new Error("No active weapon slot is available for ORBIT NODES.");
     }
+    if (id === "ORBIT_RANK") {
+      if (state.orbitRankEnabled !== true) throw new Error("ORBIT rank progression is not enabled in this tranche.");
+      if (state.orbitOwned !== true) throw new Error("Cannot rank ORBIT NODES before acquisition.");
+      throw new Error("ORBIT NODES is already rank V.");
+    }
     if (id === "ECHO_MINE") {
       if (state.echoEnabled !== true) throw new Error("ECHO MINE is not enabled in this progression step.");
       if (state.echoOwned === true) throw new Error("ECHO MINE is already owned.");
@@ -149,7 +165,10 @@ export function applyV21Draft(state: V21BuildState, id: V21DraftId): V21BuildSta
     return Object.freeze({ ...state, vectorRank: vectorRank(state) + 1 });
   }
   if (id === "ORBIT_NODES") {
-    return Object.freeze({ ...state, orbitOwned: true, weaponSlotsUsed: (state.weaponSlotsUsed ?? 1) + 1 });
+    return Object.freeze({ ...state, orbitOwned: true, orbitRank: 1, weaponSlotsUsed: (state.weaponSlotsUsed ?? 1) + 1 });
+  }
+  if (id === "ORBIT_RANK") {
+    return Object.freeze({ ...state, orbitRank: orbitRank(state) + 1 });
   }
   if (id === "ECHO_MINE") {
     return Object.freeze({ ...state, echoOwned: true, weaponSlotsUsed: (state.weaponSlotsUsed ?? 1) + 1 });
