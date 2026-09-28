@@ -100,12 +100,13 @@ function qualify(width) {
     console.log(`RARE_SHIFT_V2_3B2_PRIORITY_TRACE_${width}=PASS`);
 
     await applyFixture(canvas, 4, "expiry");
-    const expiryShots = Number(await data("vector-shots"));
+    const expiryTransferShots = Number(await data("vector-transfer-shots"));
     await shift(canvas, width);
     assert.equal(await data("vector-transfer-armed"), "true");
     await page.waitForTimeout(1300);
     assert.equal(await data("vector-transfer-armed"), "false");
-    assert.equal(Number(await data("vector-shots")), expiryShots, "expired no-target transfer must create no projectile/backlog");
+    assert.equal(Number(await data("vector-transfer-shots")), expiryTransferShots, "expired no-target transfer must create no transfer projectile/backlog");
+    assert.equal(await data("vector-last-shot-transfer"), "false", "any later ordinary shot must remain ordinary after transfer expiry");
     console.log(`RARE_SHIFT_V2_3B2_TRANSFER_EXPIRY_${width}=PASS`);
 
     await applyFixture(canvas, 4, "transfer");
