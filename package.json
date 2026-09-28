@@ -32,7 +32,9 @@
     "test:browser": "node scripts/browser-check.mjs",
     "corpus:t0-5": "node --experimental-strip-types scripts/t0-5-corpus.mjs",
     "corpus:t2": "node --experimental-strip-types scripts/t2-corpus.mjs",
-    "corpus:t3": "node --experimental-strip-types scripts/t3-corpus.mjs"
+    "corpus:t3": "node --experimental-strip-types scripts/t3-corpus.mjs",
+    "test:v2-3b2-vector": "node --experimental-strip-types --test games/rare-shift/tests/v2-3b2-vector-ranks.test.ts",
+    "test:v2-3b2-vector-browser": "node --experimental-strip-types scripts/v2-3b2-vector-browser.mjs"
   },
   "dependencies": {
     "@rarefriends/friendsdk": "file:vendor/rarefriends-friendsdk-0.1.2.tgz",
