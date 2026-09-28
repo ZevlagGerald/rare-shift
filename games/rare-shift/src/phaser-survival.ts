@@ -49,7 +49,24 @@ import {
 import type { FrameRows, Phase, SelectedFramePair } from "./types.ts";
 import { buildFractureGrid, V2_ART_SPRITES, V2_PALETTE } from "./v2-art-core.ts";
 import { effectDuration } from "./v2-fx-core.ts";
-import { acquireVectorTarget, VECTOR_RANK_I } from "./vector-core.ts";
+import {
+  acquirePriorityVectorTarget,
+  acquireVectorTarget,
+  armVectorTransfer,
+  buildVectorProfile,
+  consumeVectorTransfer,
+  initialVectorLockState,
+  isVectorTransferArmed,
+  planVectorLineHits,
+  recordVectorPrimaryHit,
+  resetVectorLock,
+  vectorPrimaryDamageForStacks,
+  vectorPriorityTier,
+  VECTOR_RANK_I,
+  type VectorLockState,
+  type VectorRankProfile,
+  type VectorTransferState,
+} from "./vector-core.ts";
 import { advanceSignalArcCooldown, planSignalArc, SIGNAL_ARC_RANK_I, type SignalArcHop } from "./signal-arc-core.ts";
 
 export interface PhaserSurvivalController {
@@ -89,6 +106,18 @@ interface VectorProjectileRuntime {
   targetId: number;
   x: number;
   y: number;
+  originX: number;
+  originY: number;
+  directionX: number;
+  directionY: number;
+  traveled: number;
+  launchPhase: Phase;
+  profile: VectorRankProfile | null;
+  transferShot: boolean;
+  hitIds: number[];
+  hitDistances: number[];
+  hitDamages: number[];
+  nextHitIndex: number;
   view: Phaser.GameObjects.Rectangle;
 }
 
@@ -104,6 +133,8 @@ interface PendingDeltaEchoRuntime {
   readonly profile: DeltaEchoProfile;
 }
 
+type VectorQualificationWindow = Window & { __RARE_SHIFT_V23B2_VECTOR_RANK__?: unknown };
+
 const VIEW_W = 960;
 const VIEW_H = 640;
 const PLAYER_SPEED = 220;
@@ -116,6 +147,7 @@ function draftCardXs(count: number): readonly number[] {
   if (count === 2) return [350, 610];
   return [220, 480, 740];
 }
+function emptyVectorTransfer(): VectorTransferState { return Object.freeze({ armed: false, expiresAtMs: null, phase: null }); }
 
 class SurvivalScene extends Phaser.Scene {
   private readonly pair: SelectedFramePair;
@@ -152,6 +184,7 @@ class SurvivalScene extends Phaser.Scene {
   private pickupRadius = 76;
 
   private vectorOwned = false;
+  private vectorRank = 1;
   private vectorAccumulator = 0;
   private vectorTargetId: number | null = null;
   private vectorTargetKind: V2EnemyKind | null = null;
@@ -159,6 +192,14 @@ class SurvivalScene extends Phaser.Scene {
   private vectorHits = 0;
   private vectorAcquisitions = 0;
   private vectorShiftInvalidations = 0;
+  private vectorPenetrationHits = 0;
+  private vectorTransferState: VectorTransferState = emptyVectorTransfer();
+  private vectorTransferShots = 0;
+  private vectorTransferExpiries = 0;
+  private vectorLockState: VectorLockState = initialVectorLockState();
+  private vectorLockPeakStacks = 0;
+  private vectorLockResets = 0;
+  private vectorQualificationFixture = "";
 
   private orbitOwned = false;
   private orbitAngle = 0;
@@ -243,6 +284,7 @@ class SurvivalScene extends Phaser.Scene {
     this.orbitNode = this.add.graphics().setDepth(28).setVisible(false);
     this.signalFx = this.add.graphics().setDepth(29).setVisible(false);
     this.buildPools();
+    this.applyVectorQualificationFixture();
     this.buildHud();
     this.installKeyboard();
     this.installTouch();
@@ -250,6 +292,17 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   setReducedMotion(reduced: boolean): void { this.reduced = reduced; }
+
+  private applyVectorQualificationFixture(): void {
+    const raw = (window as VectorQualificationWindow).__RARE_SHIFT_V23B2_VECTOR_RANK__;
+    if (!Number.isInteger(raw) || (raw as number) < 1 || (raw as number) > 5) return;
+    this.vectorOwned = true;
+    this.vectorRank = raw as number;
+    this.weaponSlotsUsed = 2;
+    this.vectorTransferState = emptyVectorTransfer();
+    this.vectorLockState = initialVectorLockState();
+    this.vectorQualificationFixture = `VECTOR_RANK_${this.vectorRank}`;
+  }
 
   update(_time: number, delta: number): void {
     if (this.dead || this.draftOpen) { this.syncTestState(); return; }
@@ -271,9 +324,14 @@ class SurvivalScene extends Phaser.Scene {
     this.updatePendingDeltaEcho();
 
     if (this.vectorOwned) {
-      this.vectorAccumulator = Math.min(VECTOR_RANK_I.cooldownMs, this.vectorAccumulator + dt);
+      const vectorProfile = buildVectorProfile(this.vectorRank);
+      if (this.vectorTransferState.armed && !isVectorTransferArmed(this.vectorTransferState, this.elapsedActiveMs)) {
+        this.vectorTransferState = emptyVectorTransfer();
+        this.vectorTransferExpiries += 1;
+      }
+      this.vectorAccumulator = Math.min(vectorProfile.cooldownMs, this.vectorAccumulator + dt);
       this.refreshVectorTarget();
-      if (this.vectorAccumulator >= VECTOR_RANK_I.cooldownMs && this.activeVectorProjectileCount() < VECTOR_RANK_I.maxInFlight) {
+      if (this.vectorAccumulator >= vectorProfile.cooldownMs && this.activeVectorProjectileCount() < vectorProfile.maxInFlight) {
         const target = this.currentVectorTarget();
         if (target) {
           this.fireVector(target);
@@ -342,7 +400,25 @@ class SurvivalScene extends Phaser.Scene {
     }
     for (let i = 0; i < VECTOR_RANK_I.maxInFlight; i++) {
       const view = this.add.rectangle(-500, -500, 18, 4, hex(V2_PALETTE.common), 0.95).setDepth(28).setVisible(false);
-      this.vectorProjectiles.push({ active: false, targetId: -1, x: -500, y: -500, view });
+      this.vectorProjectiles.push({
+        active: false,
+        targetId: -1,
+        x: -500,
+        y: -500,
+        originX: -500,
+        originY: -500,
+        directionX: 0,
+        directionY: 0,
+        traveled: 0,
+        launchPhase: "A",
+        profile: null,
+        transferShot: false,
+        hitIds: [],
+        hitDistances: [],
+        hitDamages: [],
+        nextHitIndex: 0,
+        view,
+      });
     }
     for (let i = 0; i < ECHO_RANK_I.maxActive; i++) {
       const view = this.add.graphics().setDepth(23).setVisible(false);
@@ -401,7 +477,7 @@ class SurvivalScene extends Phaser.Scene {
     this.xpBar.clear().fillStyle(0x202832, 1).fillRect(310, 48, 240, 8);
     this.xpBar.fillStyle(0x7ee787, 1).fillRect(310, 48, 240 * this.xp / xpThreshold(this.level), 8);
     this.hudText.setText(`HP ${Math.max(0, this.hp)}/${V21_PLAYER_MAX_HP}   LV ${this.level}   XP ${this.xp}/${xpThreshold(this.level)}`);
-    this.buildText.setText(`K ${this.kills} · Δ ${romanRank(this.deltaRank)} · V ${this.vectorOwned ? "I" : "--"} · O ${this.orbitOwned ? "I" : "--"} · E ${this.echoOwned ? "I" : "--"} · S ${this.signalOwned ? "I" : "--"}`);
+    this.buildText.setText(`K ${this.kills} · Δ ${romanRank(this.deltaRank)} · V ${this.vectorOwned ? romanRank(this.vectorRank) : "--"} · O ${this.orbitOwned ? "I" : "--"} · E ${this.echoOwned ? "I" : "--"} · S ${this.signalOwned ? "I" : "--"}`);
     this.phaseText.setColor(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB).setText(`PHASE ${this.phase}\nFRAME ${this.phase === "A" ? this.pair.a.index : this.pair.b.index}`);
     if (this.shiftButton) this.shiftButton.setStrokeStyle(2, hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB));
   }
@@ -495,9 +571,27 @@ class SurvivalScene extends Phaser.Scene {
     }
   }
 
+  private resetVectorLockState(): void {
+    if (this.vectorLockState.targetId !== null || this.vectorLockState.stacks !== 0) this.vectorLockResets += 1;
+    this.vectorLockState = resetVectorLock();
+  }
+
   private refreshVectorTarget(): void {
-    const result = acquireVectorTarget(this.enemies, this.phase, this.friend.x, this.friend.y);
+    if (this.vectorRank >= 5 && this.vectorLockState.targetId !== null) {
+      const locked = this.enemies.find(enemy => enemy.active && enemy.id === this.vectorLockState.targetId) ?? null;
+      if (!locked || !isEnemyCorporeal(locked.kind, this.phase) || vectorPriorityTier(locked.kind) < 1) {
+        this.resetVectorLockState();
+      } else {
+        const dx = locked.x - this.friend.x, dy = locked.y - this.friend.y;
+        if (dx * dx + dy * dy > VECTOR_RANK_I.range * VECTOR_RANK_I.range) this.resetVectorLockState();
+      }
+    }
+
+    const result = this.vectorRank >= 3
+      ? acquirePriorityVectorTarget(this.enemies, this.phase, this.friend.x, this.friend.y, this.vectorRank >= 5 ? this.vectorLockState.targetId : null)
+      : acquireVectorTarget(this.enemies, this.phase, this.friend.x, this.friend.y);
     const nextId = result?.id ?? null;
+    if (this.vectorRank >= 5 && this.vectorLockState.targetId !== null && nextId !== this.vectorLockState.targetId) this.resetVectorLockState();
     if (nextId !== this.vectorTargetId) {
       if (nextId !== null) this.vectorAcquisitions += 1;
       this.vectorTargetId = nextId;
@@ -507,15 +601,24 @@ class SurvivalScene extends Phaser.Scene {
     const target = this.currentVectorTarget();
     if (!target) { this.vectorReticle.setVisible(false); return; }
     const tone = hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB);
-    this.vectorReticle.setVisible(true).setPosition(target.x, target.y).lineStyle(1, tone, 0.72).strokeRect(-19, -19, 38, 38);
+    const priority = this.vectorRank >= 3 && vectorPriorityTier(target.kind) > 0;
+    this.vectorReticle.setVisible(true).setPosition(target.x, target.y).lineStyle(priority ? 2 : 1, tone, priority ? 0.9 : 0.72).strokeRect(-19, -19, 38, 38);
+    if (this.vectorRank >= 5 && this.vectorLockState.targetId === target.id) {
+      const inset = 23 + this.vectorLockState.stacks * 2;
+      this.vectorReticle.lineStyle(1, hex(V2_PALETTE.common), 0.72).strokeRect(-inset, -inset, inset * 2, inset * 2);
+    }
+    if (this.vectorRank >= 4 && isVectorTransferArmed(this.vectorTransferState, this.elapsedActiveMs)) {
+      this.vectorReticle.lineStyle(1, tone, 0.62).lineBetween(-26, 24, 26, -24);
+    }
   }
 
   private currentVectorTarget(): EnemyRuntime | null {
     if (this.vectorTargetId === null) return null;
     const enemy = this.enemies.find(item => item.active && item.id === this.vectorTargetId) ?? null;
     if (!enemy || !isEnemyCorporeal(enemy.kind, this.phase)) return null;
+    const profile = buildVectorProfile(this.vectorRank);
     const dx = enemy.x - this.friend.x, dy = enemy.y - this.friend.y;
-    return dx * dx + dy * dy <= VECTOR_RANK_I.range * VECTOR_RANK_I.range ? enemy : null;
+    return dx * dx + dy * dy <= profile.range * profile.range ? enemy : null;
   }
 
   private activeVectorProjectileCount(): number { return this.vectorProjectiles.filter(projectile => projectile.active).length; }
@@ -523,45 +626,141 @@ class SurvivalScene extends Phaser.Scene {
   private fireVector(target: EnemyRuntime): void {
     const projectile = this.vectorProjectiles.find(item => !item.active);
     if (!projectile) return;
-    projectile.active = true; projectile.targetId = target.id; projectile.x = this.friend.x; projectile.y = this.friend.y;
-    projectile.view.setPosition(projectile.x, projectile.y).setRotation(Math.atan2(target.y - projectile.y, target.x - projectile.x)).setFillStyle(hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB), 0.95).setVisible(true);
+    const originX = this.friend.x, originY = this.friend.y;
+    const transferReady = this.vectorRank >= 4
+      && this.vectorTransferState.phase === this.phase
+      && isVectorTransferArmed(this.vectorTransferState, this.elapsedActiveMs);
+    const profile = buildVectorProfile(this.vectorRank, transferReady);
+    const dx = target.x - originX, dy = target.y - originY, distance = Math.hypot(dx, dy);
+    if (!(distance > 0)) return;
+
+    let hitIds = [target.id];
+    let hitDistances = [distance];
+    let hitDamages = [profile.damageSequence[0]];
+    if (this.vectorRank >= 2) {
+      const planned = planVectorLineHits(this.enemies, this.phase, originX, originY, target, profile.maxHits as 2 | 3, profile.range, profile.corridorRadius);
+      if (planned.length === 0) return;
+      hitIds = planned.map(hit => hit.id);
+      hitDistances = planned.map(hit => hit.alongRay);
+      hitDamages = planned.map((_, index) => profile.damageSequence[index] ?? profile.damageSequence[profile.damageSequence.length - 1]);
+    }
+    if (this.vectorRank >= 5 && vectorPriorityTier(target.kind) >= 1) hitDamages[0] = vectorPrimaryDamageForStacks(this.vectorLockState.stacks);
+
+    if (transferReady) {
+      this.vectorTransferState = consumeVectorTransfer(this.vectorTransferState, this.elapsedActiveMs);
+      this.vectorTransferShots += 1;
+    }
+
+    projectile.active = true;
+    projectile.targetId = target.id;
+    projectile.x = originX;
+    projectile.y = originY;
+    projectile.originX = originX;
+    projectile.originY = originY;
+    projectile.directionX = dx / distance;
+    projectile.directionY = dy / distance;
+    projectile.traveled = 0;
+    projectile.launchPhase = this.phase;
+    projectile.profile = profile;
+    projectile.transferShot = transferReady;
+    projectile.hitIds = hitIds;
+    projectile.hitDistances = hitDistances;
+    projectile.hitDamages = hitDamages;
+    projectile.nextHitIndex = 0;
+    const tone = hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB);
+    const width = transferReady ? 28 : this.vectorRank >= 2 ? 22 : 18;
+    const height = transferReady ? 6 : 4;
+    projectile.view.setPosition(originX, originY).setRotation(Math.atan2(dy, dx)).setDisplaySize(width, height).setFillStyle(tone, transferReady ? 1 : 0.95).setStrokeStyle(transferReady ? 1 : 0, hex(V2_PALETTE.common), 0.9).setVisible(true);
     this.vectorShots += 1;
+  }
+
+  private applyVectorProjectileHit(projectile: VectorProjectileRuntime, hitIndex: number): void {
+    const profile = projectile.profile;
+    if (!profile) return;
+    const id = projectile.hitIds[hitIndex];
+    const enemy = this.enemies.find(item => item.active && item.id === id) ?? null;
+    if (!enemy || !isEnemyCorporeal(enemy.kind, projectile.launchPhase)) return;
+    const damage = projectile.hitDamages[hitIndex] ?? profile.damageSequence[Math.min(hitIndex, profile.damageSequence.length - 1)];
+    enemy.hp -= damage;
+    this.vectorHits += 1;
+    if (hitIndex > 0) this.vectorPenetrationHits += 1;
+    this.emitVectorHitFx(enemy.x, enemy.y, projectile.transferShot, hitIndex > 0);
+    if (profile.rank >= 5 && hitIndex === 0) {
+      if (vectorPriorityTier(enemy.kind) >= 1) {
+        this.vectorLockState = recordVectorPrimaryHit(this.vectorLockState, enemy.id);
+        this.vectorLockPeakStacks = Math.max(this.vectorLockPeakStacks, this.vectorLockState.stacks);
+      } else {
+        this.resetVectorLockState();
+      }
+    }
+    if (enemy.hp <= 0) this.killEnemy(enemy);
   }
 
   private updateVectorProjectiles(dt: number): void {
     for (const projectile of this.vectorProjectiles) {
-      if (!projectile.active) continue;
-      const target = this.enemies.find(enemy => enemy.active && enemy.id === projectile.targetId);
-      if (!target || !isEnemyCorporeal(target.kind, this.phase)) { this.deactivateVectorProjectile(projectile); continue; }
-      const dx = target.x - projectile.x, dy = target.y - projectile.y, distance = Math.max(0.001, Math.hypot(dx, dy));
-      const step = VECTOR_RANK_I.speed * dt;
-      if (distance <= VECTOR_RANK_I.hitRadius + step) {
-        target.hp -= VECTOR_RANK_I.damage; this.vectorHits += 1; this.emitVectorHitFx(target.x, target.y);
-        this.deactivateVectorProjectile(projectile);
-        if (target.hp <= 0) this.killEnemy(target);
+      if (!projectile.active || !projectile.profile) continue;
+      const profile = projectile.profile;
+      if (profile.rank === 1) {
+        const target = this.enemies.find(enemy => enemy.active && enemy.id === projectile.targetId);
+        if (!target || !isEnemyCorporeal(target.kind, this.phase)) { this.deactivateVectorProjectile(projectile); continue; }
+        const dx = target.x - projectile.x, dy = target.y - projectile.y, distance = Math.max(0.001, Math.hypot(dx, dy));
+        const step = profile.speed * dt;
+        if (distance <= profile.hitRadius + step) {
+          this.applyVectorProjectileHit(projectile, 0);
+          this.deactivateVectorProjectile(projectile);
+          continue;
+        }
+        projectile.x += dx / distance * step; projectile.y += dy / distance * step;
+        projectile.view.setPosition(projectile.x, projectile.y).setRotation(Math.atan2(dy, dx));
         continue;
       }
-      projectile.x += dx / distance * step; projectile.y += dy / distance * step;
-      projectile.view.setPosition(projectile.x, projectile.y).setRotation(Math.atan2(dy, dx));
+
+      if (projectile.launchPhase !== this.phase) { this.deactivateVectorProjectile(projectile); continue; }
+      const nextTravel = Math.min(profile.range, projectile.traveled + profile.speed * dt);
+      while (projectile.nextHitIndex < projectile.hitIds.length && projectile.hitDistances[projectile.nextHitIndex] <= nextTravel) {
+        this.applyVectorProjectileHit(projectile, projectile.nextHitIndex);
+        projectile.nextHitIndex += 1;
+      }
+      projectile.traveled = nextTravel;
+      projectile.x = projectile.originX + projectile.directionX * nextTravel;
+      projectile.y = projectile.originY + projectile.directionY * nextTravel;
+      projectile.view.setPosition(projectile.x, projectile.y).setRotation(Math.atan2(projectile.directionY, projectile.directionX));
+      const finalHitDistance = projectile.hitDistances[projectile.hitDistances.length - 1] ?? profile.range;
+      if ((projectile.nextHitIndex >= projectile.hitIds.length && nextTravel >= finalHitDistance + profile.hitRadius) || nextTravel >= profile.range) {
+        this.deactivateVectorProjectile(projectile);
+      }
     }
   }
 
   private deactivateVectorProjectile(projectile: VectorProjectileRuntime): void {
-    projectile.active = false; projectile.targetId = -1; projectile.view.setVisible(false).setPosition(-500, -500);
+    projectile.active = false;
+    projectile.targetId = -1;
+    projectile.profile = null;
+    projectile.transferShot = false;
+    projectile.hitIds = [];
+    projectile.hitDistances = [];
+    projectile.hitDamages = [];
+    projectile.nextHitIndex = 0;
+    projectile.traveled = 0;
+    projectile.view.setVisible(false).setPosition(-500, -500).setDisplaySize(18, 4).setStrokeStyle(0, 0, 0);
   }
 
-  private invalidateVectorForShift(): void {
+  private invalidateVectorForShift(nextPhase: Phase): void {
     if (!this.vectorOwned) return;
     this.vectorTargetId = null; this.vectorTargetKind = null; this.vectorReticle.clear().setVisible(false);
     for (const projectile of this.vectorProjectiles) if (projectile.active) this.deactivateVectorProjectile(projectile);
+    if (this.vectorRank >= 5) this.resetVectorLockState();
+    this.vectorTransferState = this.vectorRank >= 4 ? armVectorTransfer(this.elapsedActiveMs, nextPhase) : emptyVectorTransfer();
     this.vectorShiftInvalidations += 1;
   }
 
-  private emitVectorHitFx(x: number, y: number): void {
+  private emitVectorHitFx(x: number, y: number, transferShot = false, secondary = false): void {
     const tone = hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB);
-    const fx = this.add.graphics().setPosition(x, y).setDepth(29).lineStyle(2, tone, 0.85);
+    const fx = this.add.graphics().setPosition(x, y).setDepth(29).lineStyle(transferShot ? 3 : 2, tone, transferShot ? 0.98 : 0.85);
     fx.lineBetween(-8, 0, 8, 0); fx.lineBetween(0, -8, 0, 8);
-    this.time.delayedCall(this.reduced ? 45 : 90, () => fx.destroy());
+    if (secondary) fx.lineBetween(-11, 4, 11, 4);
+    if (transferShot) fx.strokeCircle(0, 0, 11);
+    this.time.delayedCall(this.reduced ? 45 : transferShot ? 120 : 90, () => fx.destroy());
   }
 
   private updateOrbit(dtMs: number): void {
@@ -751,6 +950,7 @@ class SurvivalScene extends Phaser.Scene {
     this.orbitLastHitAt.delete(enemy.id);
     enemy.active = false; enemy.view.setVisible(false); this.kills += 1; this.emitDeathFx(deathX, deathY, deathTone);
     if (this.vectorTargetId === enemy.id) { this.vectorTargetId = null; this.vectorTargetKind = null; this.vectorReticle.setVisible(false); }
+    if (this.vectorRank >= 5 && this.vectorLockState.targetId === enemy.id) this.resetVectorLockState();
     const pickup = this.pickups.find(item => !item.active);
     if (pickup) { pickup.active = true; pickup.x = deathX; pickup.y = deathY; pickup.view.setPosition(pickup.x, pickup.y).setVisible(true).setAlpha(1); }
   }
@@ -791,6 +991,8 @@ class SurvivalScene extends Phaser.Scene {
       pickupRadius: this.pickupRadius,
       vectorEnabled: true,
       vectorOwned: this.vectorOwned,
+      vectorRankEnabled: true,
+      vectorRank: this.vectorRank,
       orbitEnabled: true,
       orbitOwned: this.orbitOwned,
       echoEnabled: this.level >= 3,
@@ -819,26 +1021,38 @@ class SurvivalScene extends Phaser.Scene {
 
   private makeDraftCard(x: number, choice: V21DraftChoice, index: number): Phaser.GameObjects.Container {
     const container = this.add.container(x, 320).setScrollFactor(0).setDepth(200);
-    const isDelta = choice.id === "DELTA_RANK", isVector = choice.id === "VECTOR_NEEDLE", isOrbit = choice.id === "ORBIT_NODES", isEcho = choice.id === "ECHO_MINE", isSignal = choice.id === "SIGNAL_ARC";
+    const isDelta = choice.id === "DELTA_RANK";
+    const isVectorAcquire = choice.id === "VECTOR_NEEDLE";
+    const isVectorRank = choice.id === "VECTOR_RANK";
+    const isVector = isVectorAcquire || isVectorRank;
+    const isOrbit = choice.id === "ORBIT_NODES", isEcho = choice.id === "ECHO_MINE", isSignal = choice.id === "SIGNAL_ARC";
     const isPhaseWeapon = isDelta || isVector || isOrbit || isEcho || isSignal;
     const border = isPhaseWeapon ? hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB) : 0x657383;
     const bg = this.add.rectangle(0, 0, 220, 230, 0x11151b, 0.99).setStrokeStyle(isPhaseWeapon ? 3 : 2, border).setInteractive({ useHandCursor: true });
     const tag = this.add.text(0, -91, `${index + 1} // ${choice.category}`, { fontFamily: "monospace", fontSize: "11px", color: "#8b98a7" }).setOrigin(0.5);
-    const nextRank = Math.min(5, this.deltaRank + 1);
-    const titleText = isDelta ? `${choice.name} ${romanRank(nextRank)}` : choice.name;
+    const nextDeltaRank = Math.min(5, this.deltaRank + 1);
+    const nextVectorRank = Math.min(5, this.vectorRank + 1);
+    const titleText = isDelta ? `${choice.name} ${romanRank(nextDeltaRank)}` : isVectorRank ? `${choice.name} ${romanRank(nextVectorRank)}` : choice.name;
     const title = this.add.text(0, -54, titleText, { fontFamily: "monospace", fontSize: "17px", color: V2_PALETTE.common, fontStyle: "bold", align: "center", wordWrap: { width: 190 } }).setOrigin(0.5);
-    const detailText = isDelta ? `RANK ${romanRank(this.deltaRank)} → ${romanRank(nextRank)}` : (isVector || isOrbit || isEcho || isSignal) ? "ACQUIRE · RANK I" : "RUN UTILITY";
+    const detailText = isDelta
+      ? `RANK ${romanRank(this.deltaRank)} → ${romanRank(nextDeltaRank)}`
+      : isVectorRank
+        ? `RANK ${romanRank(this.vectorRank)} → ${romanRank(nextVectorRank)}`
+        : (isVectorAcquire || isOrbit || isEcho || isSignal) ? "ACQUIRE · RANK I" : "RUN UTILITY";
     const detail = this.add.text(0, -27, detailText, { fontFamily: "monospace", fontSize: "9px", color: isPhaseWeapon ? (this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB) : "#748392", letterSpacing: 1 }).setOrigin(0.5);
-    const deltaDescription = nextRank === 2 ? "DENSE SAMPLE · cadence tightens to 720ms." : nextRank === 3 ? "FIELD SCALE · canonical mask expands in world-space." : nextRank === 4 ? "PHASE ECHO · SHIFT leaves one bounded previous-phase echo." : "LOCKED IDENTITY · matching-phase pulse gains bounded stagger.";
-    const desc = this.add.text(0, 61, isDelta ? deltaDescription : choice.description, { fontFamily: "monospace", fontSize: "11px", color: "#bac5d0", align: "center", wordWrap: { width: 178 } }).setOrigin(0.5);
+    const deltaDescription = nextDeltaRank === 2 ? "DENSE SAMPLE · cadence tightens to 720ms." : nextDeltaRank === 3 ? "FIELD SCALE · canonical mask expands in world-space." : nextDeltaRank === 4 ? "PHASE ECHO · SHIFT leaves one bounded previous-phase echo." : "LOCKED IDENTITY · matching-phase pulse gains bounded stagger.";
+    const vectorDescription = nextVectorRank === 2 ? "CLEAN LINE · fixed ray penetrates one aligned target." : nextVectorRank === 3 ? "PRIORITY TRACE · focus high-value corporeal threats in-band." : nextVectorRank === 4 ? "PHASE TRANSFER · first valid post-SHIFT launch gains a third line hit." : "VECTOR LOCK · repeated priority hits build bounded primary damage.";
+    const desc = this.add.text(0, 61, isDelta ? deltaDescription : isVectorRank ? vectorDescription : choice.description, { fontFamily: "monospace", fontSize: "11px", color: "#bac5d0", align: "center", wordWrap: { width: 178 } }).setOrigin(0.5);
     container.add([bg, tag, title, detail]);
     if (isDelta) {
-      const preview = this.add.graphics(), profile = buildDeltaProfile(this.pair.a.rows, this.pair.b.rows, this.phase, nextRank);
-      const previewScale = 1.35 * profile.worldScale / 8;
-      preview.fillStyle(border, 0.82); for (const point of profile.points) preview.fillRect(point.x * previewScale - 1.5, point.y * previewScale - 1.5, 3, 3);
+      const preview = this.add.graphics(), previewProfile = buildDeltaProfile(this.pair.a.rows, this.pair.b.rows, this.phase, nextDeltaRank);
+      const previewScale = 1.35 * previewProfile.worldScale / 8;
+      preview.fillStyle(border, 0.82); for (const point of previewProfile.points) preview.fillRect(point.x * previewScale - 1.5, point.y * previewScale - 1.5, 3, 3);
       preview.setPosition(0, 9); container.add(preview);
     } else if (isVector) {
-      const glyph = this.add.graphics().lineStyle(3, border, 0.82); glyph.lineBetween(-28, 8, 28, -8); glyph.strokeCircle(25, -7, 5); glyph.setPosition(0, 2); container.add(glyph);
+      const glyph = this.add.graphics().lineStyle(isVectorRank ? 4 : 3, border, 0.82); glyph.lineBetween(-28, 8, 28, -8); glyph.strokeCircle(25, -7, 5);
+      if (isVectorRank && nextVectorRank >= 2) glyph.lineStyle(1, hex(V2_PALETTE.common), 0.7).lineBetween(-24, 13, 29, -2);
+      glyph.setPosition(0, 2); container.add(glyph);
     } else if (isOrbit) {
       const glyph = this.add.graphics().lineStyle(2, border, 0.78);
       glyph.strokeCircle(0, 2, 27); glyph.fillStyle(border, 0.95).fillRect(22, -3, 10, 10); glyph.fillStyle(hex(V2_PALETTE.common), 0.65).fillRect(12, 1, 9, 3);
@@ -864,11 +1078,17 @@ class SurvivalScene extends Phaser.Scene {
     const choice = this.draftChoices[index]; if (!choice || choice.disabled) return;
     const wasEchoOwned = this.echoOwned;
     const oldDeltaRank = this.deltaRank;
+    const oldVectorRank = this.vectorRank;
     const next = applyV21Draft(this.buildState(), choice.id as V21DraftId);
     this.deltaRank = next.deltaRank;
     if (this.deltaRank !== oldDeltaRank) this.attackAccumulator = migrateDeltaCooldownAccumulator(this.attackAccumulator, oldDeltaRank, this.deltaRank);
     this.hp = next.hp; this.pickupRadius = next.pickupRadius;
     this.vectorOwned = next.vectorOwned === true;
+    this.vectorRank = next.vectorRank ?? (this.vectorOwned ? 1 : this.vectorRank);
+    if (this.vectorRank !== oldVectorRank) {
+      if (oldVectorRank < 4 && this.vectorRank >= 4) this.vectorTransferState = emptyVectorTransfer();
+      if (this.vectorRank >= 5) this.vectorLockState = initialVectorLockState();
+    }
     this.orbitOwned = next.orbitOwned === true;
     this.echoOwned = next.echoOwned === true;
     this.signalOwned = next.signalOwned === true;
@@ -889,12 +1109,12 @@ class SurvivalScene extends Phaser.Scene {
 
   private shift(): void {
     if (this.dead || this.draftOpen) return;
-    this.invalidateVectorForShift();
+    const nextPhase: Phase = this.phase === "A" ? "B" : "A";
+    this.invalidateVectorForShift(nextPhase);
     if (this.orbitOwned) {
       this.orbitLastShiftAnchor = this.orbitAngle;
       this.orbitReversals += 1;
     }
-    const nextPhase: Phase = this.phase === "A" ? "B" : "A";
     if (this.signalOwned) {
       this.signalShiftGraphInvalidations += 1;
       this.signalLastChainIds = [];
@@ -977,10 +1197,29 @@ class SurvivalScene extends Phaser.Scene {
     canvas.dataset.deltaStaggers = String(this.deltaStaggers);
     canvas.dataset.deltaStaggeredEnemies = String(this.enemies.filter(enemy => enemy.active && enemy.staggerUntilMs > this.elapsedActiveMs).length);
     canvas.dataset.weaponSlotsUsed = String(this.weaponSlotsUsed);
-    canvas.dataset.vectorOwned = this.vectorOwned ? "true" : "false"; canvas.dataset.vectorTargetId = this.vectorTargetId === null ? "" : String(this.vectorTargetId);
-    canvas.dataset.vectorTargetKind = this.vectorTargetKind ?? ""; canvas.dataset.vectorShots = String(this.vectorShots); canvas.dataset.vectorHits = String(this.vectorHits);
-    canvas.dataset.vectorAcquisitions = String(this.vectorAcquisitions); canvas.dataset.vectorShiftInvalidations = String(this.vectorShiftInvalidations);
-    canvas.dataset.vectorInFlight = String(this.activeVectorProjectileCount()); canvas.dataset.vectorProfile = "rank1-phase-targeted";
+    canvas.dataset.vectorOwned = this.vectorOwned ? "true" : "false";
+    canvas.dataset.vectorRank = String(this.vectorRank);
+    canvas.dataset.vectorTargetId = this.vectorTargetId === null ? "" : String(this.vectorTargetId);
+    canvas.dataset.vectorTargetKind = this.vectorTargetKind ?? "";
+    canvas.dataset.vectorShots = String(this.vectorShots);
+    canvas.dataset.vectorHits = String(this.vectorHits);
+    canvas.dataset.vectorAcquisitions = String(this.vectorAcquisitions);
+    canvas.dataset.vectorShiftInvalidations = String(this.vectorShiftInvalidations);
+    canvas.dataset.vectorInFlight = String(this.activeVectorProjectileCount());
+    canvas.dataset.vectorProfile = `rank${this.vectorRank}-phase-targeted`;
+    canvas.dataset.vectorPenetrationHits = String(this.vectorPenetrationHits);
+    canvas.dataset.vectorTransferArmed = isVectorTransferArmed(this.vectorTransferState, this.elapsedActiveMs) ? "true" : "false";
+    canvas.dataset.vectorTransferPhase = this.vectorTransferState.phase ?? "";
+    canvas.dataset.vectorTransferExpiresAt = this.vectorTransferState.expiresAtMs === null ? "" : String(this.vectorTransferState.expiresAtMs);
+    canvas.dataset.vectorTransferShots = String(this.vectorTransferShots);
+    canvas.dataset.vectorTransferExpiries = String(this.vectorTransferExpiries);
+    canvas.dataset.vectorLockTargetId = this.vectorLockState.targetId === null ? "" : String(this.vectorLockState.targetId);
+    canvas.dataset.vectorLockStacks = String(this.vectorLockState.stacks);
+    canvas.dataset.vectorLockPeakStacks = String(this.vectorLockPeakStacks);
+    canvas.dataset.vectorLockResets = String(this.vectorLockResets);
+    canvas.dataset.vectorQualificationFixture = this.vectorQualificationFixture;
+    canvas.dataset.vectorInFlightRanks = this.vectorProjectiles.filter(projectile => projectile.active && projectile.profile).map(projectile => String(projectile.profile?.rank ?? 0)).join(",");
+    canvas.dataset.vectorInFlightTransfer = this.vectorProjectiles.some(projectile => projectile.active && projectile.transferShot) ? "true" : "false";
     canvas.dataset.orbitOwned = this.orbitOwned ? "true" : "false";
     canvas.dataset.orbitProfile = "rank1-phase-reversal";
     canvas.dataset.orbitAngle = this.orbitAngle.toFixed(6);
