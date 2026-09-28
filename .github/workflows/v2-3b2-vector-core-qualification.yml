@@ -21,6 +21,10 @@ jobs:
     name: V2-3B2 deterministic VECTOR contracts
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      FRIENDSDK_ARCHIVE: vendor/rarefriends-friendsdk-0.1.2.tgz
+      FRIENDSDK_SHA256: a6352e187916089b6829c5387fe87f386c5774004f181990e4e3c8ae641cfe83
+      FRIENDSDK_URL: https://github.com/spokesz/friendsdk/releases/download/v0.1.2/rarefriends-friendsdk-0.1.2.tgz
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,8 +34,16 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Install TypeScript only
-        run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
+      - name: Fetch and verify FriendSDK v0.1.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p vendor
+          curl --fail --location --retry 5 --retry-all-errors --connect-timeout 20 --max-time 180 --output "$FRIENDSDK_ARCHIVE" "$FRIENDSDK_URL"
+          printf '%s  %s\n' "$FRIENDSDK_SHA256" "$FRIENDSDK_ARCHIVE" | sha256sum --check --strict
+
+      - name: Install project dependencies
+        run: npm install --no-audit --no-fund
 
       - name: Inherited deterministic core
         run: npm run test:core
