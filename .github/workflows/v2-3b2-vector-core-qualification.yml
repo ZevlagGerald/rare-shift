@@ -7,6 +7,8 @@ on:
     paths:
       - ".github/workflows/v2-3b2-vector-core-qualification.yml"
       - "games/rare-shift/src/vector-core.ts"
+      - "games/rare-shift/src/draft-core.ts"
+      - "games/rare-shift/src/phaser-survival.ts"
       - "games/rare-shift/src/phase-combat-core.ts"
       - "games/rare-shift/tests/v2-3b2-vector-ranks.test.ts"
       - "package.json"
@@ -60,5 +62,8 @@ jobs:
       - name: V2-3B2 VECTOR Rank II-V contracts
         run: npm run test:v2-3b2-vector
 
-      - name: Core TypeScript qualification
-        run: npm run typecheck:core
+      - name: TypeScript qualification
+        shell: bash
+        run: |
+          npm run typecheck:core
+          npm run typecheck
