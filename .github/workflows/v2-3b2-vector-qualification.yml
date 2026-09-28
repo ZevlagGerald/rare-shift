@@ -1,5 +1,6 @@
 name: RARE SHIFT V2-3B2 VECTOR Qualification
 
+# Requalification after restoring the inherited V2-2A Rank-I browser marker.
 on:
   push:
     branches:
