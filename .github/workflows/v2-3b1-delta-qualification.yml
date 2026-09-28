@@ -85,7 +85,7 @@ jobs:
       - name: V2-3A progression contracts
         run: npm run test:v2-3a
 
-      - name: V2-3B1 DELTA Rank II-V contracts
+      - name: V2-3B1 DELTA Rank II-V deterministic contracts
         run: npm run test:v2-3b1-delta
 
       - name: V2 ART 00 regression
@@ -126,7 +126,7 @@ jobs:
       - name: V2-2E integrated four-slot regression proof
         run: npm run test:v2-2e-browser
 
-      - name: V2-3B1 natural DELTA Rank II-V browser proof
+      - name: V2-3B1 natural DELTA higher-rank adapter proof
         run: npm run test:v2-3b1-delta-browser
 
       - name: Upload V2-3B1 evidence
