@@ -22,8 +22,8 @@ const A = (id: number, x: number, y: number): VectorTargetCandidate => ({ id, ki
 const B = (id: number, x: number, y: number): VectorTargetCandidate => ({ id, kind: "SPLIT_B", active: true, x, y });
 
 test("VECTOR Rank I-V profiles are exact and bounded", () => {
-  assert.deepEqual(buildVectorProfile(1), { rank: 1, cooldownMs: 760, range: 560, speed: 960, hitRadius: 18, maxInFlight: 2, maxHits: 1, damageSequence: [10], corridorRadius: 0, priorityBand: 0 });
-  assert.deepEqual(buildVectorProfile(2), { rank: 2, cooldownMs: 760, range: 560, speed: 960, hitRadius: 18, maxInFlight: 2, maxHits: 2, damageSequence: [10, 7], corridorRadius: 20, priorityBand: 0 });
+  assert.deepEqual(buildVectorProfile(1), { rank: 1, damage: 10, cooldownMs: 760, range: 560, speed: 960, hitRadius: 18, maxInFlight: 2, maxHits: 1, damageSequence: [10], corridorRadius: 0, priorityBand: 0 });
+  assert.deepEqual(buildVectorProfile(2), { rank: 2, damage: 10, cooldownMs: 760, range: 560, speed: 960, hitRadius: 18, maxInFlight: 2, maxHits: 2, damageSequence: [10, 7], corridorRadius: 20, priorityBand: 0 });
   assert.equal(buildVectorProfile(3).priorityBand, VECTOR_PRIORITY_BAND_PX);
   assert.deepEqual(buildVectorProfile(4, true).damageSequence, [10, 7, 5]);
   assert.equal(buildVectorProfile(4, true).maxHits, 3);
