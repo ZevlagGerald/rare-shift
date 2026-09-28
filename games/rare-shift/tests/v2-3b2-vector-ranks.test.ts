@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { applyV21Draft, buildV21Draft, isV21DraftChoiceValid } from "../src/draft-core.ts";
+import { applyV23ACandidate, enumerateV23ACandidates, type V23BuildState } from "../src/progression-core.ts";
 import {
   VECTOR_PRIORITY_BAND_PX,
   VECTOR_TRANSFER_WINDOW_MS,
@@ -93,4 +95,54 @@ test("Rank V VECTOR LOCK damage progression is deterministic and capped", () => 
   state = recordVectorPrimaryHit(state, 8);
   assert.deepEqual(state, { targetId: 8, stacks: 1 });
   assert.deepEqual(resetVectorLock(), { targetId: null, stacks: 0 });
+});
+
+test("bounded V2-3B2 live adapter is opt-in, monotonic and rejects Rank-V overflow", () => {
+  const legacy = { deltaRank: 2, hp: 70, maxHp: 100, pickupRadius: 76, vectorEnabled: true, vectorOwned: true, vectorRank: 1, weaponSlotsUsed: 2, weaponSlotCap: 4 };
+  assert.equal(isV21DraftChoiceValid(legacy, "VECTOR_RANK"), false);
+
+  const enabled = { ...legacy, vectorRankEnabled: true };
+  assert.equal(isV21DraftChoiceValid(enabled, "VECTOR_RANK"), true);
+  assert.ok(buildV21Draft(13699, 5, enabled).some(choice => choice.id === "VECTOR_RANK"));
+  const rank2 = applyV21Draft(enabled, "VECTOR_RANK");
+  assert.equal(rank2.vectorRank, 2);
+  assert.equal(rank2.weaponSlotsUsed, 2);
+
+  let ranked = rank2;
+  ranked = applyV21Draft(ranked, "VECTOR_RANK");
+  ranked = applyV21Draft(ranked, "VECTOR_RANK");
+  ranked = applyV21Draft(ranked, "VECTOR_RANK");
+  assert.equal(ranked.vectorRank, 5);
+  assert.throws(() => applyV21Draft(ranked, "VECTOR_RANK"), /already rank V/u);
+});
+
+test("bounded live VECTOR rank adapter matches normalized V2-3 next-rank semantics", () => {
+  const normalized: V23BuildState = {
+    weapons: { DELTA: { rank: 2, evolved: false }, VECTOR: { rank: 1, evolved: false } },
+    protocols: {},
+    evolutionCores: 0,
+    refracts: 1,
+    rerollNonce: 0,
+    hp: 70,
+    maxHp: 100,
+    pickupRadius: 76,
+  };
+  const candidate = enumerateV23ACandidates(5, normalized).find(item => item.candidateId === "WEAPON_RANK:VECTOR:1->2");
+  assert.ok(candidate);
+  const normalizedNext = applyV23ACandidate(normalized, candidate);
+  assert.equal(normalizedNext.weapons.VECTOR?.rank, 2);
+
+  const liveNext = applyV21Draft({
+    deltaRank: 2,
+    hp: 70,
+    maxHp: 100,
+    pickupRadius: 76,
+    vectorEnabled: true,
+    vectorOwned: true,
+    vectorRankEnabled: true,
+    vectorRank: 1,
+    weaponSlotsUsed: 2,
+    weaponSlotCap: 4,
+  }, "VECTOR_RANK");
+  assert.equal(liveNext.vectorRank, normalizedNext.weapons.VECTOR?.rank);
 });
