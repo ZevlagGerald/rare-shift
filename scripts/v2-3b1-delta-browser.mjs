@@ -43,11 +43,13 @@ function qualify(width) {
     await canvas.waitFor({ state: "visible" });
     await canvas.focus();
     const data = name => canvas.getAttribute(`data-${name}`);
-    // Reuse the already-qualified V2-1 pursuit cadence. A compact four-way
-    // loop plus settle time lets deterministic pursuers enter canonical DELTA
-    // geometry instead of letting the test bot outrun them indefinitely.
+
+    // Use the exact movement/SHIFT discipline already qualified by V2-2E at
+    // both 960 and 390. V2-3B1 tests DELTA rank progression, not a new bot AI.
     const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
     let routeIndex = 0;
+    let expectedDraftLevel = 2;
+    const choices = [];
 
     assert.equal(await data("delta-rank"), "1");
     assert.equal(await data("delta-damage"), "12");
@@ -55,13 +57,56 @@ function qualify(width) {
     assert.equal(await data("delta-world-scale"), "8");
 
     let acquiredOrbit = false;
-    let acquiredSignal = false;
     let acquiredEcho = false;
+    let acquiredSignal = false;
     let provedRank4Echo = false;
     let rank4EchoProofPending = false;
-    let rank5Reached = false;
-    let expectedDraftLevel = 2;
-    const choices = [];
+
+    const moveUntilNextDraft = async (deadlineMs, label) => {
+      const deadline = Date.now() + deadlineMs;
+      while (Date.now() < deadline && !bool(await data("draft-open"))) {
+        if (bool(await data("dead"))) {
+          throw new Error(`died before ${label}; level=${await data("level")}; hp=${await data("hp")}; kills=${await data("kills")}; rank=${await data("delta-rank")}; choices=${choices.join("|")}`);
+        }
+        await canvas.press(route[routeIndex++ % route.length], { delay: expectedDraftLevel >= 4 ? 300 : 390 });
+        await page.waitForTimeout(expectedDraftLevel >= 4 ? 650 : 900);
+        if (routeIndex % 5 === 0 && !bool(await data("draft-open"))) {
+          await shift(canvas, width);
+          await page.waitForTimeout(95);
+        }
+      }
+      assert.equal(await data("draft-open"), "true", `expected ${label}`);
+      assert.equal(Number(await data("level")), expectedDraftLevel,
+        `${label} must be sequential Level ${expectedDraftLevel}`);
+    };
+
+    const chooseCurrentDraft = async (desired, label) => {
+      const ids = list(await data("draft-ids"));
+      const count = Number(await data("draft-count"));
+      const level = Number(await data("level"));
+      const hp = Number(await data("hp"));
+      assert.equal(level, expectedDraftLevel, `${label} draft sequence must remain exact`);
+      assert.equal(ids.length, count, `${label} draft ids/count must agree`);
+      const index = ids.indexOf(desired);
+      assert.ok(index >= 0, `${label} requires ${desired}: ${ids.join(",")}`);
+      choices.push(`L${level}:${desired}`);
+      console.log(`V2_3B1_DRAFT_${width}=L${level}:HP${hp}:${ids.join(",")}=>${desired}`);
+      const beforeRank = Number(await data("delta-rank"));
+      await clickDraft(canvas, index, count);
+      expectedDraftLevel += 1;
+      await page.waitForTimeout(220);
+      if (desired === "ORBIT_NODES") acquiredOrbit = true;
+      if (desired === "ECHO_MINE") acquiredEcho = true;
+      if (desired === "SIGNAL_ARC") acquiredSignal = true;
+      if (desired === "DELTA_RANK") {
+        assert.equal(Number(await data("delta-rank")), beforeRank + 1, `${label} must advance DELTA exactly one rank`);
+      }
+      if (bool(await data("draft-open"))) {
+        assert.equal(Number(await data("level")), expectedDraftLevel,
+          `immediate reopened draft must be exactly L${expectedDraftLevel}`);
+      }
+      return { ids, level, hp, beforeRank };
+    };
 
     const proveRank4Echo = async () => {
       assert.equal(bool(await data("draft-open")), false, "Rank-IV PHASE ECHO proof requires resumed combat");
@@ -75,115 +120,99 @@ function qualify(width) {
       rank4EchoProofPending = false;
     };
 
-    const deadline = Date.now() + 360_000;
-    while (Date.now() < deadline && !rank5Reached) {
-      if (bool(await data("dead"))) throw new Error(`died before DELTA Rank V at level ${await data("level")}; choices=${choices.join("|")}`);
-
-      if (rank4EchoProofPending && !bool(await data("draft-open"))) await proveRank4Echo();
-
-      if (bool(await data("draft-open"))) {
+    const resolveImmediateDraftsBeforeEchoProof = async () => {
+      let resolved = 0;
+      while (bool(await data("draft-open")) && resolved < 8) {
         const ids = list(await data("draft-ids"));
-        const count = Number(await data("draft-count"));
-        assert.equal(ids.length, count);
-        const rank = Number(await data("delta-rank"));
-        const level = Number(await data("level"));
         const hp = Number(await data("hp"));
-
-        assert.equal(level, expectedDraftLevel, `draft level sequence skipped: expected L${expectedDraftLevel}, got L${level}`);
-        expectedDraftLevel += 1;
-
         let desired = "";
-        if (rank === 4 && rank4EchoProofPending) {
-          if (hp <= 55 && ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
-          else desired = ids.find(id => id !== "DELTA_RANK") ?? "";
-          assert.ok(desired, `Rank-IV echo proof requires a legal non-DELTA bridge choice: ${ids.join(",")}`);
-        } else if (hp <= 55 && ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
-        // Qualify DELTA ranks after the already-proven survival onboarding.
-        // ORBIT -> ECHO -> SIGNAL is the inherited safe 4/4 route; the rank
-        // tranche must not require DELTA II at Level 2 or tune combat around
-        // an intentionally fragile build order.
-        else if (!acquiredOrbit && ids.includes("ORBIT_NODES")) desired = "ORBIT_NODES";
-        else if (!acquiredEcho && ids.includes("ECHO_MINE")) desired = "ECHO_MINE";
-        else if (!acquiredSignal && ids.includes("SIGNAL_ARC")) desired = "SIGNAL_ARC";
-        else if (ids.includes("DELTA_RANK")) desired = "DELTA_RANK";
-        else desired = ids[0];
+        if (hp <= 55 && ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
+        else if (ids.includes("SIGNAL_MAGNET")) desired = "SIGNAL_MAGNET";
+        else desired = ids.find(id => id !== "DELTA_RANK") ?? "";
+        assert.ok(desired, `Rank-IV echo bridge requires a legal non-DELTA choice: ${ids.join(",")}`);
+        await chooseCurrentDraft(desired, "Rank-IV echo bridge");
+        resolved += 1;
+      }
+      assert.equal(await data("draft-open"), "false", "Rank-IV echo bridge must eventually resume combat");
+    };
 
-        choices.push(`L${level}:${desired}`);
-        console.log(`V2_3B1_DRAFT_${width}=L${level}:HP${hp}:${ids.join(",")}=>${desired}`);
-        const index = ids.indexOf(desired);
-        assert.ok(index >= 0, `desired ${desired} missing from ${ids.join(",")}`);
-        const beforeRank = rank;
-        await clickDraft(canvas, index, count);
-        await page.waitForTimeout(220);
+    // First establish the already-qualified survival build. This keeps V2-3B1
+    // focused on rank behavior instead of forcing a fragile DELTA-II-at-L2 path.
+    await moveUntilNextDraft(58_000, "Level-2 ORBIT onboarding draft");
+    await chooseCurrentDraft("ORBIT_NODES", "Level-2 ORBIT onboarding");
+    assert.equal(await data("weapon-slots-used"), "2");
 
-        if (bool(await data("draft-open"))) {
-          assert.equal(Number(await data("level")), expectedDraftLevel,
-            `immediate reopened draft must be exactly L${expectedDraftLevel}`);
-        }
+    await moveUntilNextDraft(64_000, "Level-3 ECHO onboarding draft");
+    await chooseCurrentDraft("ECHO_MINE", "Level-3 ECHO onboarding");
+    assert.equal(await data("weapon-slots-used"), "3");
 
-        if (desired === "ORBIT_NODES") acquiredOrbit = true;
-        if (desired === "SIGNAL_ARC") acquiredSignal = true;
-        if (desired === "ECHO_MINE") acquiredEcho = true;
+    await moveUntilNextDraft(76_000, "Level-4 SIGNAL onboarding draft");
+    await chooseCurrentDraft("SIGNAL_ARC", "Level-4 SIGNAL onboarding");
+    assert.equal(await data("weapon-slots-used"), "4");
+    assert.equal(acquiredOrbit, true);
+    assert.equal(acquiredEcho, true);
+    assert.equal(acquiredSignal, true);
 
-        const afterRank = Number(await data("delta-rank"));
-        if (desired === "DELTA_RANK") {
-          assert.equal(afterRank, beforeRank + 1);
-          if (afterRank === 2) {
-            assert.equal(acquiredOrbit, true, "DELTA II proof begins after ORBIT onboarding");
-            assert.equal(acquiredEcho, true, "DELTA II proof begins after ECHO onboarding");
-            assert.equal(acquiredSignal, true, "DELTA II proof begins after SIGNAL onboarding");
-            assert.equal(await data("weapon-slots-used"), "4");
-            assert.equal(await data("delta-damage"), "12");
-            assert.equal(await data("delta-cooldown-ms"), "720");
-            assert.equal(await data("delta-world-scale"), "8");
-          }
-          if (afterRank === 3) {
-            assert.equal(await data("delta-damage"), "12");
-            assert.equal(await data("delta-cooldown-ms"), "720");
-            assert.equal(await data("delta-world-scale"), "9.5");
-          }
-          if (afterRank === 4) {
-            rank4EchoProofPending = true;
-            if (!bool(await data("draft-open"))) await proveRank4Echo();
-          }
-          if (afterRank === 5) {
-            assert.equal(provedRank4Echo, true, "Rank IV PHASE ECHO must be proven before DELTA V");
-            assert.equal(await data("delta-damage"), "14");
-            assert.equal(await data("delta-cooldown-ms"), "720");
-            assert.equal(await data("delta-world-scale"), "9.5");
-            rank5Reached = true;
-          }
-        }
+    // Earn DELTA II-V only through subsequent real draft decisions. Critical
+    // healing may delay a rank, but no HP/XP/rank state is injected.
+    while (Number(await data("delta-rank")) < 5) {
+      if (rank4EchoProofPending && !bool(await data("draft-open"))) await proveRank4Echo();
+      if (!bool(await data("draft-open"))) {
+        await moveUntilNextDraft(90_000, `DELTA progression draft L${expectedDraftLevel}`);
       }
 
-      if (rank5Reached) break;
-      await canvas.press(route[routeIndex % route.length], { delay: 460 });
-      routeIndex += 1;
-      await page.waitForTimeout(1400);
-      if (!bool(await data("draft-open")) && routeIndex % 2 === 0) {
-        await shift(canvas, width);
-        await page.waitForTimeout(120);
+      const ids = list(await data("draft-ids"));
+      const hp = Number(await data("hp"));
+      const rank = Number(await data("delta-rank"));
+      let desired = "";
+
+      if (rank === 4 && rank4EchoProofPending) {
+        if (hp <= 55 && ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
+        else if (ids.includes("SIGNAL_MAGNET")) desired = "SIGNAL_MAGNET";
+        else desired = ids.find(id => id !== "DELTA_RANK") ?? "";
+        assert.ok(desired, `Rank-IV echo proof requires a legal bridge choice: ${ids.join(",")}`);
+      } else if (hp <= 55 && ids.includes("FIELD_REPAIR")) {
+        desired = "FIELD_REPAIR";
+      } else if (ids.includes("DELTA_RANK")) {
+        desired = "DELTA_RANK";
+      } else if (ids.includes("SIGNAL_MAGNET")) {
+        desired = "SIGNAL_MAGNET";
+      } else {
+        desired = ids[0];
+      }
+
+      const { beforeRank } = await chooseCurrentDraft(desired, `DELTA progression L${expectedDraftLevel - 1}`);
+      if (desired !== "DELTA_RANK") continue;
+
+      const afterRank = Number(await data("delta-rank"));
+      assert.equal(afterRank, beforeRank + 1);
+      if (afterRank === 2) {
+        assert.equal(await data("weapon-slots-used"), "4");
+        assert.equal(await data("delta-damage"), "12");
+        assert.equal(await data("delta-cooldown-ms"), "720");
+        assert.equal(await data("delta-world-scale"), "8");
+      }
+      if (afterRank === 3) {
+        assert.equal(await data("delta-damage"), "12");
+        assert.equal(await data("delta-cooldown-ms"), "720");
+        assert.equal(await data("delta-world-scale"), "9.5");
+      }
+      if (afterRank === 4) {
+        rank4EchoProofPending = true;
+        if (bool(await data("draft-open"))) await resolveImmediateDraftsBeforeEchoProof();
+        await proveRank4Echo();
+      }
+      if (afterRank === 5) {
+        assert.equal(provedRank4Echo, true, "Rank IV PHASE ECHO must be proven before DELTA V");
+        assert.equal(await data("delta-damage"), "14");
+        assert.equal(await data("delta-cooldown-ms"), "720");
+        assert.equal(await data("delta-world-scale"), "9.5");
       }
     }
 
-    if (!rank5Reached) {
-      console.log(`V2_3B1_TIMEOUT_STATE_${width}=${JSON.stringify({
-        level: Number(await data("level")),
-        hp: Number(await data("hp")),
-        kills: Number(await data("kills")),
-        deltaRank: Number(await data("delta-rank")),
-        weaponSlotsUsed: Number(await data("weapon-slots-used")),
-        expectedDraftLevel,
-        choices,
-      })}`);
-    }
-    assert.equal(rank5Reached, true, "natural draft route must reach DELTA Rank V");
     assert.equal(provedRank4Echo, true, "Rank IV echo must be proven before Rank V");
     assert.equal(await data("delta-rank"), "5");
     assert.equal(await data("delta-damage"), "14");
-    assert.equal(acquiredOrbit, true, "natural qualification must include ORBIT close defense");
-    assert.equal(acquiredSignal, true, "natural qualification must include SIGNAL wave clear");
-    assert.equal(acquiredEcho, true, "natural qualification must include ECHO route control");
     assert.ok(expectedDraftLevel >= 9, "draft sequence must prove Level 2 through Level 8 without skipping");
 
     const staggerBefore = Number(await data("delta-staggers"));
@@ -192,27 +221,22 @@ function qualify(width) {
       if (bool(await data("dead"))) throw new Error("died before Rank-V stagger observation");
       if (bool(await data("draft-open"))) {
         const ids = list(await data("draft-ids"));
-        const count = Number(await data("draft-count"));
-        const level = Number(await data("level"));
-        assert.equal(level, expectedDraftLevel, `post-Rank-V draft level sequence skipped: expected L${expectedDraftLevel}, got L${level}`);
-        expectedDraftLevel += 1;
-        const heal = ids.indexOf("FIELD_REPAIR");
-        await clickDraft(canvas, heal >= 0 ? heal : 0, count);
-        await page.waitForTimeout(160);
-        if (bool(await data("draft-open"))) {
-          assert.equal(Number(await data("level")), expectedDraftLevel,
-            `post-Rank-V immediate draft must be exactly L${expectedDraftLevel}`);
-        }
-      } else {
-        await canvas.press(route[routeIndex % route.length], { delay: 460 });
-        routeIndex += 1;
-        await page.waitForTimeout(1400);
-        if (!bool(await data("draft-open")) && routeIndex % 2 === 0) {
-          await shift(canvas, width);
-          await page.waitForTimeout(120);
-        }
+        const hp = Number(await data("hp"));
+        let desired = "";
+        if (hp <= 55 && ids.includes("FIELD_REPAIR")) desired = "FIELD_REPAIR";
+        else if (ids.includes("SIGNAL_MAGNET")) desired = "SIGNAL_MAGNET";
+        else desired = ids[0];
+        await chooseCurrentDraft(desired, "post-Rank-V survival draft");
+        continue;
+      }
+      await canvas.press(route[routeIndex++ % route.length], { delay: 220 });
+      await page.waitForTimeout(360);
+      if (routeIndex % 4 === 0 && !bool(await data("draft-open"))) {
+        await shift(canvas, width);
+        await page.waitForTimeout(320);
       }
     }
+
     assert.ok(Number(await data("delta-staggers")) > staggerBefore, "Rank V matching-phase primary pulse must produce bounded normal-enemy stagger");
     assert.equal(await data("dead"), "false");
     assert.ok(Number(await data("active-enemies")) <= 48);
