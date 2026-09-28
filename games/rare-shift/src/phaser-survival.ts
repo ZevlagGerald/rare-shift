@@ -1139,7 +1139,7 @@ class SurvivalScene extends Phaser.Scene {
     canvas.dataset.vectorTargetKind = this.vectorTargetKind ?? ""; canvas.dataset.vectorShots = String(this.vectorShots); canvas.dataset.vectorHits = String(this.vectorHits);
     canvas.dataset.vectorPenetrationHits = String(this.vectorPenetrationHits); canvas.dataset.vectorTransferShots = String(this.vectorTransferShots);
     canvas.dataset.vectorAcquisitions = String(this.vectorAcquisitions); canvas.dataset.vectorShiftInvalidations = String(this.vectorShiftInvalidations);
-    canvas.dataset.vectorInFlight = String(this.activeVectorProjectileCount()); canvas.dataset.vectorProfile = this.vectorOwned ? `rank${this.vectorRank}-phase-precision` : "unowned";
+    canvas.dataset.vectorInFlight = String(this.activeVectorProjectileCount()); canvas.dataset.vectorProfile = this.vectorOwned && this.vectorRank > 1 ? `rank${this.vectorRank}-phase-precision` : "rank1-phase-targeted";
     canvas.dataset.vectorTransferArmed = this.vectorTransfer && isVectorPhaseTransferArmed(this.vectorTransfer, this.phase, this.elapsedActiveMs) ? "true" : "false";
     canvas.dataset.vectorTransferExpiresInMs = this.vectorTransfer ? String(Math.max(0, Math.ceil(this.vectorTransfer.expiresAtMs - this.elapsedActiveMs))) : "0";
     canvas.dataset.vectorLockTargetId = this.vectorLock.targetId === null ? "" : String(this.vectorLock.targetId); canvas.dataset.vectorLockStacks = String(this.vectorLock.stacks);
