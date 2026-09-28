@@ -2,12 +2,16 @@ import { isEnemyCorporeal, type V2EnemyKind } from "./phase-combat-core.ts";
 import type { Phase } from "./types.ts";
 
 export interface VectorProfile {
-  readonly rank: number;
+  readonly damage: number;
   readonly cooldownMs: number;
   readonly range: number;
   readonly speed: number;
   readonly hitRadius: number;
   readonly maxInFlight: number;
+}
+
+export interface VectorRankProfile extends VectorProfile {
+  readonly rank: number;
   readonly maxHits: number;
   readonly damageSequence: readonly number[];
   readonly corridorRadius: number;
@@ -51,6 +55,15 @@ export const VECTOR_PRIORITY_BAND_PX = 120 as const;
 export const VECTOR_LINE_CORRIDOR_RADIUS = 20 as const;
 export const VECTOR_MAX_LOCK_STACKS = 3 as const;
 
+export const VECTOR_RANK_I: VectorProfile = Object.freeze({
+  damage: 10,
+  cooldownMs: 760,
+  range: 560,
+  speed: 960,
+  hitRadius: 18,
+  maxInFlight: 2,
+});
+
 function assertRank(rank: number): void {
   if (!Number.isInteger(rank) || rank < 1 || rank > 5) throw new Error("VECTOR rank must be an integer from 1 to 5.");
 }
@@ -59,25 +72,24 @@ export function vectorPriorityTier(kind: V2EnemyKind): number {
   return kind === "TRACE" ? 1 : 0;
 }
 
-export function buildVectorProfile(rank: number, transferShot = false): VectorProfile {
+export function buildVectorProfile(rank: number, transferShot = false): VectorRankProfile {
   assertRank(rank);
   const maxHits = rank === 1 ? 1 : transferShot && rank >= 4 ? 3 : 2;
   const damageSequence = maxHits === 1 ? [10] : maxHits === 2 ? [10, 7] : [10, 7, 5];
   return Object.freeze({
     rank,
-    cooldownMs: 760,
-    range: 560,
-    speed: 960,
-    hitRadius: 18,
-    maxInFlight: 2,
+    damage: 10,
+    cooldownMs: VECTOR_RANK_I.cooldownMs,
+    range: VECTOR_RANK_I.range,
+    speed: VECTOR_RANK_I.speed,
+    hitRadius: VECTOR_RANK_I.hitRadius,
+    maxInFlight: VECTOR_RANK_I.maxInFlight,
     maxHits,
     damageSequence: Object.freeze(damageSequence),
     corridorRadius: rank >= 2 ? VECTOR_LINE_CORRIDOR_RADIUS : 0,
     priorityBand: rank >= 3 ? VECTOR_PRIORITY_BAND_PX : 0,
   });
 }
-
-export const VECTOR_RANK_I: VectorProfile = buildVectorProfile(1);
 
 export function isVectorTargetLegal(
   candidate: VectorTargetCandidate,
@@ -122,7 +134,7 @@ export function acquirePriorityVectorTarget(
   originX: number,
   originY: number,
   lockedTargetId: number | null = null,
-  range = 560,
+  range = VECTOR_RANK_I.range,
   priorityBand = VECTOR_PRIORITY_BAND_PX,
 ): VectorTargetResult | null {
   const legal = candidates
@@ -150,7 +162,7 @@ export function planVectorLineHits(
   originY: number,
   primary: VectorTargetCandidate,
   maxHits: 2 | 3,
-  range = 560,
+  range = VECTOR_RANK_I.range,
   corridorRadius = VECTOR_LINE_CORRIDOR_RADIUS,
 ): readonly VectorLineHit[] {
   if (!isVectorTargetLegal(primary, phase, originX, originY, range)) return Object.freeze([]);
