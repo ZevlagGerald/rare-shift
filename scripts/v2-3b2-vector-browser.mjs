@@ -107,8 +107,12 @@ function naturalQualification(width) {
     await choose("ORBIT_NODES", "level-3 defensive acquisition draft");
     assert.equal(await data("weapon-slots-used"), "3");
 
-    await moveUntilDraft(4, 82_000, "level-4 memory acquisition draft");
-    await choose("ECHO_MINE", "level-4 memory acquisition draft");
+    // Reuse the already-qualified V2-2E survival route at the final acquisition:
+    // SIGNAL gives immediate wave-clear pressure while preserving a full four-slot
+    // build and therefore keeps VECTOR_RANK legal at the next level. This is a
+    // harness policy correction only; no production gameplay values are changed.
+    await moveUntilDraft(4, 82_000, "level-4 wave-clear acquisition draft");
+    await choose("SIGNAL_ARC", "level-4 wave-clear acquisition draft");
     assert.equal(await data("weapon-slots-used"), "4");
 
     let rankSelected = false;
