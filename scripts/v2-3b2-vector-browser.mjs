@@ -70,8 +70,13 @@ function naturalQualification(width) {
           throw new Error(`died before ${label}; L${await data("level")}; HP${await data("hp")}; K${await data("kills")}; V${await data("vector-rank")}`);
         }
         if (!bool(await data("draft-open"))) {
-          await canvas.press(route[routeIndex++ % route.length], { delay: minimumLevel >= 4 ? 300 : 390 });
-          await page.waitForTimeout(minimumLevel >= 4 ? 650 : 900);
+          // Keep the same deterministic four-direction route and real SHIFT cadence,
+          // but avoid the idle-heavy 300/650 and 390/900 duty cycles. The original
+          // ECHO route already reached VECTOR Rank II at 960; the narrow route died
+          // while mostly stationary. This movement-only harness correction changes
+          // no HP, XP, enemies, damage, ranks, pickups or production gameplay state.
+          await canvas.press(route[routeIndex++ % route.length], { delay: 520 });
+          await page.waitForTimeout(160);
           if (routeIndex % 5 === 0 && !bool(await data("draft-open"))) {
             await shift(canvas, width);
             await page.waitForTimeout(95);
@@ -107,12 +112,12 @@ function naturalQualification(width) {
     await choose("ORBIT_NODES", "level-3 defensive acquisition draft");
     assert.equal(await data("weapon-slots-used"), "3");
 
-    // Reuse the already-qualified V2-2E survival route at the final acquisition:
-    // SIGNAL gives immediate wave-clear pressure while preserving a full four-slot
-    // build and therefore keeps VECTOR_RANK legal at the next level. This is a
-    // harness policy correction only; no production gameplay values are changed.
-    await moveUntilDraft(4, 82_000, "level-4 wave-clear acquisition draft");
-    await choose("SIGNAL_ARC", "level-4 wave-clear acquisition draft");
+    // ECHO is the proven fourth-slot route for natural VECTOR progression: it
+    // keeps kill/pickup activity near the Friend and allowed the 960 proof to
+    // reach Level 5 naturally. The movement-dominant driver above addresses the
+    // narrow-screen survival failure without changing the build or game values.
+    await moveUntilDraft(4, 82_000, "level-4 local-memory acquisition draft");
+    await choose("ECHO_MINE", "level-4 local-memory acquisition draft");
     assert.equal(await data("weapon-slots-used"), "4");
 
     let rankSelected = false;
