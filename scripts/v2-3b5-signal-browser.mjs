@@ -138,25 +138,45 @@ function naturalQualification(width) {
       await page.waitForTimeout(120);
     }
     assert.equal(rankSelected, true, "natural production route must expose SIGNAL I→II without injected progression state");
-
-    const castDeadline = Date.now() + 45_000;
-    let fourTargetObserved = false;
-    while (Date.now() < castDeadline && !fourTargetObserved) {
-      if (bool(await data("dead"))) throw new Error("died before a real Rank-II four-target SIGNAL cast");
-      if (bool(await data("draft-open"))) { await clearDraft(canvas, data); await page.waitForTimeout(90); continue; }
-      await canvas.press(route[routeIndex++ % route.length], { delay: 520 });
-      await page.waitForTimeout(100);
-      if (routeIndex % 6 === 0) { await shift(canvas, width); await page.waitForTimeout(60); }
-      const ids = list(await data("signal-last-chain-ids"));
-      const damages = list(await data("signal-last-chain-damage")).map(Number);
-      if (ids.length === 4 && damages.join(",") === "10,8,6,5") fourTargetObserved = true;
-    }
-    assert.equal(fourTargetObserved, true, "Rank II must produce a real four-target [10,8,6,5] cast");
     assert.equal(await data("signal-qualification-fixture"), "");
     assert.equal(await data("dead"), "false");
     if (width === 390) assert.equal(await reduced.isChecked(), true);
     await page.locator(".rf-game-frame").screenshot({ path: resolve(`artifacts/rare-shift-v2-3b5-natural-rank2-${width}.png`) });
     console.log(`RARE_SHIFT_V2_3B5_NATURAL_SIGNAL_RANK2_${width}=PASS`);
+  };
+}
+
+function rank2Qualification(width) {
+  return async ({ page, game }) => {
+    await game.locator('[data-stage="scan"]').waitFor({ state: "visible" });
+    const reduced = await enableReducedMotion(game, width);
+    await setFixture(game, 2);
+    const canvas = await mount(game);
+    const data = name => canvas.getAttribute(`data-${name}`);
+    const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
+    let routeIndex = 0;
+
+    assert.equal(await data("signal-qualification-fixture"), "SIGNAL_RANK_2");
+    assert.equal(await data("signal-rank"), "2");
+    assert.equal(await data("signal-max-targets"), "4");
+    assert.equal(await data("signal-damage-profile"), "10,8,6,5");
+
+    const deadline = Date.now() + 65_000;
+    let fourTargetObserved = false;
+    while (Date.now() < deadline && !fourTargetObserved) {
+      if (bool(await data("dead"))) throw new Error("died before a real controlled Rank-II four-target SIGNAL cast");
+      if (bool(await data("draft-open"))) { await clearDraft(canvas, data); await page.waitForTimeout(80); continue; }
+      await canvas.press(route[routeIndex++ % route.length], { delay: 480 });
+      await page.waitForTimeout(90);
+      if (routeIndex % 5 === 0) { await shift(canvas, width); await page.waitForTimeout(70); }
+      const ids = list(await data("signal-last-chain-ids"));
+      const damages = list(await data("signal-last-chain-damage")).map(Number);
+      if (ids.length === 4 && damages.join(",") === "10,8,6,5") fourTargetObserved = true;
+    }
+    assert.equal(fourTargetObserved, true, "Rank II must produce a real four-target [10,8,6,5] cast");
+    assert.equal(await data("dead"), "false");
+    if (width === 390) assert.equal(await reduced.isChecked(), true);
+    await page.locator(".rf-game-frame").screenshot({ path: resolve(`artifacts/rare-shift-v2-3b5-rank2-four-link-${width}.png`) });
     console.log(`RARE_SHIFT_V2_3B5_SIGNAL_RANK2_FOUR_LINK_${width}=PASS`);
   };
 }
@@ -245,6 +265,13 @@ for (const width of [960, 390]) {
     timeout: 180_000,
     screenshot: resolve(`artifacts/rare-shift-v2-3b5-natural-host-${width}.png`),
     check: naturalQualification(width),
+  });
+  await testGame(gameDirectory, {
+    width,
+    height: width === 960 ? 800 : 844,
+    timeout: 100_000,
+    screenshot: resolve(`artifacts/rare-shift-v2-3b5-rank2-host-${width}.png`),
+    check: rank2Qualification(width),
   });
   await testGame(gameDirectory, {
     width,
