@@ -15,6 +15,7 @@ import {
   type V23DraftCandidate,
   type V23ProtocolFamily,
   type V23WeaponFamily,
+  type V23WeaponProgress,
 } from "../src/progression-core.ts";
 
 const SEED = 13699;
@@ -26,7 +27,9 @@ function choice(draft: { readonly choices: readonly V23DraftCandidate[] }, id: s
 }
 
 function evolutionReadyState(families: readonly V23WeaponFamily[], cores = 1): V23BuildState {
-  const weapons: V23BuildState["weapons"] = { DELTA: { rank: families.includes("DELTA") ? 5 : 1, evolved: false } };
+  const weapons: Partial<Record<V23WeaponFamily, V23WeaponProgress>> = {
+    DELTA: { rank: families.includes("DELTA") ? 5 : 1, evolved: false },
+  };
   const protocols: Partial<Record<V23ProtocolFamily, number>> = {};
   for (const family of families) {
     if (family !== "DELTA") weapons[family] = { rank: 5, evolved: false };
