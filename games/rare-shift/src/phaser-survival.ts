@@ -1,15 +1,20 @@
 import Phaser from "phaser";
 import { applyV21Draft, buildV21Draft, type V21BuildState, type V21DraftChoice, type V21DraftId } from "./draft-core.ts";
 import {
+  buildEchoProfile,
   canPlaceEchoMine,
   createEchoMine,
   echoBlastTargetIds,
   echoTriggerCandidateIds,
   ECHO_RANK_I,
+  initializeEchoMineForRankV,
   isEchoMineExpired,
+  planEchoDamageTargets,
   selectEchoReplacementId,
   transitionEchoMineForPhase,
+  type EchoBurstLedger,
   type EchoMineCore,
+  type EchoRankProfile,
 } from "./echo-core.ts";
 import {
   buildDeltaEchoProfile,
@@ -140,6 +145,7 @@ interface PendingDeltaEchoRuntime {
 
 type VectorQualificationWindow = Window & { __RARE_SHIFT_V23B2_VECTOR_RANK__?: unknown };
 type OrbitQualificationWindow = Window & { __RARE_SHIFT_V23B3_ORBIT_RANK__?: unknown };
+type EchoQualificationWindow = Window & { __RARE_SHIFT_V23B4_ECHO_RANK__?: unknown };
 
 const VIEW_W = 960;
 const VIEW_H = 640;
@@ -221,6 +227,7 @@ class SurvivalScene extends Phaser.Scene {
   private orbitQualificationFixture = "";
 
   private echoOwned = false;
+  private echoRank = 1;
   private echoPlacementAccumulator = 0;
   private echoNextId = 0;
   private echoPlacements = 0;
@@ -230,6 +237,12 @@ class SurvivalScene extends Phaser.Scene {
   private echoHits = 0;
   private echoReplacements = 0;
   private echoExpiries = 0;
+  private echoDepthIncrements = 0;
+  private echoDepth2Triggers = 0;
+  private echoDepth2Hits = 0;
+  private echoBurstSuppressedHits = 0;
+  private echoBurstLedger: EchoBurstLedger = new Map();
+  private echoQualificationFixture = "";
 
   private signalOwned = false;
   private signalAccumulator = 0;
@@ -298,6 +311,7 @@ class SurvivalScene extends Phaser.Scene {
     this.buildPools();
     this.applyVectorQualificationFixture();
     this.applyOrbitQualificationFixture();
+    this.applyEchoQualificationFixture();
     this.buildHud();
     this.installKeyboard();
     this.installTouch();
@@ -326,6 +340,25 @@ class SurvivalScene extends Phaser.Scene {
     this.orbitShearLastEmittedAt = null;
     this.orbitQualificationFixture = `ORBIT_RANK_${this.orbitRank}`;
     this.syncOrbitNodeView();
+  }
+
+  private applyEchoQualificationFixture(): void {
+    const raw = (window as EchoQualificationWindow).__RARE_SHIFT_V23B4_ECHO_RANK__;
+    if (!Number.isInteger(raw) || (raw as number) < 1 || (raw as number) > 5) return;
+    this.echoOwned = true;
+    this.echoRank = raw as number;
+    this.weaponSlotsUsed = Math.max(this.weaponSlotsUsed, 2);
+    this.echoBurstLedger = new Map();
+    this.echoQualificationFixture = `ECHO_RANK_${this.echoRank}`;
+    this.ensureEchoMineCapacity();
+  }
+
+  private ensureEchoMineCapacity(): void {
+    const required = buildEchoProfile(this.echoRank, 0).maxActive;
+    while (this.echoMines.length < required) {
+      const view = this.add.graphics().setDepth(23).setVisible(false);
+      this.echoMines.push({ active: false, mine: null, view });
+    }
   }
 
   update(_time: number, delta: number): void {
@@ -501,7 +534,7 @@ class SurvivalScene extends Phaser.Scene {
     this.xpBar.clear().fillStyle(0x202832, 1).fillRect(310, 48, 240, 8);
     this.xpBar.fillStyle(0x7ee787, 1).fillRect(310, 48, 240 * this.xp / xpThreshold(this.level), 8);
     this.hudText.setText(`HP ${Math.max(0, this.hp)}/${V21_PLAYER_MAX_HP}   LV ${this.level}   XP ${this.xp}/${xpThreshold(this.level)}`);
-    this.buildText.setText(`K ${this.kills} · Δ ${romanRank(this.deltaRank)} · V ${this.vectorOwned ? romanRank(this.vectorRank) : "--"} · O ${this.orbitOwned ? romanRank(this.orbitRank) : "--"} · E ${this.echoOwned ? "I" : "--"} · S ${this.signalOwned ? "I" : "--"}`);
+    this.buildText.setText(`K ${this.kills} · Δ ${romanRank(this.deltaRank)} · V ${this.vectorOwned ? romanRank(this.vectorRank) : "--"} · O ${this.orbitOwned ? romanRank(this.orbitRank) : "--"} · E ${this.echoOwned ? romanRank(this.echoRank) : "--"} · S ${this.signalOwned ? "I" : "--"}`);
     this.phaseText.setColor(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB).setText(`PHASE ${this.phase}\nFRAME ${this.phase === "A" ? this.pair.a.index : this.pair.b.index}`);
     if (this.shiftButton) this.shiftButton.setStrokeStyle(2, hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB));
   }
@@ -874,16 +907,18 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private updateEcho(dtMs: number): void {
+    const placementProfile = buildEchoProfile(this.echoRank, 0);
     for (const runtime of this.echoMines) {
       if (!runtime.active || !runtime.mine) continue;
-      if (!isEchoMineExpired(runtime.mine, this.elapsedActiveMs)) continue;
+      const mineProfile = buildEchoProfile(this.echoRank, runtime.mine.memoryDepth);
+      if (!isEchoMineExpired(runtime.mine, this.elapsedActiveMs, mineProfile)) continue;
       this.deactivateEchoMine(runtime);
       this.echoExpiries += 1;
     }
 
     this.echoPlacementAccumulator += dtMs;
-    while (this.echoPlacementAccumulator >= ECHO_RANK_I.placementIntervalMs) {
-      this.echoPlacementAccumulator -= ECHO_RANK_I.placementIntervalMs;
+    while (this.echoPlacementAccumulator >= placementProfile.placementIntervalMs) {
+      this.echoPlacementAccumulator -= placementProfile.placementIntervalMs;
       this.tryPlaceEchoMine();
     }
 
@@ -894,28 +929,36 @@ class SurvivalScene extends Phaser.Scene {
     for (const runtime of ordered) {
       if (!runtime.active || !runtime.mine) continue;
       this.paintEchoMine(runtime);
-      if (echoTriggerCandidateIds(runtime.mine, this.phase, this.elapsedActiveMs, this.enemies).length === 0) continue;
       const mine = runtime.mine;
-      const targetIds = echoBlastTargetIds(mine, this.phase, this.enemies);
+      const profile = buildEchoProfile(this.echoRank, mine.memoryDepth);
+      if (echoTriggerCandidateIds(mine, this.phase, this.elapsedActiveMs, this.enemies, profile).length === 0) continue;
+      const targetIds = echoBlastTargetIds(mine, this.phase, this.enemies, profile);
       this.deactivateEchoMine(runtime);
       this.echoTriggers += 1;
-      this.emitEchoBlastFx(mine.x, mine.y, mine.recordedPhase);
-      for (const id of targetIds) {
+      if (mine.memoryDepth >= 2) this.echoDepth2Triggers += 1;
+      this.emitEchoBlastFx(mine.x, mine.y, mine.recordedPhase, profile);
+      const plan = planEchoDamageTargets(targetIds, this.echoRank, this.elapsedActiveMs, this.echoBurstLedger);
+      this.echoBurstSuppressedHits += targetIds.length - plan.targetIds.length;
+      this.echoBurstLedger = plan.ledger;
+      for (const id of plan.targetIds) {
         const enemy = this.enemies.find(item => item.active && item.id === id);
         if (!enemy || !isEnemyCorporeal(enemy.kind, this.phase)) continue;
-        enemy.hp -= ECHO_RANK_I.damage;
+        enemy.hp -= profile.damage;
         this.echoHits += 1;
+        if (mine.memoryDepth >= 2) this.echoDepth2Hits += 1;
         if (enemy.hp <= 0) this.killEnemy(enemy);
       }
     }
   }
 
   private tryPlaceEchoMine(): void {
+    const profile = buildEchoProfile(this.echoRank, 0);
+    this.ensureEchoMineCapacity();
     const active = this.echoMines
       .filter((runtime): runtime is EchoMineRuntime & { mine: EchoMineCore } => runtime.active && runtime.mine !== null)
       .map(runtime => runtime.mine);
-    const replacementId = selectEchoReplacementId(active);
-    if (!canPlaceEchoMine(this.friend.x, this.friend.y, active, replacementId)) return;
+    const replacementId = selectEchoReplacementId(active, profile);
+    if (!canPlaceEchoMine(this.friend.x, this.friend.y, active, replacementId, profile)) return;
 
     let slot = this.echoMines.find(runtime => !runtime.active) ?? null;
     if (replacementId !== null) {
@@ -937,7 +980,8 @@ class SurvivalScene extends Phaser.Scene {
     for (const runtime of this.echoMines) {
       if (!runtime.active || !runtime.mine) continue;
       const previous = runtime.mine;
-      const next = transitionEchoMineForPhase(previous, nextPhase, this.elapsedActiveMs);
+      const next = transitionEchoMineForPhase(previous, nextPhase, this.elapsedActiveMs, this.echoRank);
+      if (next.memoryDepth > previous.memoryDepth) this.echoDepthIncrements += next.memoryDepth - previous.memoryDepth;
       if (previous.state !== next.state) {
         if (next.state === "ARMED_AWAY") this.echoArmedTransitions += 1;
         if (next.state === "RETURN_READY") this.echoReturns += 1;
@@ -956,6 +1000,14 @@ class SurvivalScene extends Phaser.Scene {
     runtime.view.lineStyle(mine.state === "RETURN_READY" ? 2 : 1, tone, alpha).strokeCircle(0, 0, mine.state === "RETURN_READY" ? 15 : 11);
     runtime.view.fillStyle(tone, alpha).fillRect(-5, -5, 10, 10);
     runtime.view.fillStyle(hex(V2_PALETTE.common), Math.min(0.8, alpha + 0.12)).fillRect(-2, -2, 4, 4);
+    if (this.echoRank >= 5 && mine.memoryDepth >= 1) {
+      runtime.view.lineStyle(1, tone, 0.62).strokeCircle(0, 0, 18);
+      runtime.view.fillStyle(hex(V2_PALETTE.common), 0.78).fillRect(-10, -1, 4, 2);
+      if (mine.memoryDepth >= 2) {
+        runtime.view.lineStyle(2, tone, 0.76).strokeCircle(0, 0, 21);
+        runtime.view.fillStyle(hex(V2_PALETTE.common), 0.82).fillRect(6, -1, 4, 2);
+      }
+    }
   }
 
   private deactivateEchoMine(runtime: EchoMineRuntime): void {
@@ -968,10 +1020,10 @@ class SurvivalScene extends Phaser.Scene {
     for (const runtime of this.echoMines) if (!runtime.active) runtime.view.setVisible(false);
   }
 
-  private emitEchoBlastFx(x: number, y: number, recordedPhase: Phase): void {
+  private emitEchoBlastFx(x: number, y: number, recordedPhase: Phase, profile: EchoRankProfile): void {
     const tone = hex(recordedPhase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB);
-    const fx = this.add.graphics().setPosition(x, y).setDepth(29).lineStyle(2, tone, 0.82);
-    fx.strokeCircle(0, 0, ECHO_RANK_I.blastRadius * 0.35);
+    const fx = this.add.graphics().setPosition(x, y).setDepth(29).lineStyle(profile.damage >= 20 ? 3 : 2, tone, 0.82);
+    fx.strokeCircle(0, 0, profile.blastRadius * 0.35);
     fx.lineBetween(-12, 0, 12, 0); fx.lineBetween(0, -12, 0, 12);
     this.time.delayedCall(this.reduced ? 55 : 110, () => fx.destroy());
   }
@@ -1075,6 +1127,8 @@ class SurvivalScene extends Phaser.Scene {
       orbitRank: this.orbitRank,
       echoEnabled: this.level >= 3,
       echoOwned: this.echoOwned,
+      echoRankEnabled: true,
+      echoRank: this.echoRank,
       signalEnabled: this.level >= 4,
       signalOwned: this.signalOwned,
       weaponSlotsUsed: this.weaponSlotsUsed,
@@ -1106,7 +1160,10 @@ class SurvivalScene extends Phaser.Scene {
     const isOrbitAcquire = choice.id === "ORBIT_NODES";
     const isOrbitRank = choice.id === "ORBIT_RANK";
     const isOrbit = isOrbitAcquire || isOrbitRank;
-    const isEcho = choice.id === "ECHO_MINE", isSignal = choice.id === "SIGNAL_ARC";
+    const isEchoAcquire = choice.id === "ECHO_MINE";
+    const isEchoRank = choice.id === "ECHO_RANK";
+    const isEcho = isEchoAcquire || isEchoRank;
+    const isSignal = choice.id === "SIGNAL_ARC";
     const isPhaseWeapon = isDelta || isVector || isOrbit || isEcho || isSignal;
     const border = isPhaseWeapon ? hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB) : 0x657383;
     const bg = this.add.rectangle(0, 0, 220, 230, 0x11151b, 0.99).setStrokeStyle(isPhaseWeapon ? 3 : 2, border).setInteractive({ useHandCursor: true });
@@ -1114,7 +1171,8 @@ class SurvivalScene extends Phaser.Scene {
     const nextDeltaRank = Math.min(5, this.deltaRank + 1);
     const nextVectorRank = Math.min(5, this.vectorRank + 1);
     const nextOrbitRank = Math.min(5, this.orbitRank + 1);
-    const titleText = isDelta ? `${choice.name} ${romanRank(nextDeltaRank)}` : isVectorRank ? `${choice.name} ${romanRank(nextVectorRank)}` : isOrbitRank ? `${choice.name} ${romanRank(nextOrbitRank)}` : choice.name;
+    const nextEchoRank = Math.min(5, this.echoRank + 1);
+    const titleText = isDelta ? `${choice.name} ${romanRank(nextDeltaRank)}` : isVectorRank ? `${choice.name} ${romanRank(nextVectorRank)}` : isOrbitRank ? `${choice.name} ${romanRank(nextOrbitRank)}` : isEchoRank ? `${choice.name} ${romanRank(nextEchoRank)}` : choice.name;
     const title = this.add.text(0, -54, titleText, { fontFamily: "monospace", fontSize: "17px", color: V2_PALETTE.common, fontStyle: "bold", align: "center", wordWrap: { width: 190 } }).setOrigin(0.5);
     const detailText = isDelta
       ? `RANK ${romanRank(this.deltaRank)} → ${romanRank(nextDeltaRank)}`
@@ -1122,12 +1180,15 @@ class SurvivalScene extends Phaser.Scene {
         ? `RANK ${romanRank(this.vectorRank)} → ${romanRank(nextVectorRank)}`
         : isOrbitRank
           ? `RANK ${romanRank(this.orbitRank)} → ${romanRank(nextOrbitRank)}`
-          : (isVectorAcquire || isOrbitAcquire || isEcho || isSignal) ? "ACQUIRE · RANK I" : "RUN UTILITY";
+          : isEchoRank
+            ? `RANK ${romanRank(this.echoRank)} → ${romanRank(nextEchoRank)}`
+            : (isVectorAcquire || isOrbitAcquire || isEchoAcquire || isSignal) ? "ACQUIRE · RANK I" : "RUN UTILITY";
     const detail = this.add.text(0, -27, detailText, { fontFamily: "monospace", fontSize: "9px", color: isPhaseWeapon ? (this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB) : "#748392", letterSpacing: 1 }).setOrigin(0.5);
     const deltaDescription = nextDeltaRank === 2 ? "DENSE SAMPLE · cadence tightens to 720ms." : nextDeltaRank === 3 ? "FIELD SCALE · canonical mask expands in world-space." : nextDeltaRank === 4 ? "PHASE ECHO · SHIFT leaves one bounded previous-phase echo." : "LOCKED IDENTITY · matching-phase pulse gains bounded stagger.";
     const vectorDescription = nextVectorRank === 2 ? "CLEAN LINE · fixed ray penetrates one aligned target." : nextVectorRank === 3 ? "PRIORITY TRACE · focus high-value corporeal threats in-band." : nextVectorRank === 4 ? "PHASE TRANSFER · first valid post-SHIFT launch gains a third line hit." : "VECTOR LOCK · repeated priority hits build bounded primary damage.";
     const orbitDescription = nextOrbitRank === 2 ? "SECOND NODE · two nodes share one target-hit ledger." : nextOrbitRank === 3 ? "STABLE ORBIT · wider, faster close-defense geometry." : nextOrbitRank === 4 ? "PHASE SHEAR · SHIFT reversal emits one bounded post-phase sweep." : "SYNCHRONIZED RING · three equally spaced nodes share one ledger.";
-    const desc = this.add.text(0, 61, isDelta ? deltaDescription : isVectorRank ? vectorDescription : isOrbitRank ? orbitDescription : choice.description, { fontFamily: "monospace", fontSize: "11px", color: "#bac5d0", align: "center", wordWrap: { width: 178 } }).setOrigin(0.5);
+    const echoDescription = nextEchoRank === 2 ? "LONG MEMORY · four mines persist for 12 seconds." : nextEchoRank === 3 ? "WIDER COLLAPSE · trigger and blast geometry expand." : nextEchoRank === 4 ? "FAST RECALL · returned memory readies after 140ms." : "DEEP MEMORY · genuine return cycles build bounded memory depth.";
+    const desc = this.add.text(0, 61, isDelta ? deltaDescription : isVectorRank ? vectorDescription : isOrbitRank ? orbitDescription : isEchoRank ? echoDescription : choice.description, { fontFamily: "monospace", fontSize: "11px", color: "#bac5d0", align: "center", wordWrap: { width: 178 } }).setOrigin(0.5);
     container.add([bg, tag, title, detail]);
     if (isDelta) {
       const preview = this.add.graphics(), previewProfile = buildDeltaProfile(this.pair.a.rows, this.pair.b.rows, this.phase, nextDeltaRank);
@@ -1150,9 +1211,11 @@ class SurvivalScene extends Phaser.Scene {
       }
       container.add(glyph);
     } else if (isEcho) {
-      const glyph = this.add.graphics().lineStyle(2, border, 0.78);
+      const glyph = this.add.graphics().lineStyle(isEchoRank ? 3 : 2, border, 0.78);
       glyph.strokeCircle(0, 3, 25); glyph.fillStyle(border, 0.9).fillRect(-6, -3, 12, 12);
       glyph.lineBetween(-31, 3, -19, 3); glyph.lineBetween(19, 3, 31, 3);
+      if (isEchoRank && nextEchoRank >= 3) glyph.lineStyle(1, hex(V2_PALETTE.common), 0.7).strokeCircle(0, 3, 31);
+      if (isEchoRank && nextEchoRank >= 5) glyph.lineStyle(1, border, 0.75).strokeCircle(0, 3, 36);
       container.add(glyph);
     } else if (isSignal) {
       const glyph = this.add.graphics().lineStyle(2, border, 0.82);
@@ -1172,6 +1235,7 @@ class SurvivalScene extends Phaser.Scene {
     const oldDeltaRank = this.deltaRank;
     const oldVectorRank = this.vectorRank;
     const oldOrbitRank = this.orbitRank;
+    const oldEchoRank = this.echoRank;
     const next = applyV21Draft(this.buildState(), choice.id as V21DraftId);
     this.deltaRank = next.deltaRank;
     if (this.deltaRank !== oldDeltaRank) this.attackAccumulator = migrateDeltaCooldownAccumulator(this.attackAccumulator, oldDeltaRank, this.deltaRank);
@@ -1190,6 +1254,14 @@ class SurvivalScene extends Phaser.Scene {
       this.orbitAngle = this.orbitAngle;
     }
     this.echoOwned = next.echoOwned === true;
+    this.echoRank = next.echoRank ?? (this.echoOwned ? 1 : this.echoRank);
+    if (this.echoRank !== oldEchoRank) {
+      this.ensureEchoMineCapacity();
+      if (oldEchoRank < 5 && this.echoRank >= 5) {
+        for (const runtime of this.echoMines) if (runtime.active && runtime.mine) runtime.mine = initializeEchoMineForRankV(runtime.mine);
+        this.echoBurstLedger = new Map();
+      }
+    }
     this.signalOwned = next.signalOwned === true;
     this.weaponSlotsUsed = next.weaponSlotsUsed ?? this.weaponSlotsUsed;
     if (this.orbitOwned) this.syncOrbitNodeView();
@@ -1345,8 +1417,12 @@ class SurvivalScene extends Phaser.Scene {
     const activeMines = this.echoMines
       .filter((runtime): runtime is EchoMineRuntime & { mine: EchoMineCore } => runtime.active && runtime.mine !== null)
       .sort((a, b) => a.mine.id - b.mine.id);
+    const echoProfile = buildEchoProfile(this.echoRank, 0);
     canvas.dataset.echoOwned = this.echoOwned ? "true" : "false";
-    canvas.dataset.echoProfile = "rank1-phase-memory";
+    canvas.dataset.echoRank = String(this.echoRank);
+    canvas.dataset.echoProfile = `rank${this.echoRank}-phase-memory`;
+    canvas.dataset.echoMaxActive = String(echoProfile.maxActive);
+    canvas.dataset.echoReturnDelayMs = String(echoProfile.returnDelayMs);
     canvas.dataset.echoActiveMines = String(activeMines.length);
     canvas.dataset.echoPlacements = String(this.echoPlacements);
     canvas.dataset.echoArmedTransitions = String(this.echoArmedTransitions);
@@ -1355,7 +1431,14 @@ class SurvivalScene extends Phaser.Scene {
     canvas.dataset.echoHits = String(this.echoHits);
     canvas.dataset.echoReplacements = String(this.echoReplacements);
     canvas.dataset.echoExpiries = String(this.echoExpiries);
-    canvas.dataset.echoMineStates = activeMines.map(runtime => `${runtime.mine.id}:${runtime.mine.recordedPhase}:${runtime.mine.state}`).join("|");
+    canvas.dataset.echoDepthIncrements = String(this.echoDepthIncrements);
+    canvas.dataset.echoDepth2Triggers = String(this.echoDepth2Triggers);
+    canvas.dataset.echoDepth2Hits = String(this.echoDepth2Hits);
+    canvas.dataset.echoBurstSuppressedHits = String(this.echoBurstSuppressedHits);
+    canvas.dataset.echoBurstLedgerTargets = String(this.echoBurstLedger.size);
+    canvas.dataset.echoQualificationFixture = this.echoQualificationFixture;
+    canvas.dataset.echoMemoryDepths = activeMines.map(runtime => `${runtime.mine.id}:${runtime.mine.memoryDepth}`).join(",");
+    canvas.dataset.echoMineStates = activeMines.map(runtime => `${runtime.mine.id}:${runtime.mine.recordedPhase}:${runtime.mine.state}:D${runtime.mine.memoryDepth}`).join("|");
     canvas.dataset.signalOwned = this.signalOwned ? "true" : "false";
     canvas.dataset.signalProfile = "rank1-phase-chain";
     canvas.dataset.signalCasts = String(this.signalCasts);
