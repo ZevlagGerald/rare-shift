@@ -30,6 +30,7 @@
     "test:v2-3b2-vector-browser": "node --experimental-strip-types scripts/v2-3b2-vector-browser.mjs",
     "test:v2-3b3-orbit-browser": "node --experimental-strip-types scripts/v2-3b3-orbit-browser.mjs",
     "test:v2-3b4-echo-browser": "node --experimental-strip-types scripts/v2-3b4-echo-browser.mjs",
+    "test:v2-3b5-signal-browser": "node --experimental-strip-types scripts/v2-3b5-signal-browser.mjs",
     "typecheck:core": "tsc -p tsconfig.core.json",
     "typecheck": "tsc -p games/rare-shift/tsconfig.json --noEmit",
     "dev": "friendsdk dev ./games/rare-shift",
