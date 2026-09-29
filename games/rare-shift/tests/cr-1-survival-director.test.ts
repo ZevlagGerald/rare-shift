@@ -2,16 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   CR1_CHECKPOINTS,
-  CR1_RESERVED_CHECKPOINT_SLOTS,
   CR1_STAGES,
   buildDirectedSpawnSpec,
-  canSpawnRegularEnemy,
   checkpointRewards,
   claimCheckpointRewards,
   dueCheckpoints,
   emptyCR1RewardLedger,
   isFlickerKind,
   nextFlickerKind,
+  selectCheckpointSpawnSlotIndex,
   stageForElapsedMs,
 } from "../src/cr1-director-core.ts";
 import { enemyBaseHp, enemyContactDamage, enemyMoveSpeed, enemyThreatPhase, isEnemyCorporeal } from "../src/phase-combat-core.ts";
@@ -76,14 +75,21 @@ test("CR-1 checkpoint schedule is deterministic and reports each unspawned check
   assert.deepEqual(dueCheckpoints(285_000, spawned).map(item => item.id), ["ELITE_II"]);
 });
 
-test("CR-1 ordinary spawning reserves capacity for all mandatory checkpoints", () => {
-  assert.equal(CR1_RESERVED_CHECKPOINT_SLOTS, 3);
-  assert.equal(CR1_RESERVED_CHECKPOINT_SLOTS, CR1_CHECKPOINTS.length);
-  assert.equal(canSpawnRegularEnemy(44, 48), true);
-  assert.equal(canSpawnRegularEnemy(45, 48), false);
-  assert.equal(canSpawnRegularEnemy(46, 48), false);
-  assert.throws(() => canSpawnRegularEnemy(-1, 48), /non-negative integer/u);
-  assert.throws(() => canSpawnRegularEnemy(0, 2), /reserve all CR-1 checkpoint slots/u);
+test("CR-1 checkpoint slot selection preserves ordinary capacity and reclaims only regular enemies", () => {
+  assert.equal(selectCheckpointSpawnSlotIndex([
+    { active: true, elite: false },
+    { active: false, elite: false },
+    { active: true, elite: true },
+  ]), 1);
+  assert.equal(selectCheckpointSpawnSlotIndex([
+    { active: true, elite: true },
+    { active: true, elite: false },
+    { active: true, elite: false },
+  ]), 1);
+  assert.equal(selectCheckpointSpawnSlotIndex([
+    { active: true, elite: true },
+    { active: true, elite: true },
+  ]), -1);
 });
 
 test("CR-1 elite reward ledger is exactly-once and checkpoint core rule is bounded", () => {

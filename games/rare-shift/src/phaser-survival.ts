@@ -70,8 +70,8 @@ import {
   CR1_MAX_BEACON_PROJECTILES,
   buildCheckpointSpawnPosition,
   buildDirectedSpawnSpec,
-  canSpawnRegularEnemy,
   claimCheckpointRewards,
+  selectCheckpointSpawnSlotIndex,
   dueCheckpoints,
   emptyCR1RewardLedger,
   isFlickerKind,
@@ -677,17 +677,33 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private spawnCheckpoint(checkpointId: CR1CheckpointId, kind: V2EnemyKind, hpMultiplier: number, label: string): boolean {
-    const slot = this.enemies.find(enemy => !enemy.active);
-    if (!slot) return false;
+    const slotIndex = selectCheckpointSpawnSlotIndex(this.enemies);
+    if (slotIndex < 0) return false;
+    const slot = this.enemies[slotIndex];
+    if (slot.active) this.retireRegularEnemyForCheckpoint(slot);
     const position = buildCheckpointSpawnPosition(this.seed, checkpointId, { x: this.friend.x, y: this.friend.y });
     this.activateEnemy(slot, this.spawnIndex++, kind, position.x, position.y, true, checkpointId, hpMultiplier);
     this.statusText.setText(label);
     return true;
   }
 
+  private retireRegularEnemyForCheckpoint(enemy: EnemyRuntime): void {
+    if (!enemy.active || enemy.elite) throw new Error("checkpoint replacement requires an active regular enemy.");
+    const retiredId = enemy.id;
+    this.orbitLastHitAt.delete(retiredId);
+    if (this.vectorTargetId === retiredId) {
+      this.vectorTargetId = null;
+      this.vectorTargetKind = null;
+      this.vectorReticle.setVisible(false);
+    }
+    if (this.vectorRank >= 5 && this.vectorLockState.targetId === retiredId) this.resetVectorLockState();
+    enemy.active = false;
+    enemy.view.setVisible(false);
+    enemy.telegraphView.clear().setVisible(false);
+    enemy.healthView.clear().setVisible(false);
+  }
+
   private spawnEnemy(): void {
-    const activeRegularEnemies = this.enemies.filter(enemy => enemy.active && !enemy.elite).length;
-    if (!canSpawnRegularEnemy(activeRegularEnemies, this.enemies.length)) return;
     const slot = this.enemies.find(enemy => !enemy.active);
     if (!slot) return;
     const spec = buildDirectedSpawnSpec(this.seed, this.spawnIndex, this.elapsedActiveMs, { x: this.friend.x, y: this.friend.y });
