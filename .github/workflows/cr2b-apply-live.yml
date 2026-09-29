@@ -38,10 +38,22 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Verify explicit Git workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          test -d .git
+          test "$(git rev-parse --show-toplevel)" = "$GITHUB_WORKSPACE"
+          echo "CR2B_GIT_ROOT=$(git rev-parse --show-toplevel)"
+          echo "CR2B_PREAPPLY_HEAD=$(git rev-parse HEAD)"
+
       - name: Sanitize one-shot generator literals
         shell: bash
         run: |
           set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
           python3 - <<'PY'
           from pathlib import Path
 
@@ -74,15 +86,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git rev-parse --is-inside-work-tree
           node scripts/apply-cr2b-live-integration.mjs
-          git diff --check
-          git diff -- games/rare-shift/src/phaser-survival.ts
-          test -n "$(git status --porcelain -- games/rare-shift/src/phaser-survival.ts)"
+          git -C "$GITHUB_WORKSPACE" rev-parse --is-inside-work-tree
+          git -C "$GITHUB_WORKSPACE" diff --check
+          git -C "$GITHUB_WORKSPACE" diff -- games/rare-shift/src/phaser-survival.ts
+          test -n "$(git -C "$GITHUB_WORKSPACE" status --porcelain -- games/rare-shift/src/phaser-survival.ts)"
 
       - name: Fetch and verify FriendSDK v0.1.3
         shell: bash
         run: |
           set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
           mkdir -p vendor
           curl --fail --location --retry 5 --retry-all-errors --connect-timeout 20 --max-time 180 --output "$FRIENDSDK_ARCHIVE" "$FRIENDSDK_URL"
           printf '%s  %s\n' "$FRIENDSDK_SHA256" "$FRIENDSDK_ARCHIVE" | sha256sum --check --strict
@@ -122,6 +139,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config user.name "Zev"
           git config user.email "214125688+ZevlagGerald@users.noreply.github.com"
           git restore scripts/apply-cr2b-live-integration.mjs
