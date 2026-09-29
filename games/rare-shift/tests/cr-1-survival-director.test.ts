@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   CR1_CHECKPOINTS,
+  CR1_RESERVED_CHECKPOINT_SLOTS,
   CR1_STAGES,
   buildDirectedSpawnSpec,
+  canSpawnRegularEnemy,
   checkpointRewards,
   claimCheckpointRewards,
   dueCheckpoints,
@@ -72,6 +74,16 @@ test("CR-1 checkpoint schedule is deterministic and reports each unspawned check
   assert.deepEqual(dueCheckpoints(180_000, spawned).map(item => item.id), ["CHECKPOINT_ELITE"]);
   spawned.add("CHECKPOINT_ELITE");
   assert.deepEqual(dueCheckpoints(285_000, spawned).map(item => item.id), ["ELITE_II"]);
+});
+
+test("CR-1 ordinary spawning reserves capacity for all mandatory checkpoints", () => {
+  assert.equal(CR1_RESERVED_CHECKPOINT_SLOTS, 3);
+  assert.equal(CR1_RESERVED_CHECKPOINT_SLOTS, CR1_CHECKPOINTS.length);
+  assert.equal(canSpawnRegularEnemy(44, 48), true);
+  assert.equal(canSpawnRegularEnemy(45, 48), false);
+  assert.equal(canSpawnRegularEnemy(46, 48), false);
+  assert.throws(() => canSpawnRegularEnemy(-1, 48), /non-negative integer/u);
+  assert.throws(() => canSpawnRegularEnemy(0, 2), /reserve all CR-1 checkpoint slots/u);
 });
 
 test("CR-1 elite reward ledger is exactly-once and checkpoint core rule is bounded", () => {

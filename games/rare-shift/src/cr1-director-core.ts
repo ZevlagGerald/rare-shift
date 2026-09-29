@@ -66,6 +66,15 @@ export const CR1_CHECKPOINTS: readonly CR1CheckpointSpec[] = Object.freeze([
   Object.freeze({ id: "ELITE_II", atMs: 285_000, kind: "FLICKER_A", hpMultiplier: 4.2, label: "ELITE II // PHASE HUNTER" }),
 ]);
 
+export const CR1_RESERVED_CHECKPOINT_SLOTS = 3 as const;
+
+export function canSpawnRegularEnemy(activeRegularEnemies: number, maxActiveEnemies: number): boolean {
+  if (!Number.isInteger(activeRegularEnemies) || activeRegularEnemies < 0) throw new Error("activeRegularEnemies must be a non-negative integer.");
+  if (!Number.isInteger(maxActiveEnemies) || maxActiveEnemies < CR1_RESERVED_CHECKPOINT_SLOTS) throw new Error("maxActiveEnemies must reserve all CR-1 checkpoint slots.");
+  if (CR1_RESERVED_CHECKPOINT_SLOTS !== CR1_CHECKPOINTS.length) throw new Error("CR-1 checkpoint reserve must match checkpoint count.");
+  return activeRegularEnemies < maxActiveEnemies - CR1_RESERVED_CHECKPOINT_SLOTS;
+}
+
 export function stageForElapsedMs(elapsedMs: number): CR1StageSpec {
   if (!Number.isFinite(elapsedMs) || elapsedMs < 0) throw new Error("elapsedMs must be finite and non-negative.");
   return CR1_STAGES.find(stage => elapsedMs >= stage.startsAtMs && (stage.endsAtMs === null || elapsedMs < stage.endsAtMs)) ?? CR1_STAGES[CR1_STAGES.length - 1];

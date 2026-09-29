@@ -70,6 +70,7 @@ import {
   CR1_MAX_BEACON_PROJECTILES,
   buildCheckpointSpawnPosition,
   buildDirectedSpawnSpec,
+  canSpawnRegularEnemy,
   claimCheckpointRewards,
   dueCheckpoints,
   emptyCR1RewardLedger,
@@ -685,6 +686,8 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private spawnEnemy(): void {
+    const activeRegularEnemies = this.enemies.filter(enemy => enemy.active && !enemy.elite).length;
+    if (!canSpawnRegularEnemy(activeRegularEnemies, this.enemies.length)) return;
     const slot = this.enemies.find(enemy => !enemy.active);
     if (!slot) return;
     const spec = buildDirectedSpawnSpec(this.seed, this.spawnIndex, this.elapsedActiveMs, { x: this.friend.x, y: this.friend.y });
