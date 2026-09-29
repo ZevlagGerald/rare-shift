@@ -6,6 +6,8 @@ import {
   applyOrbitStabilizerToOrbit,
   applyResonanceCoilToSignal,
   applyVectorLensToVector,
+  cr2EffectivePickupRadius,
+  cr2ProtocolFieldPickupRadiusBonus,
 } from "../src/cr2-protocol-runtime.ts";
 import { buildEchoProfile, ECHO_RETURN_DELAY_FLOOR_MS } from "../src/echo-core.ts";
 import { buildOrbitProfile } from "../src/orbit-core.ts";
@@ -23,6 +25,21 @@ function rows(active: readonly [number, number][]): FrameRows {
 function assertNear(actual: number, expected: number, tolerance = 1e-9): void {
   assert.ok(Math.abs(actual - expected) <= tolerance, `expected ${actual} to be within ${tolerance} of ${expected}`);
 }
+
+test("every Protocol has bounded standalone field utility even without its matching weapon", () => {
+  for (const family of ["COMMON_CORE", "VECTOR_LENS", "ORBIT_STABILIZER", "MEMORY_FUSE", "RESONANCE_COIL"] as const) {
+    assert.equal(cr2ProtocolFieldPickupRadiusBonus({ [family]: 1 }), 4, family);
+    assert.equal(cr2EffectivePickupRadius(76, { [family]: 1 }), 80, family);
+  }
+  assert.equal(cr2ProtocolFieldPickupRadiusBonus({
+    COMMON_CORE: 3,
+    VECTOR_LENS: 3,
+    ORBIT_STABILIZER: 3,
+    MEMORY_FUSE: 3,
+  }), 48);
+  assert.equal(cr2EffectivePickupRadius(220, { COMMON_CORE: 3, VECTOR_LENS: 3, ORBIT_STABILIZER: 3, MEMORY_FUSE: 3 }), 240);
+  assert.throws(() => cr2ProtocolFieldPickupRadiusBonus({ COMMON_CORE: 4 }), /ranks I-III/u);
+});
 
 test("COMMON CORE composes only bounded DELTA cadence/field support and preserves canonical authority", () => {
   const a = rows([[2, 2], [7, 7]]);
