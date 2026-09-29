@@ -149,3 +149,5 @@ jobs:
           test "$(git diff --cached --name-only)" = "games/rare-shift/src/phaser-survival.ts"
           git commit -m "feat(cr-2b): integrate Protocol runtime into Phaser"
           git push origin HEAD:feature/cr-2b-live-integration
+
+# Retry marker: VECTOR priority-band API is qualified at e466832162f4785d45340a76fe2f16d519fb48e2.
