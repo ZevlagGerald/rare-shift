@@ -68,22 +68,16 @@ function naturalQualification(width) {
     const canvas = await mount(game);
     const data = name => canvas.getAttribute(`data-${name}`);
     const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
-    let moveTicks = 0;
-
-    const moveCentralPatrol = async () => {
-      const key = route[Math.floor(moveTicks / 3) % route.length];
-      await canvas.press(key, { delay: 520 });
-      moveTicks += 1;
-    };
+    let routeIndex = 0;
 
     const moveUntilDraft = async (minimumLevel, deadlineMs, label) => {
       const deadline = Date.now() + deadlineMs;
       while (Date.now() < deadline && !(bool(await data("draft-open")) && Number(await data("level")) >= minimumLevel)) {
         if (bool(await data("dead"))) throw new Error(`died before ${label}; L${await data("level")}; HP${await data("hp")}; K${await data("kills")}; E${await data("director-elapsed-ms")}`);
         if (!bool(await data("draft-open"))) {
-          await moveCentralPatrol();
+          await canvas.press(route[routeIndex++ % route.length], { delay: 520 });
           await page.waitForTimeout(160);
-          if (moveTicks % 5 === 0 && !bool(await data("draft-open"))) {
+          if (routeIndex % 5 === 0 && !bool(await data("draft-open"))) {
             await shift(canvas, width);
             await page.waitForTimeout(95);
           }
