@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyV21Draft, buildV21Draft, isV21DraftChoiceValid } from "../src/draft-core.ts";
+import { applyV21Draft, buildV21Draft, isV21DraftChoiceValid, type V21BuildState } from "../src/draft-core.ts";
 import { applyV23ACandidate, enumerateV23ACandidates, type V23BuildState } from "../src/progression-core.ts";
 
-function live(rank: number, enabled = true) {
+function live(rank: number, enabled = true): V21BuildState {
   return {
     deltaRank: 5,
     hp: 80,
@@ -27,7 +27,7 @@ test("bounded live ECHO bridge is opt-in and slot neutral", () => {
 });
 
 test("ECHO bridge is monotonic I-V and rejects disabled, unowned, and Rank V", () => {
-  let state = live(1, true);
+  let state: V21BuildState = live(1, true);
   for (let rank = 2; rank <= 5; rank += 1) {
     state = applyV21Draft(state, "ECHO_RANK");
     assert.equal(state.echoRank, rank);
