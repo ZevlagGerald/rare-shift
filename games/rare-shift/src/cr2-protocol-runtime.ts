@@ -2,6 +2,7 @@ import { cr2ProtocolProfile, type CR2ProtocolRank } from "./cr2-progression-core
 import { ECHO_RETURN_DELAY_FLOOR_MS, type EchoRankProfile } from "./echo-core.ts";
 import type { OrbitRankProfile } from "./orbit-core.ts";
 import type { DeltaProfile } from "./phase-combat-core.ts";
+import type { V23ProtocolFamily } from "./progression-core.ts";
 import type { SignalArcRankProfile } from "./signal-arc-core.ts";
 import type { VectorRankProfile } from "./vector-core.ts";
 
@@ -20,8 +21,38 @@ export interface CR2SignalProtocolRuntime {
   readonly postShiftCommonBonus: number;
 }
 
+export const CR2_PROTOCOL_FIELD_RADIUS_PER_RANK = 4 as const;
+export const CR2_PROTOCOL_FIELD_RADIUS_MAX_BONUS = 48 as const;
+export const CR2_PROTOCOL_EFFECTIVE_PICKUP_RADIUS_CAP = 240 as const;
+
 function positiveIntegerMs(value: number): number {
   return Math.max(1, Math.round(value));
+}
+
+/**
+ * Every equipped Protocol contributes a small deterministic field-resonance
+ * benefit even when its matching weapon is not owned. Family-specific combat
+ * adapters below remain the larger identity benefit. Four Rank-III Protocols
+ * hard-cap at +48px and can never push the live pickup field beyond 240px.
+ */
+export function cr2ProtocolFieldPickupRadiusBonus(
+  protocols: Readonly<Partial<Record<V23ProtocolFamily, number>>>,
+): number {
+  let totalRanks = 0;
+  for (const rank of Object.values(protocols)) {
+    if (rank === undefined) continue;
+    if (!Number.isInteger(rank) || rank < 1 || rank > 3) throw new Error("Protocol field utility requires ranks I-III.");
+    totalRanks += rank;
+  }
+  return Math.min(CR2_PROTOCOL_FIELD_RADIUS_MAX_BONUS, totalRanks * CR2_PROTOCOL_FIELD_RADIUS_PER_RANK);
+}
+
+export function cr2EffectivePickupRadius(
+  baseRadius: number,
+  protocols: Readonly<Partial<Record<V23ProtocolFamily, number>>>,
+): number {
+  if (!Number.isFinite(baseRadius) || baseRadius < 0) throw new Error("Base pickup radius must be finite and non-negative.");
+  return Math.min(CR2_PROTOCOL_EFFECTIVE_PICKUP_RADIUS_CAP, baseRadius + cr2ProtocolFieldPickupRadiusBonus(protocols));
 }
 
 export function applyCommonCoreToDelta(base: DeltaProfile, rank: CR2ProtocolRank): CR2DeltaProtocolRuntime {
