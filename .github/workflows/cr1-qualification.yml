@@ -9,6 +9,7 @@ on:
       - ".github/workflows/cr1-qualification.yml"
       - "games/rare-shift/**"
       - "scripts/cr1-survival-director-browser.mjs"
+      - "scripts/v2-3b5-signal-browser.mjs"
       - "package.json"
       - "tsconfig.core.json"
   workflow_dispatch:
