@@ -129,6 +129,7 @@ function naturalQualification(width) {
         break;
       }
       let fallback = ids.indexOf("FIELD_REPAIR");
+      if (fallback < 0) fallback = ids.indexOf("ORBIT_RANK");
       if (fallback < 0) fallback = ids.indexOf("DELTA_RANK");
       if (fallback < 0) fallback = ids.indexOf("SIGNAL_MAGNET");
       if (fallback < 0) fallback = 0;
