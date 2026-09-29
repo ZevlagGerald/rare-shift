@@ -25,6 +25,7 @@ import {
   enemyBaseHp,
   enemyContactDamage,
   enemyMoveSpeed,
+  enemyThreatPhase,
   isDeltaEchoTargetEligible,
   isEnemyCorporeal,
   migrateDeltaCooldownAccumulator,
@@ -45,17 +46,41 @@ import {
 } from "./orbit-core.ts";
 import {
   addSignalXp,
-  buildSpawnSpec,
   clampPlayerPosition,
   V21_CONTACT_INVULN_MS,
   V21_MAX_ACTIVE_ENEMIES,
   V21_PLAYER_MAX_HP,
-  V21_SPAWN_INTERVAL_MS,
   V21_WORLD_HEIGHT,
   V21_WORLD_WIDTH,
   v21QualificationReached,
   xpThreshold,
 } from "./survival-core.ts";
+import {
+  CR1_BEACON_COOLDOWN_MS,
+  CR1_BEACON_PROJECTILE_DAMAGE,
+  CR1_BEACON_PROJECTILE_LIFETIME_MS,
+  CR1_BEACON_PROJECTILE_SPEED,
+  CR1_BEACON_TELEGRAPH_MS,
+  CR1_ELITE_PULSE_COOLDOWN_MS,
+  CR1_ELITE_PULSE_DAMAGE,
+  CR1_ELITE_PULSE_RADIUS,
+  CR1_ELITE_PULSE_TELEGRAPH_MS,
+  CR1_FLICKER_SWITCH_MS,
+  CR1_FLICKER_WARNING_MS,
+  CR1_MAX_BEACON_PROJECTILES,
+  buildCheckpointSpawnPosition,
+  buildDirectedSpawnSpec,
+  claimCheckpointRewards,
+  dueCheckpoints,
+  emptyCR1RewardLedger,
+  isFlickerKind,
+  nextFlickerKind,
+  stageForElapsedMs,
+  type CR1CheckpointId,
+  type CR1PickupKind,
+  type CR1RewardLedger,
+  type CR1StageId,
+} from "./cr1-director-core.ts";
 import type { FrameRows, Phase, SelectedFramePair } from "./types.ts";
 import { buildFractureGrid, V2_ART_SPRITES, V2_PALETTE } from "./v2-art-core.ts";
 import { effectDuration } from "./v2-fx-core.ts";
@@ -98,17 +123,41 @@ interface EnemyRuntime {
   active: boolean;
   kind: V2EnemyKind;
   hp: number;
+  maxHp: number;
   x: number;
   y: number;
   staggerUntilMs: number;
+  elite: boolean;
+  checkpointId: CR1CheckpointId | null;
+  beaconNextShotAt: number;
+  beaconLaunchAt: number | null;
+  beaconDirectionX: number;
+  beaconDirectionY: number;
+  flickerNextSwitchAt: number;
+  eliteNextPulseAt: number;
+  elitePulseAt: number | null;
   view: Phaser.GameObjects.Container;
+  telegraphView: Phaser.GameObjects.Graphics;
+  healthView: Phaser.GameObjects.Graphics;
 }
 
 interface PickupRuntime {
   active: boolean;
+  kind: CR1PickupKind;
+  magnetized: boolean;
   x: number;
   y: number;
   view: Phaser.GameObjects.Container;
+}
+
+interface BeaconProjectileRuntime {
+  active: boolean;
+  x: number;
+  y: number;
+  directionX: number;
+  directionY: number;
+  bornAtMs: number;
+  view: Phaser.GameObjects.Rectangle;
 }
 
 interface VectorProjectileRuntime {
@@ -173,6 +222,7 @@ class SurvivalScene extends Phaser.Scene {
   private friend!: Phaser.GameObjects.Container;
   private enemies: EnemyRuntime[] = [];
   private pickups: PickupRuntime[] = [];
+  private beaconProjectiles: BeaconProjectileRuntime[] = [];
   private vectorProjectiles: VectorProjectileRuntime[] = [];
   private echoMines: EchoMineRuntime[] = [];
   private vectorReticle!: Phaser.GameObjects.Graphics;
@@ -268,6 +318,12 @@ class SurvivalScene extends Phaser.Scene {
   private elapsedActiveMs = 0;
   private spawnAccumulator = 0;
   private spawnIndex = 0;
+  private directorStage: CR1StageId = "STAGE_I";
+  private readonly spawnedCheckpoints = new Set<CR1CheckpointId>();
+  private rewardLedger: CR1RewardLedger = emptyCR1RewardLedger();
+  private evolutionCores = 0;
+  private elitesDefeated = 0;
+  private bossPending = false;
   private attackAccumulator = 0;
   private lastContactAt = -99_999;
   private dead = false;
@@ -295,6 +351,7 @@ class SurvivalScene extends Phaser.Scene {
   private buildText!: Phaser.GameObjects.Text;
   private phaseText!: Phaser.GameObjects.Text;
   private statusText!: Phaser.GameObjects.Text;
+  private stageText!: Phaser.GameObjects.Text;
 
   constructor(private readonly opts: Omit<SurvivalOptions, "parent">) {
     super({ key: "RareShiftV21Survival" });
@@ -385,10 +442,16 @@ class SurvivalScene extends Phaser.Scene {
     const dt = Math.min(50, Math.max(0, delta));
     this.elapsedActiveMs += dt;
     this.updateMovement(dt / 1000);
-    this.spawnAccumulator += dt;
-    while (this.spawnAccumulator >= V21_SPAWN_INTERVAL_MS) {
-      this.spawnAccumulator -= V21_SPAWN_INTERVAL_MS;
-      this.spawnEnemy();
+    this.updateDirector();
+    const stage = stageForElapsedMs(this.elapsedActiveMs);
+    if (stage.spawnIntervalMs !== null) {
+      this.spawnAccumulator += dt;
+      while (this.spawnAccumulator >= stage.spawnIntervalMs) {
+        this.spawnAccumulator -= stage.spawnIntervalMs;
+        this.spawnEnemy();
+      }
+    } else {
+      this.spawnAccumulator = 0;
     }
 
     this.attackAccumulator += dt;
@@ -427,6 +490,7 @@ class SurvivalScene extends Phaser.Scene {
     else this.signalFx.clear().setVisible(false);
 
     this.updateEnemies(dt / 1000);
+    this.updateBeaconProjectiles(dt / 1000);
     this.updatePickups(dt / 1000);
     this.updateHud();
 
@@ -466,13 +530,19 @@ class SurvivalScene extends Phaser.Scene {
   private buildPools(): void {
     for (let i = 0; i < V21_MAX_ACTIVE_ENEMIES; i++) {
       const view = this.add.container(-500, -500).setDepth(20).setVisible(false);
-      this.enemies.push({ id: -1, active: false, kind: "TRACE", hp: 0, x: -500, y: -500, staggerUntilMs: 0, view });
+      const telegraphView = this.add.graphics().setDepth(19).setVisible(false);
+      const healthView = this.add.graphics().setDepth(31).setVisible(false);
+      this.enemies.push({
+        id: -1, active: false, kind: "TRACE", hp: 0, maxHp: 0, x: -500, y: -500, staggerUntilMs: 0,
+        elite: false, checkpointId: null, beaconNextShotAt: 0, beaconLaunchAt: null, beaconDirectionX: 0, beaconDirectionY: 0,
+        flickerNextSwitchAt: 0, eliteNextPulseAt: 0, elitePulseAt: null, view, telegraphView, healthView,
+      });
     }
     for (let i = 0; i < PICKUP_POOL_SIZE; i++) {
       const view = this.add.container(-500, -500).setDepth(15).setVisible(false);
       this.paintRows(view, V2_ART_SPRITES.SIGNAL_XP.rows, hex(V2_PALETTE.common), 2);
       view.addAt(this.add.circle(0, 0, 20, hex(V2_PALETTE.common), 0.025).setStrokeStyle(1, hex(V2_PALETTE.common), 0.28), 0);
-      this.pickups.push({ active: false, x: -500, y: -500, view });
+      this.pickups.push({ active: false, kind: "SIGNAL_XP", magnetized: false, x: -500, y: -500, view });
     }
     for (let i = 0; i < VECTOR_RANK_I.maxInFlight; i++) {
       const view = this.add.rectangle(-500, -500, 18, 4, hex(V2_PALETTE.common), 0.95).setDepth(28).setVisible(false);
@@ -510,10 +580,27 @@ class SurvivalScene extends Phaser.Scene {
     }
   }
 
-  private paintEnemy(container: Phaser.GameObjects.Container, kind: V2EnemyKind): void {
-    const tone = kind === "TRACE" ? hex(V2_PALETTE.common) : kind === "SPLIT_A" ? hex(V2_PALETTE.phaseA) : hex(V2_PALETTE.phaseB);
-    this.paintRows(container, V2_ART_SPRITES[kind].rows, tone, 2);
-    if (kind === "TRACE") {
+  private paintEnemy(container: Phaser.GameObjects.Container, kind: V2EnemyKind, elite = false): void {
+    const threat = enemyThreatPhase(kind);
+    const tone = threat === "A" ? hex(V2_PALETTE.phaseA) : threat === "B" ? hex(V2_PALETTE.phaseB) : hex(V2_PALETTE.common);
+    const spriteKey = kind === "SPLIT_A" || kind === "FLICKER_A" ? "SPLIT_A" : kind === "SPLIT_B" || kind === "FLICKER_B" ? "SPLIT_B" : "TRACE";
+    const scale = kind === "ANCHOR" ? 2.7 : kind === "BEACON" ? 2.2 : 2;
+    this.paintRows(container, V2_ART_SPRITES[spriteKey].rows, tone, scale);
+    if (kind === "BEACON") {
+      container.add(this.add.rectangle(0, 0, 46, 46, 0x000000, 0).setStrokeStyle(2, tone, 0.72));
+      container.add(this.add.rectangle(0, -28, 4, 16, tone, 0.9));
+      container.add(this.add.circle(0, -37, 5, tone, 0.9));
+      container.add(this.add.rectangle(0, 0, 60, 2, tone, 0.52));
+    } else if (kind === "ANCHOR") {
+      container.add(this.add.rectangle(0, 0, 58, 58, 0x000000, 0).setStrokeStyle(3, tone, 0.82));
+      container.add(this.add.rectangle(0, 0, 40, 40, 0x000000, 0).setStrokeStyle(1, tone, 0.55));
+      container.add(this.add.rectangle(-30, 0, 8, 22, tone, 0.82));
+      container.add(this.add.rectangle(30, 0, 8, 22, tone, 0.82));
+    } else if (isFlickerKind(kind)) {
+      const side = kind === "FLICKER_A" ? -24 : 24;
+      container.add(this.add.rectangle(0, 0, 46, 46, 0x000000, 0).setStrokeStyle(2, tone, 0.72).setRotation(Math.PI / 4));
+      container.add(this.add.rectangle(side, 0, 4, 32, tone, 0.88));
+    } else if (kind === "TRACE") {
       container.add(this.add.rectangle(0, 0, 40, 40, 0x000000, 0).setStrokeStyle(1, tone, 0.48));
       container.add(this.add.rectangle(0, -22, 10, 2, tone, 0.7));
       container.add(this.add.rectangle(0, 22, 10, 2, tone, 0.7));
@@ -522,6 +609,10 @@ class SurvivalScene extends Phaser.Scene {
       container.add(this.add.rectangle(side, 0, 3, 30, tone, 0.72));
       container.add(this.add.rectangle(side + inward, -13, 10, 3, tone, 0.72));
       container.add(this.add.rectangle(side + inward, 13, 10, 3, tone, 0.72));
+    }
+    if (elite) {
+      container.add(this.add.circle(0, 0, 38, 0x000000, 0).setStrokeStyle(3, 0xf6c85f, 0.95));
+      container.add(this.add.rectangle(0, -46, 14, 6, 0xf6c85f, 0.95).setRotation(Math.PI / 4));
     }
   }
 
@@ -544,6 +635,7 @@ class SurvivalScene extends Phaser.Scene {
     this.buildText = this.add.text(574, 20, "", { fontFamily: "monospace", fontSize: "9px", color: "#9eabb8", fontStyle: "bold" }).setScrollFactor(0).setDepth(102);
     this.phaseText = this.add.text(790, 16, "", { fontFamily: "monospace", fontSize: "14px", color: V2_PALETTE.phaseB, fontStyle: "bold", align: "right" }).setScrollFactor(0).setDepth(102);
     this.statusText = this.add.text(480, 82, "MOVE · AUTO-FIRE · SPACE / SHIFT", { fontFamily: "monospace", fontSize: "10px", color: "#aeb9c5", backgroundColor: "#0b0e12", padding: { x: 8, y: 4 } }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(110);
+    this.stageText = this.add.text(480, 112, "", { fontFamily: "monospace", fontSize: "12px", color: "#d7e0e8", backgroundColor: "#0b0e12", padding: { x: 9, y: 4 }, fontStyle: "bold" }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(109);
     this.updateHud();
   }
 
@@ -555,34 +647,149 @@ class SurvivalScene extends Phaser.Scene {
     this.hudText.setText(`HP ${Math.max(0, this.hp)}/${V21_PLAYER_MAX_HP}   LV ${this.level}   XP ${this.xp}/${xpThreshold(this.level)}`);
     this.buildText.setText(`K ${this.kills} · Δ ${romanRank(this.deltaRank)} · V ${this.vectorOwned ? romanRank(this.vectorRank) : "--"} · O ${this.orbitOwned ? romanRank(this.orbitRank) : "--"} · E ${this.echoOwned ? romanRank(this.echoRank) : "--"} · S ${this.signalOwned ? romanRank(this.signalRank) : "--"}`);
     this.phaseText.setColor(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB).setText(`PHASE ${this.phase}\nFRAME ${this.phase === "A" ? this.pair.a.index : this.pair.b.index}`);
+    if (this.stageText) this.stageText.setText(`${stageForElapsedMs(this.elapsedActiveMs).label} · CORES ${this.evolutionCores}`);
     if (this.shiftButton) this.shiftButton.setStrokeStyle(2, hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB));
+  }
+
+  private updateDirector(): void {
+    const stage = stageForElapsedMs(this.elapsedActiveMs);
+    if (stage.id !== this.directorStage) {
+      this.directorStage = stage.id;
+      this.statusText.setText(stage.label);
+    }
+    this.bossPending = stage.id === "BOSS_PENDING";
+    for (const checkpoint of dueCheckpoints(this.elapsedActiveMs, this.spawnedCheckpoints)) {
+      if (this.spawnCheckpoint(checkpoint.id, checkpoint.kind, checkpoint.hpMultiplier, checkpoint.label)) this.spawnedCheckpoints.add(checkpoint.id);
+    }
+  }
+
+  private activateEnemy(slot: EnemyRuntime, id: number, kind: V2EnemyKind, x: number, y: number, elite: boolean, checkpointId: CR1CheckpointId | null, hpMultiplier = 1): void {
+    const maxHp = Math.max(1, Math.round(enemyBaseHp(kind) * hpMultiplier));
+    slot.id = id; slot.active = true; slot.kind = kind; slot.hp = maxHp; slot.maxHp = maxHp; slot.x = x; slot.y = y; slot.staggerUntilMs = 0;
+    slot.elite = elite; slot.checkpointId = checkpointId; slot.beaconNextShotAt = this.elapsedActiveMs + 1200; slot.beaconLaunchAt = null; slot.beaconDirectionX = 0; slot.beaconDirectionY = 0;
+    slot.flickerNextSwitchAt = isFlickerKind(kind) ? this.elapsedActiveMs + CR1_FLICKER_SWITCH_MS : 0;
+    slot.eliteNextPulseAt = elite ? this.elapsedActiveMs + 1800 : 0; slot.elitePulseAt = null;
+    slot.telegraphView.clear().setVisible(false); slot.healthView.clear().setVisible(false);
+    slot.view.setPosition(x, y).setVisible(true).setScale(1);
+    this.paintEnemy(slot.view, kind, elite);
+    slot.view.setAlpha(isEnemyCorporeal(kind, this.phase) ? 1 : 0.24);
+  }
+
+  private spawnCheckpoint(checkpointId: CR1CheckpointId, kind: V2EnemyKind, hpMultiplier: number, label: string): boolean {
+    const slot = this.enemies.find(enemy => !enemy.active);
+    if (!slot) return false;
+    const position = buildCheckpointSpawnPosition(this.seed, checkpointId, { x: this.friend.x, y: this.friend.y });
+    this.activateEnemy(slot, this.spawnIndex++, kind, position.x, position.y, true, checkpointId, hpMultiplier);
+    this.statusText.setText(label);
+    return true;
   }
 
   private spawnEnemy(): void {
     const slot = this.enemies.find(enemy => !enemy.active);
     if (!slot) return;
-    const spec = buildSpawnSpec(this.seed, this.spawnIndex++, this.elapsedActiveMs, { x: this.friend.x, y: this.friend.y });
-    slot.id = spec.id; slot.active = true; slot.kind = spec.kind; slot.hp = enemyBaseHp(spec.kind); slot.x = spec.position.x; slot.y = spec.position.y; slot.staggerUntilMs = 0;
-    slot.view.setPosition(slot.x, slot.y).setVisible(true);
-    this.paintEnemy(slot.view, spec.kind);
-    slot.view.setAlpha(isEnemyCorporeal(spec.kind, this.phase) ? 1 : 0.24);
+    const spec = buildDirectedSpawnSpec(this.seed, this.spawnIndex, this.elapsedActiveMs, { x: this.friend.x, y: this.friend.y });
+    if (!spec) return;
+    this.spawnIndex += 1;
+    this.activateEnemy(slot, spec.id, spec.kind, spec.position.x, spec.position.y, false, null, 1);
+  }
+
+  private applyPlayerDamage(amount: number): boolean {
+    if (this.elapsedActiveMs - this.lastContactAt < V21_CONTACT_INVULN_MS) return false;
+    this.lastContactAt = this.elapsedActiveMs;
+    this.hp = Math.max(0, this.hp - amount);
+    if (!this.reduced) this.cameras.main.flash(80, 246, 200, 95, false);
+    if (this.hp <= 0) { this.dead = true; this.statusText.setText("SIGNAL LOST // run ended."); }
+    return true;
+  }
+
+  private updateFlicker(enemy: EnemyRuntime): void {
+    if (!isFlickerKind(enemy.kind)) return;
+    const warningAt = enemy.flickerNextSwitchAt - CR1_FLICKER_WARNING_MS;
+    if (this.elapsedActiveMs >= warningAt && this.elapsedActiveMs < enemy.flickerNextSwitchAt) {
+      const nextKind = nextFlickerKind(enemy.kind);
+      const tone = hex(nextKind === "FLICKER_A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB);
+      enemy.telegraphView.clear().setVisible(true).setPosition(enemy.x, enemy.y).lineStyle(2, tone, 0.8).strokeCircle(0, 0, 34);
+    }
+    if (this.elapsedActiveMs < enemy.flickerNextSwitchAt) return;
+    enemy.kind = nextFlickerKind(enemy.kind);
+    enemy.flickerNextSwitchAt += CR1_FLICKER_SWITCH_MS;
+    enemy.telegraphView.clear().setVisible(false);
+    this.paintEnemy(enemy.view, enemy.kind, enemy.elite);
+  }
+
+  private updateBeacon(enemy: EnemyRuntime): void {
+    if (enemy.kind !== "BEACON") return;
+    if (enemy.beaconLaunchAt === null && this.elapsedActiveMs >= enemy.beaconNextShotAt) {
+      const dx = this.friend.x - enemy.x, dy = this.friend.y - enemy.y, length = Math.max(0.001, Math.hypot(dx, dy));
+      enemy.beaconDirectionX = dx / length; enemy.beaconDirectionY = dy / length;
+      enemy.beaconLaunchAt = this.elapsedActiveMs + CR1_BEACON_TELEGRAPH_MS;
+      enemy.telegraphView.clear().setVisible(true).setPosition(enemy.x, enemy.y).lineStyle(2, hex(V2_PALETTE.common), 0.72).lineBetween(0, 0, enemy.beaconDirectionX * 210, enemy.beaconDirectionY * 210);
+    }
+    if (enemy.beaconLaunchAt === null || this.elapsedActiveMs < enemy.beaconLaunchAt) return;
+    this.spawnBeaconProjectile(enemy);
+    enemy.beaconLaunchAt = null; enemy.beaconNextShotAt = this.elapsedActiveMs + CR1_BEACON_COOLDOWN_MS; enemy.telegraphView.clear().setVisible(false);
+  }
+
+  private updateElitePulse(enemy: EnemyRuntime): void {
+    if (!enemy.elite || enemy.kind === "BEACON" || isFlickerKind(enemy.kind)) return;
+    if (enemy.elitePulseAt === null && this.elapsedActiveMs >= enemy.eliteNextPulseAt) {
+      enemy.elitePulseAt = this.elapsedActiveMs + CR1_ELITE_PULSE_TELEGRAPH_MS;
+      enemy.telegraphView.clear().setVisible(true).setPosition(enemy.x, enemy.y).lineStyle(3, 0xf6c85f, 0.78).strokeCircle(0, 0, CR1_ELITE_PULSE_RADIUS);
+    }
+    if (enemy.elitePulseAt === null || this.elapsedActiveMs < enemy.elitePulseAt) return;
+    const distance = Math.hypot(this.friend.x - enemy.x, this.friend.y - enemy.y);
+    if (isEnemyCorporeal(enemy.kind, this.phase) && distance <= CR1_ELITE_PULSE_RADIUS) this.applyPlayerDamage(CR1_ELITE_PULSE_DAMAGE);
+    enemy.elitePulseAt = null; enemy.eliteNextPulseAt = this.elapsedActiveMs + CR1_ELITE_PULSE_COOLDOWN_MS; enemy.telegraphView.clear().setVisible(false);
+  }
+
+  private spawnBeaconProjectile(enemy: EnemyRuntime): void {
+    if (this.beaconProjectiles.length >= CR1_MAX_BEACON_PROJECTILES) return;
+    const view = this.add.rectangle(enemy.x, enemy.y, 14, 6, hex(V2_PALETTE.common), 0.94).setDepth(26).setRotation(Math.atan2(enemy.beaconDirectionY, enemy.beaconDirectionX));
+    this.beaconProjectiles.push({ active: true, x: enemy.x, y: enemy.y, directionX: enemy.beaconDirectionX, directionY: enemy.beaconDirectionY, bornAtMs: this.elapsedActiveMs, view });
+  }
+
+  private updateBeaconProjectiles(dt: number): void {
+    const survivors: BeaconProjectileRuntime[] = [];
+    for (const projectile of this.beaconProjectiles) {
+      if (!projectile.active) { projectile.view.destroy(); continue; }
+      if (this.elapsedActiveMs - projectile.bornAtMs >= CR1_BEACON_PROJECTILE_LIFETIME_MS) { projectile.view.destroy(); continue; }
+      projectile.x += projectile.directionX * CR1_BEACON_PROJECTILE_SPEED * dt;
+      projectile.y += projectile.directionY * CR1_BEACON_PROJECTILE_SPEED * dt;
+      projectile.view.setPosition(projectile.x, projectile.y);
+      if (Math.hypot(this.friend.x - projectile.x, this.friend.y - projectile.y) < 25) {
+        this.applyPlayerDamage(CR1_BEACON_PROJECTILE_DAMAGE); projectile.view.destroy(); continue;
+      }
+      survivors.push(projectile);
+    }
+    this.beaconProjectiles = survivors;
+  }
+
+  private updateEliteHealth(enemy: EnemyRuntime): void {
+    if (!enemy.elite) { enemy.healthView.clear().setVisible(false); return; }
+    const ratio = Math.max(0, Math.min(1, enemy.hp / Math.max(1, enemy.maxHp)));
+    enemy.healthView.clear().setVisible(true).setPosition(enemy.x, enemy.y - 52).fillStyle(0x252b33, 0.95).fillRect(-34, -3, 68, 6).fillStyle(0xf6c85f, 1).fillRect(-34, -3, 68 * ratio, 6);
   }
 
   private updateEnemies(dt: number): void {
     for (const enemy of this.enemies) {
       if (!enemy.active) continue;
+      this.updateFlicker(enemy);
+      this.updateBeacon(enemy);
+      this.updateElitePulse(enemy);
       const dx = this.friend.x - enemy.x, dy = this.friend.y - enemy.y, distance = Math.max(0.001, Math.hypot(dx, dy));
       if (this.elapsedActiveMs >= enemy.staggerUntilMs) {
-        const speed = enemyMoveSpeed(enemy.kind);
-        enemy.x += dx / distance * speed * dt; enemy.y += dy / distance * speed * dt;
+        const speed = enemyMoveSpeed(enemy.kind) * (enemy.elite ? 0.92 : 1);
+        let direction = 1;
+        if (enemy.kind === "BEACON") direction = distance < 230 ? -0.7 : distance <= 330 ? 0 : 1;
+        enemy.x += dx / distance * speed * dt * direction; enemy.y += dy / distance * speed * dt * direction;
       }
-      enemy.view.setPosition(enemy.x, enemy.y);
+      enemy.view.setPosition(enemy.x, enemy.y); enemy.telegraphView.setPosition(enemy.x, enemy.y);
+      this.updateEliteHealth(enemy);
       const corporeal = isEnemyCorporeal(enemy.kind, this.phase);
       enemy.view.setAlpha(corporeal ? 1 : 0.22);
-      if (corporeal && distance < 32 && this.elapsedActiveMs - this.lastContactAt >= V21_CONTACT_INVULN_MS) {
-        this.lastContactAt = this.elapsedActiveMs; this.hp = Math.max(0, this.hp - enemyContactDamage(enemy.kind));
-        if (!this.reduced) this.cameras.main.flash(80, 246, 200, 95, false);
-        if (this.hp <= 0) { this.dead = true; this.statusText.setText("SIGNAL LOST // V2-1 sandbox stopped at 0 HP."); break; }
+      if (corporeal && distance < (enemy.kind === "ANCHOR" ? 38 : 32)) {
+        this.applyPlayerDamage(enemyContactDamage(enemy.kind) + (enemy.elite ? 2 : 0));
+        if (this.dead) break;
       }
     }
   }
@@ -1120,15 +1327,49 @@ class SurvivalScene extends Phaser.Scene {
     this.time.delayedCall(this.reduced ? 55 : 105, () => this.signalFx.clear().setVisible(false));
   }
 
+  private paintPickup(pickup: PickupRuntime): void {
+    const view = pickup.view; view.removeAll(true);
+    if (pickup.kind === "SIGNAL_XP") {
+      this.paintRows(view, V2_ART_SPRITES.SIGNAL_XP.rows, hex(V2_PALETTE.common), 2);
+      view.addAt(this.add.circle(0, 0, 20, hex(V2_PALETTE.common), 0.025).setStrokeStyle(1, hex(V2_PALETTE.common), 0.28), 0);
+    } else if (pickup.kind === "REPAIR") {
+      view.add(this.add.rectangle(0, 0, 26, 8, 0x7ee787, 0.95)); view.add(this.add.rectangle(0, 0, 8, 26, 0x7ee787, 0.95));
+    } else if (pickup.kind === "VACUUM") {
+      view.add(this.add.circle(0, 0, 16, 0x000000, 0).setStrokeStyle(3, 0x4cc9f0, 0.95)); view.add(this.add.circle(0, 0, 5, 0x4cc9f0, 0.95));
+    } else if (pickup.kind === "DISCHARGE") {
+      const g = this.add.graphics().lineStyle(3, 0xf72585, 0.95); g.lineBetween(-13, -13, 13, 13); g.lineBetween(13, -13, -13, 13); view.add(g);
+    } else {
+      view.add(this.add.rectangle(0, 0, 20, 20, 0xf6c85f, 0.96).setRotation(Math.PI / 4)); view.add(this.add.circle(0, 0, 4, 0xe8edf2, 0.95));
+    }
+  }
+
+  private spawnPickup(kind: CR1PickupKind, x: number, y: number, offsetIndex = 0): void {
+    const pickup = this.pickups.find(item => !item.active);
+    if (!pickup) return;
+    pickup.active = true; pickup.kind = kind; pickup.magnetized = false; pickup.x = x + offsetIndex * 18; pickup.y = y + offsetIndex * 12;
+    this.paintPickup(pickup); pickup.view.setPosition(pickup.x, pickup.y).setVisible(true).setAlpha(1);
+  }
+
   private killEnemy(enemy: EnemyRuntime): void {
+    if (!enemy.active) return;
     const deathX = enemy.x, deathY = enemy.y;
-    const deathTone = enemy.kind === "TRACE" ? hex(V2_PALETTE.common) : enemy.kind === "SPLIT_A" ? hex(V2_PALETTE.phaseA) : hex(V2_PALETTE.phaseB);
+    const threat = enemyThreatPhase(enemy.kind);
+    const deathTone = threat === "A" ? hex(V2_PALETTE.phaseA) : threat === "B" ? hex(V2_PALETTE.phaseB) : hex(V2_PALETTE.common);
     this.orbitLastHitAt.delete(enemy.id);
-    enemy.active = false; enemy.view.setVisible(false); this.kills += 1; this.emitDeathFx(deathX, deathY, deathTone);
+    const elite = enemy.elite, checkpointId = enemy.checkpointId;
+    enemy.active = false; enemy.view.setVisible(false); enemy.telegraphView.clear().setVisible(false); enemy.healthView.clear().setVisible(false); this.kills += 1; this.emitDeathFx(deathX, deathY, deathTone);
     if (this.vectorTargetId === enemy.id) { this.vectorTargetId = null; this.vectorTargetKind = null; this.vectorReticle.setVisible(false); }
     if (this.vectorRank >= 5 && this.vectorLockState.targetId === enemy.id) this.resetVectorLockState();
-    const pickup = this.pickups.find(item => !item.active);
-    if (pickup) { pickup.active = true; pickup.x = deathX; pickup.y = deathY; pickup.view.setPosition(pickup.x, pickup.y).setVisible(true).setAlpha(1); }
+    this.spawnPickup("SIGNAL_XP", deathX, deathY);
+    if (elite && checkpointId) {
+      const claim = claimCheckpointRewards(this.rewardLedger, checkpointId, this.evolutionCores);
+      this.rewardLedger = claim.ledger;
+      if (claim.newlyClaimed) {
+        this.elitesDefeated += 1;
+        claim.rewards.forEach((reward, index) => this.spawnPickup(reward, deathX, deathY, index + 1));
+        this.statusText.setText(`${checkpointId.replaceAll("_", " ")} DEFEATED // reward signal released.`);
+      }
+    }
   }
 
   private emitDeathFx(x: number, y: number, tone: number): void {
@@ -1143,8 +1384,8 @@ class SurvivalScene extends Phaser.Scene {
     for (const pickup of this.pickups) {
       if (!pickup.active) continue;
       const dx = this.friend.x - pickup.x, dy = this.friend.y - pickup.y, distance = Math.max(0.001, Math.hypot(dx, dy));
-      if (distance <= this.pickupRadius) {
-        const speed = Math.max(180, 460 - distance);
+      if (pickup.magnetized || distance <= this.pickupRadius) {
+        const speed = pickup.magnetized ? 720 : Math.max(180, 460 - distance);
         pickup.x += dx / distance * speed * dt; pickup.y += dy / distance * speed * dt; pickup.view.setPosition(pickup.x, pickup.y);
       }
       if (distance < 24 && this.collectPickup(pickup)) break;
@@ -1152,7 +1393,15 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private collectPickup(pickup: PickupRuntime): boolean {
-    pickup.active = false; pickup.view.setVisible(false);
+    const kind = pickup.kind; pickup.active = false; pickup.magnetized = false; pickup.view.setVisible(false);
+    if (kind === "REPAIR") { this.hp = Math.min(V21_PLAYER_MAX_HP, this.hp + 28); this.statusText.setText("REPAIR // integrity restored."); return false; }
+    if (kind === "VACUUM") { for (const item of this.pickups) if (item.active && item.kind === "SIGNAL_XP") item.magnetized = true; this.statusText.setText("VACUUM // Signal XP recalled."); return false; }
+    if (kind === "DISCHARGE") {
+      const targets = this.enemies.filter(enemy => enemy.active && !enemy.elite);
+      for (const enemy of targets) this.killEnemy(enemy);
+      this.statusText.setText("DISCHARGE // ordinary threat field cleared."); return false;
+    }
+    if (kind === "EVOLUTION_CORE") { this.evolutionCores += 1; this.statusText.setText(`EVOLUTION CORE ACQUIRED // ${this.evolutionCores}`); return false; }
     const progress = addSignalXp(this.level, this.xp, 1); this.level = progress.level; this.xp = progress.xp;
     if (progress.levelsGained <= 0) return false;
     this.openDraft();
@@ -1429,6 +1678,10 @@ class SurvivalScene extends Phaser.Scene {
     canvas.dataset.deltaRank = String(this.deltaRank); canvas.dataset.pickupRadius = String(this.pickupRadius); canvas.dataset.draftOpen = this.draftOpen ? "true" : "false";
     canvas.dataset.draftCount = String(this.draftChoices.length); canvas.dataset.draftIds = this.draftChoices.map(choice => choice.id).join(",");
     canvas.dataset.activeEnemies = String(this.enemies.filter(enemy => enemy.active).length); canvas.dataset.qualified = this.qualified ? "true" : "false"; canvas.dataset.dead = this.dead ? "true" : "false";
+    canvas.dataset.directorStage = this.directorStage; canvas.dataset.directorElapsedMs = String(Math.round(this.elapsedActiveMs)); canvas.dataset.bossPending = this.bossPending ? "true" : "false";
+    canvas.dataset.spawnedCheckpoints = [...this.spawnedCheckpoints].join(","); canvas.dataset.elitesDefeated = String(this.elitesDefeated); canvas.dataset.evolutionCores = String(this.evolutionCores);
+    canvas.dataset.activeElites = String(this.enemies.filter(enemy => enemy.active && enemy.elite).length); canvas.dataset.beaconProjectiles = String(this.beaconProjectiles.length);
+    canvas.dataset.enemyKinds = this.enemies.filter(enemy => enemy.active).map(enemy => enemy.kind).sort().join(",");
     canvas.dataset.seed = String(this.seed); canvas.dataset.controlsDimmed = this.draftOpen ? "true" : "false"; canvas.dataset.deltaFx = "canonical-exclusive";
     const deltaProfile = buildDeltaProfile(this.pair.a.rows, this.pair.b.rows, this.phase, this.deltaRank);
     canvas.dataset.deltaDamage = String(deltaProfile.damage);
