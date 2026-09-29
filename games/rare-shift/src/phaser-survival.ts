@@ -104,6 +104,33 @@ import {
   type VectorTransferState,
 } from "./vector-core.ts";
 import { advanceSignalArcCooldown, buildSignalArcProfile, planSignalArc, SIGNAL_ARC_RANK_I, type SignalArcHop } from "./signal-arc-core.ts";
+import {
+  applyCR2CandidateToLive,
+  buildCR2StateFromLive,
+  grantCR2CoreToLive,
+  projectCR2StateToLive,
+  restoreCR2RefractToLive,
+  type CR2LiveProjection,
+  type CR2LiveSnapshot,
+} from "./cr2-live-state-core.ts";
+import { cr2DraftCategory, cr2LegacyCompatibleDraftId } from "./cr2-live-draft-compat.ts";
+import {
+  applyCommonCoreToDelta,
+  applyMemoryFuseToEcho,
+  applyOrbitStabilizerToOrbit,
+  applyResonanceCoilToSignal,
+  applyVectorLensToVector,
+  cr2EffectivePickupRadius,
+} from "./cr2-protocol-runtime.ts";
+import type { CR2ProtocolRank } from "./cr2-progression-core.ts";
+import {
+  buildV23ADraft,
+  useV23ARefract,
+  V23_PROTOCOL_FAMILIES,
+  type V23DraftCandidate,
+  type V23ProtocolFamily,
+  type V23WeaponFamily,
+} from "./progression-core.ts";
 
 export interface PhaserSurvivalController {
   destroy(): void;
@@ -202,6 +229,13 @@ const VIEW_W = 960;
 const VIEW_H = 640;
 const PLAYER_SPEED = 220;
 const PICKUP_POOL_SIZE = 64;
+const PROTOCOL_SHORT: Readonly<Record<V23ProtocolFamily, string>> = Object.freeze({
+  COMMON_CORE: "CC",
+  VECTOR_LENS: "VL",
+  ORBIT_STABILIZER: "OS",
+  MEMORY_FUSE: "MF",
+  RESONANCE_COIL: "RC",
+});
 
 function hex(value: string): number { return Number.parseInt(value.slice(1), 16); }
 function romanRank(rank: number): string { return ["I", "II", "III", "IV", "V"][Math.max(1, Math.min(5, rank)) - 1]; }
@@ -323,15 +357,20 @@ class SurvivalScene extends Phaser.Scene {
   private readonly spawnedCheckpoints = new Set<CR1CheckpointId>();
   private rewardLedger: CR1RewardLedger = emptyCR1RewardLedger();
   private evolutionCores = 0;
+  private protocols: Partial<Record<V23ProtocolFamily, number>> = {};
+  private evolvedWeapons: Partial<Record<V23WeaponFamily, boolean>> = {};
+  private refracts = 1;
+  private rerollNonce = 0;
   private elitesDefeated = 0;
   private bossPending = false;
   private attackAccumulator = 0;
   private lastContactAt = -99_999;
   private dead = false;
   private draftOpen = false;
-  private draftChoices: readonly V21DraftChoice[] = [];
+  private draftChoices: readonly V23DraftCandidate[] = [];
   private draftViews: Phaser.GameObjects.Container[] = [];
   private draftBackdrop: Phaser.GameObjects.Rectangle | null = null;
+  private refractView: Phaser.GameObjects.Container | null = null;
   private qualified = false;
 
   private moveUp = false;
@@ -431,7 +470,7 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private ensureEchoMineCapacity(): void {
-    const required = buildEchoProfile(this.echoRank, 0).maxActive;
+    const required = this.echoProfile(0).maxActive;
     while (this.echoMines.length < required) {
       const view = this.add.graphics().setDepth(23).setVisible(false);
       this.echoMines.push({ active: false, mine: null, view });
@@ -456,7 +495,7 @@ class SurvivalScene extends Phaser.Scene {
     }
 
     this.attackAccumulator += dt;
-    const profile = buildDeltaProfile(this.pair.a.rows, this.pair.b.rows, this.phase, this.deltaRank);
+    const profile = this.deltaProfile();
     if (this.attackAccumulator >= profile.cooldownMs) {
       this.attackAccumulator %= profile.cooldownMs;
       this.fireDelta(profile);
@@ -464,7 +503,7 @@ class SurvivalScene extends Phaser.Scene {
     this.updatePendingDeltaEcho();
 
     if (this.vectorOwned) {
-      const vectorProfile = buildVectorProfile(this.vectorRank);
+      const vectorProfile = this.vectorProfile();
       if (this.vectorTransferState.armed && !isVectorTransferArmed(this.vectorTransferState, this.elapsedActiveMs)) {
         this.vectorTransferState = emptyVectorTransfer();
         this.vectorTransferExpiries += 1;
@@ -646,9 +685,10 @@ class SurvivalScene extends Phaser.Scene {
     this.xpBar.clear().fillStyle(0x202832, 1).fillRect(310, 48, 240, 8);
     this.xpBar.fillStyle(0x7ee787, 1).fillRect(310, 48, 240 * this.xp / xpThreshold(this.level), 8);
     this.hudText.setText(`HP ${Math.max(0, this.hp)}/${V21_PLAYER_MAX_HP}   LV ${this.level}   XP ${this.xp}/${xpThreshold(this.level)}`);
-    this.buildText.setText(`K ${this.kills} · Δ ${romanRank(this.deltaRank)} · V ${this.vectorOwned ? romanRank(this.vectorRank) : "--"} · O ${this.orbitOwned ? romanRank(this.orbitRank) : "--"} · E ${this.echoOwned ? romanRank(this.echoRank) : "--"} · S ${this.signalOwned ? romanRank(this.signalRank) : "--"}`);
+    const protocolSummary = V23_PROTOCOL_FAMILIES.filter(family => this.protocols[family] !== undefined).map(family => `${PROTOCOL_SHORT[family]}${romanRank(this.protocols[family] ?? 1)}`).join(" ") || "--";
+    this.buildText.setText(`K ${this.kills} · Δ ${romanRank(this.deltaRank)} · V ${this.vectorOwned ? romanRank(this.vectorRank) : "--"} · O ${this.orbitOwned ? romanRank(this.orbitRank) : "--"} · E ${this.echoOwned ? romanRank(this.echoRank) : "--"} · S ${this.signalOwned ? romanRank(this.signalRank) : "--"}\nP ${protocolSummary} · R ${this.refracts}`);
     this.phaseText.setColor(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB).setText(`PHASE ${this.phase}\nFRAME ${this.phase === "A" ? this.pair.a.index : this.pair.b.index}`);
-    if (this.stageText) this.stageText.setText(`${stageForElapsedMs(this.elapsedActiveMs).label} · CORES ${this.evolutionCores}`);
+    if (this.stageText) this.stageText.setText(`${stageForElapsedMs(this.elapsedActiveMs).label} · CORES ${this.evolutionCores} · REFRACT ${this.refracts}`);
     if (this.shiftButton) this.shiftButton.setStrokeStyle(2, hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB));
   }
 
@@ -879,19 +919,20 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private refreshVectorTarget(): void {
+    const targetProfile = this.vectorProfile();
     if (this.vectorRank >= 5 && this.vectorLockState.targetId !== null) {
       const locked = this.enemies.find(enemy => enemy.active && enemy.id === this.vectorLockState.targetId) ?? null;
       if (!locked || !isEnemyCorporeal(locked.kind, this.phase) || vectorPriorityTier(locked.kind) < 1) {
         this.resetVectorLockState();
       } else {
         const dx = locked.x - this.friend.x, dy = locked.y - this.friend.y;
-        if (dx * dx + dy * dy > VECTOR_RANK_I.range * VECTOR_RANK_I.range) this.resetVectorLockState();
+        if (dx * dx + dy * dy > targetProfile.range * targetProfile.range) this.resetVectorLockState();
       }
     }
 
     const result = this.vectorRank >= 3
-      ? acquirePriorityVectorTarget(this.enemies, this.phase, this.friend.x, this.friend.y, this.vectorRank >= 5 ? this.vectorLockState.targetId : null)
-      : acquireVectorTarget(this.enemies, this.phase, this.friend.x, this.friend.y);
+      ? acquirePriorityVectorTarget(this.enemies, this.phase, this.friend.x, this.friend.y, this.vectorRank >= 5 ? this.vectorLockState.targetId : null, targetProfile.range, targetProfile.priorityBand)
+      : acquireVectorTarget(this.enemies, this.phase, this.friend.x, this.friend.y, targetProfile.range);
     const nextId = result?.id ?? null;
     if (this.vectorRank >= 5 && this.vectorLockState.targetId !== null && nextId !== this.vectorLockState.targetId) this.resetVectorLockState();
     if (nextId !== this.vectorTargetId) {
@@ -918,7 +959,7 @@ class SurvivalScene extends Phaser.Scene {
     if (this.vectorTargetId === null) return null;
     const enemy = this.enemies.find(item => item.active && item.id === this.vectorTargetId) ?? null;
     if (!enemy || !isEnemyCorporeal(enemy.kind, this.phase)) return null;
-    const profile = buildVectorProfile(this.vectorRank);
+    const profile = this.vectorProfile();
     const dx = enemy.x - this.friend.x, dy = enemy.y - this.friend.y;
     return dx * dx + dy * dy <= profile.range * profile.range ? enemy : null;
   }
@@ -932,7 +973,7 @@ class SurvivalScene extends Phaser.Scene {
     const transferReady = this.vectorRank >= 4
       && this.vectorTransferState.phase === this.phase
       && isVectorTransferArmed(this.vectorTransferState, this.elapsedActiveMs);
-    const profile = buildVectorProfile(this.vectorRank, transferReady);
+    const profile = this.vectorProfile(transferReady);
     const dx = target.x - originX, dy = target.y - originY, distance = Math.hypot(dx, dy);
     if (!(distance > 0)) return;
 
@@ -1066,7 +1107,7 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private updateOrbit(dtMs: number): void {
-    const profile = buildOrbitProfile(this.orbitRank);
+    const profile = this.orbitProfile();
     this.orbitAngle = advanceOrbitAngle(this.orbitAngle, this.phase, dtMs, profile.angularSpeed);
     const points = this.syncOrbitNodeView(profile);
     for (const enemy of this.enemies) {
@@ -1082,7 +1123,7 @@ class SurvivalScene extends Phaser.Scene {
     }
   }
 
-  private syncOrbitNodeView(profile: OrbitRankProfile = buildOrbitProfile(this.orbitRank)): readonly { x: number; y: number }[] {
+  private syncOrbitNodeView(profile: OrbitRankProfile = this.orbitProfile()): readonly { x: number; y: number }[] {
     const points = orbitNodePositions(this.friend.x, this.friend.y, this.orbitAngle, profile);
     if (!this.orbitOwned) { this.orbitNode.clear().setVisible(false); return points; }
     const direction = orbitDirectionForPhase(this.phase);
@@ -1102,7 +1143,7 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private tryEmitOrbitShear(anchorAngle: number): void {
-    const profile = buildOrbitProfile(this.orbitRank);
+    const profile = this.orbitProfile();
     if (profile.rank < 4) return;
     if (!canEmitOrbitShear(profile.rank, this.orbitShearLastEmittedAt, this.elapsedActiveMs)) {
       this.orbitShearRearmBlocks += 1;
@@ -1152,10 +1193,10 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private updateEcho(dtMs: number): void {
-    const placementProfile = buildEchoProfile(this.echoRank, 0);
+    const placementProfile = this.echoProfile(0);
     for (const runtime of this.echoMines) {
       if (!runtime.active || !runtime.mine) continue;
-      const mineProfile = buildEchoProfile(this.echoRank, runtime.mine.memoryDepth);
+      const mineProfile = this.echoProfile(runtime.mine.memoryDepth);
       if (!isEchoMineExpired(runtime.mine, this.elapsedActiveMs, mineProfile)) continue;
       this.deactivateEchoMine(runtime);
       this.echoExpiries += 1;
@@ -1175,7 +1216,7 @@ class SurvivalScene extends Phaser.Scene {
       if (!runtime.active || !runtime.mine) continue;
       this.paintEchoMine(runtime);
       const mine = runtime.mine;
-      const profile = buildEchoProfile(this.echoRank, mine.memoryDepth);
+      const profile = this.echoProfile(mine.memoryDepth);
       if (echoTriggerCandidateIds(mine, this.phase, this.elapsedActiveMs, this.enemies, profile).length === 0) continue;
       const targetIds = echoBlastTargetIds(mine, this.phase, this.enemies, profile);
       this.deactivateEchoMine(runtime);
@@ -1197,7 +1238,7 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private tryPlaceEchoMine(): void {
-    const profile = buildEchoProfile(this.echoRank, 0);
+    const profile = this.echoProfile(0);
     this.ensureEchoMineCapacity();
     const active = this.echoMines
       .filter((runtime): runtime is EchoMineRuntime & { mine: EchoMineCore } => runtime.active && runtime.mine !== null)
@@ -1274,14 +1315,14 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private updateSignalArc(dtMs: number): void {
-    const profile = buildSignalArcProfile(this.signalRank);
+    const profile = this.signalProfile();
     this.signalAccumulator = advanceSignalArcCooldown(this.signalAccumulator, dtMs, profile);
     if (this.signalAccumulator < profile.cooldownMs) return;
     const path = planSignalArc(this.enemies, this.phase, this.friend.x, this.friend.y, profile);
     if (path.length === 0) return;
     let controlledRouting = false;
     if (this.signalRank >= 5) {
-      const nearestPath = planSignalArc(this.enemies, this.phase, this.friend.x, this.friend.y, buildSignalArcProfile(4));
+      const nearestPath = planSignalArc(this.enemies, this.phase, this.friend.x, this.friend.y, this.signalProfile(4));
       controlledRouting = path.map(hop => hop.id).join(",") !== nearestPath.map(hop => hop.id).join(",");
     }
     this.fireSignalArc(path, controlledRouting);
@@ -1385,6 +1426,7 @@ class SurvivalScene extends Phaser.Scene {
       this.rewardLedger = claim.ledger;
       if (claim.newlyClaimed) {
         this.elitesDefeated += 1;
+        if (checkpointId === "CHECKPOINT_ELITE") this.applyCR2Projection(restoreCR2RefractToLive(this.liveSnapshot(), 1));
         claim.rewards.forEach((reward, index) => this.spawnPickup(reward, deathX, deathY, index + 1));
         this.statusText.setText(`${checkpointId.replaceAll("_", " ")} DEFEATED // reward signal released.`);
       }
@@ -1403,7 +1445,7 @@ class SurvivalScene extends Phaser.Scene {
     for (const pickup of this.pickups) {
       if (!pickup.active) continue;
       const dx = this.friend.x - pickup.x, dy = this.friend.y - pickup.y, distance = Math.max(0.001, Math.hypot(dx, dy));
-      if (pickup.magnetized || distance <= this.pickupRadius) {
+      if (pickup.magnetized || distance <= this.effectivePickupRadius()) {
         const speed = pickup.magnetized ? 720 : Math.max(180, 460 - distance);
         pickup.x += dx / distance * speed * dt; pickup.y += dy / distance * speed * dt; pickup.view.setPosition(pickup.x, pickup.y);
       }
@@ -1420,170 +1462,121 @@ class SurvivalScene extends Phaser.Scene {
       for (const enemy of targets) this.killEnemy(enemy);
       this.statusText.setText("DISCHARGE // ordinary threat field cleared."); return false;
     }
-    if (kind === "EVOLUTION_CORE") { this.evolutionCores += 1; this.statusText.setText(`EVOLUTION CORE ACQUIRED // ${this.evolutionCores}`); return false; }
+    if (kind === "EVOLUTION_CORE") { this.applyCR2Projection(grantCR2CoreToLive(this.liveSnapshot(), 1)); this.statusText.setText(`EVOLUTION CORE ACQUIRED // ${this.evolutionCores}`); return false; }
     const progress = addSignalXp(this.level, this.xp, 1); this.level = progress.level; this.xp = progress.xp;
     if (progress.levelsGained <= 0) return false;
     this.openDraft();
     return this.draftOpen;
   }
 
-  private buildState(): V21BuildState {
+  private protocolRank(family: V23ProtocolFamily): CR2ProtocolRank | null {
+    const rank = this.protocols[family];
+    return rank === 1 || rank === 2 || rank === 3 ? rank : null;
+  }
+
+  private deltaProfile(rank = this.deltaRank, phase: Phase = this.phase): ReturnType<typeof buildDeltaProfile> {
+    const base = buildDeltaProfile(this.pair.a.rows, this.pair.b.rows, phase, rank);
+    const protocol = this.protocolRank("COMMON_CORE");
+    return protocol === null ? base : applyCommonCoreToDelta(base, protocol).profile;
+  }
+
+  private vectorProfile(transferShot = false, rank = this.vectorRank): VectorRankProfile {
+    const base = buildVectorProfile(rank, transferShot);
+    const protocol = this.protocolRank("VECTOR_LENS");
+    return protocol === null ? base : applyVectorLensToVector(base, protocol).profile;
+  }
+
+  private orbitProfile(rank = this.orbitRank): OrbitRankProfile {
+    const base = buildOrbitProfile(rank);
+    const protocol = this.protocolRank("ORBIT_STABILIZER");
+    return protocol === null ? base : applyOrbitStabilizerToOrbit(base, protocol);
+  }
+
+  private echoProfile(memoryDepth = 0, rank = this.echoRank): EchoRankProfile {
+    const base = buildEchoProfile(rank, memoryDepth);
+    const protocol = this.protocolRank("MEMORY_FUSE");
+    return protocol === null ? base : applyMemoryFuseToEcho(base, protocol);
+  }
+
+  private signalProfile(rank = this.signalRank): ReturnType<typeof buildSignalArcProfile> {
+    const base = buildSignalArcProfile(rank);
+    const protocol = this.protocolRank("RESONANCE_COIL");
+    return protocol === null ? base : applyResonanceCoilToSignal(base, protocol).profile;
+  }
+
+  private effectivePickupRadius(): number {
+    return cr2EffectivePickupRadius(this.pickupRadius, this.protocols);
+  }
+
+  private liveSnapshot(): CR2LiveSnapshot {
     return {
       deltaRank: this.deltaRank,
+      vectorOwned: this.vectorOwned,
+      vectorRank: this.vectorRank,
+      orbitOwned: this.orbitOwned,
+      orbitRank: this.orbitRank,
+      echoOwned: this.echoOwned,
+      echoRank: this.echoRank,
+      signalOwned: this.signalOwned,
+      signalRank: this.signalRank,
+      evolvedWeapons: this.evolvedWeapons,
+      protocols: this.protocols,
+      evolutionCores: this.evolutionCores,
+      refracts: this.refracts,
+      rerollNonce: this.rerollNonce,
       hp: this.hp,
       maxHp: V21_PLAYER_MAX_HP,
       pickupRadius: this.pickupRadius,
-      vectorEnabled: true,
-      vectorOwned: this.vectorOwned,
-      vectorRankEnabled: true,
-      vectorRank: this.vectorRank,
-      orbitEnabled: true,
-      orbitOwned: this.orbitOwned,
-      orbitRankEnabled: true,
-      orbitRank: this.orbitRank,
-      echoEnabled: this.level >= 3,
-      echoOwned: this.echoOwned,
-      echoRankEnabled: true,
-      echoRank: this.echoRank,
-      signalEnabled: this.level >= 4,
-      signalOwned: this.signalOwned,
-      signalRankEnabled: true,
-      signalRank: this.signalRank,
       weaponSlotsUsed: this.weaponSlotsUsed,
-      weaponSlotCap: 4,
     };
   }
 
-  private openDraft(): void {
-    this.draftChoices = buildV21Draft(this.seed, this.level, this.buildState());
-    if (this.draftChoices.length === 0) {
-      this.draftOpen = false; this.setCombatControlsEnabled(true);
-      this.statusText.setDepth(110).setText("LEVEL UP // upgrade pool exhausted · combat resumed."); this.syncTestState(); return;
-    }
-    this.draftOpen = true; this.setCombatControlsEnabled(false);
-    this.draftBackdrop?.destroy();
-    this.draftBackdrop = this.add.rectangle(480, 320, 960, 640, 0x05070a, 0.58).setScrollFactor(0).setDepth(180);
-    const xs = draftCardXs(this.draftChoices.length);
-    this.draftViews = this.draftChoices.map((choice, index) => this.makeDraftCard(xs[index], choice, index));
-    const keyLabel = this.draftChoices.length === 1 ? "key 1" : `keys 1–${this.draftChoices.length}`;
-    this.statusText.setText(`LEVEL UP // choose 1 of ${this.draftChoices.length} · ${keyLabel} or tap`).setDepth(210); this.syncTestState();
+  private migrateCooldownProgress(currentMs: number, oldCooldownMs: number, newCooldownMs: number): number {
+    const progress = Math.max(0, Math.min(1, currentMs / Math.max(1, oldCooldownMs)));
+    return progress * Math.max(1, newCooldownMs);
   }
 
-  private makeDraftCard(x: number, choice: V21DraftChoice, index: number): Phaser.GameObjects.Container {
-    const container = this.add.container(x, 320).setScrollFactor(0).setDepth(200);
-    const isDelta = choice.id === "DELTA_RANK";
-    const isVectorAcquire = choice.id === "VECTOR_NEEDLE";
-    const isVectorRank = choice.id === "VECTOR_RANK";
-    const isVector = isVectorAcquire || isVectorRank;
-    const isOrbitAcquire = choice.id === "ORBIT_NODES";
-    const isOrbitRank = choice.id === "ORBIT_RANK";
-    const isOrbit = isOrbitAcquire || isOrbitRank;
-    const isEchoAcquire = choice.id === "ECHO_MINE";
-    const isEchoRank = choice.id === "ECHO_RANK";
-    const isEcho = isEchoAcquire || isEchoRank;
-    const isSignalAcquire = choice.id === "SIGNAL_ARC";
-    const isSignalRank = choice.id === "SIGNAL_RANK";
-    const isSignal = isSignalAcquire || isSignalRank;
-    const isPhaseWeapon = isDelta || isVector || isOrbit || isEcho || isSignal;
-    const border = isPhaseWeapon ? hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB) : 0x657383;
-    const bg = this.add.rectangle(0, 0, 220, 230, 0x11151b, 0.99).setStrokeStyle(isPhaseWeapon ? 3 : 2, border).setInteractive({ useHandCursor: true });
-    const tag = this.add.text(0, -91, `${index + 1} // ${choice.category}`, { fontFamily: "monospace", fontSize: "11px", color: "#8b98a7" }).setOrigin(0.5);
-    const nextDeltaRank = Math.min(5, this.deltaRank + 1);
-    const nextVectorRank = Math.min(5, this.vectorRank + 1);
-    const nextOrbitRank = Math.min(5, this.orbitRank + 1);
-    const nextEchoRank = Math.min(5, this.echoRank + 1);
-    const nextSignalRank = Math.min(5, this.signalRank + 1);
-    const titleText = isDelta ? `${choice.name} ${romanRank(nextDeltaRank)}` : isVectorRank ? `${choice.name} ${romanRank(nextVectorRank)}` : isOrbitRank ? `${choice.name} ${romanRank(nextOrbitRank)}` : isEchoRank ? `${choice.name} ${romanRank(nextEchoRank)}` : isSignalRank ? `${choice.name} ${romanRank(nextSignalRank)}` : choice.name;
-    const title = this.add.text(0, -54, titleText, { fontFamily: "monospace", fontSize: "17px", color: V2_PALETTE.common, fontStyle: "bold", align: "center", wordWrap: { width: 190 } }).setOrigin(0.5);
-    const detailText = isDelta
-      ? `RANK ${romanRank(this.deltaRank)} → ${romanRank(nextDeltaRank)}`
-      : isVectorRank
-        ? `RANK ${romanRank(this.vectorRank)} → ${romanRank(nextVectorRank)}`
-        : isOrbitRank
-          ? `RANK ${romanRank(this.orbitRank)} → ${romanRank(nextOrbitRank)}`
-          : isEchoRank
-            ? `RANK ${romanRank(this.echoRank)} → ${romanRank(nextEchoRank)}`
-            : isSignalRank
-              ? `RANK ${romanRank(this.signalRank)} → ${romanRank(nextSignalRank)}`
-              : (isVectorAcquire || isOrbitAcquire || isEchoAcquire || isSignalAcquire) ? "ACQUIRE · RANK I" : "RUN UTILITY";
-    const detail = this.add.text(0, -27, detailText, { fontFamily: "monospace", fontSize: "9px", color: isPhaseWeapon ? (this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB) : "#748392", letterSpacing: 1 }).setOrigin(0.5);
-    const deltaDescription = nextDeltaRank === 2 ? "DENSE SAMPLE · cadence tightens to 720ms." : nextDeltaRank === 3 ? "FIELD SCALE · canonical mask expands in world-space." : nextDeltaRank === 4 ? "PHASE ECHO · SHIFT leaves one bounded previous-phase echo." : "LOCKED IDENTITY · matching-phase pulse gains bounded stagger.";
-    const vectorDescription = nextVectorRank === 2 ? "CLEAN LINE · fixed ray penetrates one aligned target." : nextVectorRank === 3 ? "PRIORITY TRACE · focus high-value corporeal threats in-band." : nextVectorRank === 4 ? "PHASE TRANSFER · first valid post-SHIFT launch gains a third line hit." : "VECTOR LOCK · repeated priority hits build bounded primary damage.";
-    const orbitDescription = nextOrbitRank === 2 ? "SECOND NODE · two nodes share one target-hit ledger." : nextOrbitRank === 3 ? "STABLE ORBIT · wider, faster close-defense geometry." : nextOrbitRank === 4 ? "PHASE SHEAR · SHIFT reversal emits one bounded post-phase sweep." : "SYNCHRONIZED RING · three equally spaced nodes share one ledger.";
-    const echoDescription = nextEchoRank === 2 ? "LONG MEMORY · four mines persist for 12 seconds." : nextEchoRank === 3 ? "WIDER COLLAPSE · trigger and blast geometry expand." : nextEchoRank === 4 ? "FAST RECALL · returned memory readies after 140ms." : "DEEP MEMORY · genuine return cycles build bounded memory depth.";
-    const signalDescription = nextSignalRank === 2 ? "EXTRA LINK · current corporeal graph reaches a fourth target." : nextSignalRank === 3 ? "LOWER DECAY · four-link damage decays more slowly." : nextSignalRank === 4 ? "RESONANT RELAY · first COMMON relay may extend one edge to 240px." : "CHAIN CONTROL · relay choice favors deterministic forward connectivity.";
-    const desc = this.add.text(0, 61, isDelta ? deltaDescription : isVectorRank ? vectorDescription : isOrbitRank ? orbitDescription : isEchoRank ? echoDescription : isSignalRank ? signalDescription : choice.description, { fontFamily: "monospace", fontSize: "11px", color: "#bac5d0", align: "center", wordWrap: { width: 178 } }).setOrigin(0.5);
-    container.add([bg, tag, title, detail]);
-    if (isDelta) {
-      const preview = this.add.graphics(), previewProfile = buildDeltaProfile(this.pair.a.rows, this.pair.b.rows, this.phase, nextDeltaRank);
-      const previewScale = 1.35 * previewProfile.worldScale / 8;
-      preview.fillStyle(border, 0.82); for (const point of previewProfile.points) preview.fillRect(point.x * previewScale - 1.5, point.y * previewScale - 1.5, 3, 3);
-      preview.setPosition(0, 9); container.add(preview);
-    } else if (isVector) {
-      const glyph = this.add.graphics().lineStyle(isVectorRank ? 4 : 3, border, 0.82); glyph.lineBetween(-28, 8, 28, -8); glyph.strokeCircle(25, -7, 5);
-      if (isVectorRank && nextVectorRank >= 2) glyph.lineStyle(1, hex(V2_PALETTE.common), 0.7).lineBetween(-24, 13, 29, -2);
-      glyph.setPosition(0, 2); container.add(glyph);
-    } else if (isOrbit) {
-      const previewRank = isOrbitRank ? nextOrbitRank : 1;
-      const previewProfile = buildOrbitProfile(previewRank);
-      const glyph = this.add.graphics().lineStyle(2, border, 0.78);
-      glyph.strokeCircle(0, 2, 27);
-      for (const angle of orbitNodeAngles(0, previewProfile.nodeCount)) {
-        const nodeX = Math.cos(angle) * 27;
-        const nodeY = 2 + Math.sin(angle) * 27;
-        glyph.fillStyle(border, 0.95).fillRect(nodeX - 5, nodeY - 5, 10, 10);
-      }
-      container.add(glyph);
-    } else if (isEcho) {
-      const glyph = this.add.graphics().lineStyle(isEchoRank ? 3 : 2, border, 0.78);
-      glyph.strokeCircle(0, 3, 25); glyph.fillStyle(border, 0.9).fillRect(-6, -3, 12, 12);
-      glyph.lineBetween(-31, 3, -19, 3); glyph.lineBetween(19, 3, 31, 3);
-      if (isEchoRank && nextEchoRank >= 3) glyph.lineStyle(1, hex(V2_PALETTE.common), 0.7).strokeCircle(0, 3, 31);
-      if (isEchoRank && nextEchoRank >= 5) glyph.lineStyle(1, border, 0.75).strokeCircle(0, 3, 36);
-      container.add(glyph);
-    } else if (isSignal) {
-      const previewRank = isSignalRank ? nextSignalRank : 1;
-      const glyph = this.add.graphics().lineStyle(previewRank >= 4 ? 3 : 2, border, 0.82);
-      glyph.lineBetween(-30, 10, -7, -7); glyph.lineBetween(-7, -7, 13, 7); glyph.lineBetween(13, 7, 30, -10);
-      glyph.fillStyle(border, 0.95).fillCircle(-30, 10, 4).fillCircle(-7, -7, 4).fillCircle(13, 7, 4).fillCircle(30, -10, 4);
-      if (previewRank >= 2) glyph.fillStyle(hex(V2_PALETTE.common), 0.88).fillCircle(36, 5, 4);
-      if (previewRank >= 4) glyph.lineStyle(2, hex(V2_PALETTE.common), 0.72).lineBetween(30, -10, 36, 5);
-      if (previewRank >= 5) glyph.lineStyle(1, hex(V2_PALETTE.common), 0.66).strokeCircle(13, 7, 8);
-      container.add(glyph);
-    } else {
-      const glyph = this.add.graphics().lineStyle(2, border, 0.62); glyph.strokeRect(-12, -3, 24, 24); glyph.lineBetween(-6, 9, 6, 9); glyph.setPosition(0, -2); container.add(glyph);
-    }
-    container.add(desc); bg.on("pointerdown", () => this.chooseDraft(index)); return container;
-  }
-
-  private chooseDraft(index: number): void {
-    if (!this.draftOpen) return;
-    const choice = this.draftChoices[index]; if (!choice || choice.disabled) return;
+  private applyCR2Projection(next: CR2LiveProjection): void {
     const wasEchoOwned = this.echoOwned;
     const oldDeltaRank = this.deltaRank;
     const oldVectorRank = this.vectorRank;
     const oldOrbitRank = this.orbitRank;
     const oldEchoRank = this.echoRank;
     const oldSignalRank = this.signalRank;
-    const next = applyV21Draft(this.buildState(), choice.id as V21DraftId);
+    const oldSignalOwned = this.signalOwned;
+    const oldDeltaCooldown = this.deltaProfile().cooldownMs;
+    const oldSignalCooldown = oldSignalOwned ? this.signalProfile().cooldownMs : null;
+
     this.deltaRank = next.deltaRank;
-    if (this.deltaRank !== oldDeltaRank) this.attackAccumulator = migrateDeltaCooldownAccumulator(this.attackAccumulator, oldDeltaRank, this.deltaRank);
-    this.hp = next.hp; this.pickupRadius = next.pickupRadius;
-    this.vectorOwned = next.vectorOwned === true;
-    this.vectorRank = next.vectorRank ?? (this.vectorOwned ? 1 : this.vectorRank);
+    this.vectorOwned = next.vectorOwned;
+    this.vectorRank = next.vectorRank;
+    this.orbitOwned = next.orbitOwned;
+    this.orbitRank = next.orbitRank;
+    this.echoOwned = next.echoOwned;
+    this.echoRank = next.echoRank;
+    this.signalOwned = next.signalOwned;
+    this.signalRank = next.signalRank;
+    this.evolvedWeapons = { ...next.evolvedWeapons };
+    this.protocols = { ...next.protocols };
+    this.evolutionCores = next.evolutionCores;
+    this.refracts = next.refracts;
+    this.rerollNonce = next.rerollNonce;
+    this.hp = next.hp;
+    this.pickupRadius = next.pickupRadius;
+    this.weaponSlotsUsed = next.weaponSlotsUsed;
+
+    const newDeltaCooldown = this.deltaProfile().cooldownMs;
+    if (oldDeltaCooldown !== newDeltaCooldown || oldDeltaRank !== this.deltaRank) {
+      this.attackAccumulator = this.migrateCooldownProgress(this.attackAccumulator, oldDeltaCooldown, newDeltaCooldown);
+    }
+
     if (this.vectorRank !== oldVectorRank) {
       if (oldVectorRank < 4 && this.vectorRank >= 4) this.vectorTransferState = emptyVectorTransfer();
       if (this.vectorRank >= 5) this.vectorLockState = initialVectorLockState();
     }
-    this.orbitOwned = next.orbitOwned === true;
-    this.orbitRank = next.orbitRank ?? (this.orbitOwned ? 1 : this.orbitRank);
     if (this.orbitRank !== oldOrbitRank) {
-      // Rank migration is geometry-only while paused: preserve anchor angle,
-      // normal hit ledger and existing shear rearm. No rank-up emits shear.
-      this.orbitAngle = this.orbitAngle;
+      // Preserve anchor, contact ledger and shear rearm. Rank-up or Protocol application emits nothing.
     }
-    this.echoOwned = next.echoOwned === true;
-    this.echoRank = next.echoRank ?? (this.echoOwned ? 1 : this.echoRank);
     if (this.echoRank !== oldEchoRank) {
       this.ensureEchoMineCapacity();
       if (oldEchoRank < 5 && this.echoRank >= 5) {
@@ -1591,18 +1584,139 @@ class SurvivalScene extends Phaser.Scene {
         this.echoBurstLedger = new Map();
       }
     }
-    this.signalOwned = next.signalOwned === true;
-    this.signalRank = next.signalRank ?? (this.signalOwned ? 1 : this.signalRank);
-    if (this.signalRank !== oldSignalRank) {
-      // SIGNAL casts are instantaneous. Preserve ordinary cooldown progress and
-      // carry no historical COMMON bonus or route state across rank application.
+    if (oldSignalOwned && this.signalOwned && oldSignalCooldown !== null) {
+      const newSignalCooldown = this.signalProfile().cooldownMs;
+      if (oldSignalCooldown !== newSignalCooldown || oldSignalRank !== this.signalRank) {
+        this.signalAccumulator = this.migrateCooldownProgress(this.signalAccumulator, oldSignalCooldown, newSignalCooldown);
+      }
     }
-    this.weaponSlotsUsed = next.weaponSlotsUsed ?? this.weaponSlotsUsed;
     if (this.orbitOwned) this.syncOrbitNodeView();
     if (!wasEchoOwned && this.echoOwned) this.echoPlacementAccumulator = 0;
+  }
+
+  private openDraft(): void {
+    try {
+      this.draftChoices = buildV23ADraft(this.seed, this.level, buildCR2StateFromLive(this.liveSnapshot())).choices;
+    } catch (error) {
+      this.draftChoices = [];
+      this.draftOpen = false;
+      this.setCombatControlsEnabled(true);
+      this.statusText.setDepth(110).setText("LEVEL UP // legal upgrade pool exhausted · combat resumed.");
+      this.syncTestState();
+      return;
+    }
+    this.draftOpen = true;
+    this.setCombatControlsEnabled(false);
+    this.draftBackdrop?.destroy();
+    this.draftBackdrop = this.add.rectangle(480, 320, 960, 640, 0x05070a, 0.58).setScrollFactor(0).setDepth(180);
+    this.renderDraftChoices();
+  }
+
+  private renderDraftChoices(): void {
     for (const view of this.draftViews) view.destroy(true);
-    this.draftViews = []; this.draftChoices = []; this.draftBackdrop?.destroy(); this.draftBackdrop = null; this.draftOpen = false;
-    this.setCombatControlsEnabled(true); this.statusText.setDepth(110).setText(`${choice.name} selected // combat resumed.`); this.updateHud(); this.syncTestState();
+    this.draftViews = [];
+    this.refractView?.destroy(true);
+    this.refractView = null;
+    const xs = draftCardXs(this.draftChoices.length);
+    this.draftViews = this.draftChoices.map((choice, index) => this.makeDraftCard(xs[index], choice, index));
+    if (this.refracts > 0) {
+      const container = this.add.container(480, 490).setScrollFactor(0).setDepth(205);
+      const bg = this.add.rectangle(0, 0, 220, 42, 0x11151b, 0.98).setStrokeStyle(2, 0x7ee787, 0.82).setInteractive({ useHandCursor: true });
+      const label = this.add.text(0, 0, "R // REFRACT · " + this.refracts, { fontFamily: "monospace", fontSize: "12px", color: "#d7fbe2", fontStyle: "bold" }).setOrigin(0.5);
+      container.add([bg, label]);
+      bg.on("pointerdown", () => this.refractDraft());
+      this.refractView = container;
+    }
+    const refractHint = this.refracts > 0 ? " · R REFRACT" : "";
+    this.statusText.setText("LEVEL UP // choose 1 of " + this.draftChoices.length + " · keys 1–" + this.draftChoices.length + refractHint).setDepth(210);
+    this.syncTestState();
+  }
+
+  private refractDraft(): void {
+    if (!this.draftOpen || this.refracts <= 0) return;
+    const result = useV23ARefract(this.seed, this.level, buildCR2StateFromLive(this.liveSnapshot()));
+    this.applyCR2Projection(projectCR2StateToLive(result.state));
+    this.draftChoices = result.draft.choices;
+    this.renderDraftChoices();
+    this.statusText.setText("REFRACT // deterministic reroll applied · " + this.refracts + " remaining").setDepth(210);
+  }
+
+  private makeDraftCard(x: number, choice: V23DraftCandidate, index: number): Phaser.GameObjects.Container {
+    const legacyId = cr2LegacyCompatibleDraftId(choice);
+    const category = cr2DraftCategory(choice);
+    const container = this.add.container(x, 320).setScrollFactor(0).setDepth(200);
+    const isDelta = legacyId === "DELTA_RANK";
+    const isVector = legacyId === "VECTOR_NEEDLE" || legacyId === "VECTOR_RANK";
+    const isOrbit = legacyId === "ORBIT_NODES" || legacyId === "ORBIT_RANK";
+    const isEcho = legacyId === "ECHO_MINE" || legacyId === "ECHO_RANK";
+    const isSignal = legacyId === "SIGNAL_ARC" || legacyId === "SIGNAL_RANK";
+    const isPhaseWeapon = isDelta || isVector || isOrbit || isEcho || isSignal;
+    const border = category === "PROTOCOL" ? 0x7ee787 : isPhaseWeapon ? hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB) : 0x657383;
+    const bg = this.add.rectangle(0, 0, 220, 230, 0x11151b, 0.99).setStrokeStyle(category === "PROTOCOL" || isPhaseWeapon ? 3 : 2, border).setInteractive({ useHandCursor: true });
+    const tag = this.add.text(0, -91, String(index + 1) + " // " + category, { fontFamily: "monospace", fontSize: "11px", color: "#8b98a7" }).setOrigin(0.5);
+    const rankSuffix = choice.toRank !== null && choice.candidateType !== "UTILITY" ? " " + romanRank(choice.toRank) : "";
+    const title = this.add.text(0, -54, choice.name + rankSuffix, { fontFamily: "monospace", fontSize: "16px", color: V2_PALETTE.common, fontStyle: "bold", align: "center", wordWrap: { width: 190 } }).setOrigin(0.5);
+    let detailText = "RUN UTILITY";
+    if (choice.candidateType === "WEAPON_ACQUIRE") detailText = "ACQUIRE · RANK I";
+    else if (choice.candidateType === "WEAPON_RANK") detailText = "RANK " + romanRank(choice.fromRank ?? 1) + " → " + romanRank(choice.toRank ?? 1);
+    else if (choice.candidateType === "PROTOCOL_ACQUIRE") detailText = "PROTOCOL SLOT · RANK I";
+    else if (choice.candidateType === "PROTOCOL_RANK") detailText = "PROTOCOL " + romanRank(choice.fromRank ?? 1) + " → " + romanRank(choice.toRank ?? 1);
+    const detail = this.add.text(0, -27, detailText, { fontFamily: "monospace", fontSize: "9px", color: category === "PROTOCOL" ? "#7ee787" : isPhaseWeapon ? (this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB) : "#748392", letterSpacing: 1 }).setOrigin(0.5);
+    const protocolSuffix = category === "PROTOCOL" ? " Also strengthens pickup-field reach by +4px per Protocol rank." : "";
+    const desc = this.add.text(0, 61, choice.description + protocolSuffix, { fontFamily: "monospace", fontSize: "10px", color: "#bac5d0", align: "center", wordWrap: { width: 184 } }).setOrigin(0.5);
+    container.add([bg, tag, title, detail]);
+
+    if (isDelta) {
+      const preview = this.add.graphics();
+      const previewProfile = this.deltaProfile(choice.toRank ?? this.deltaRank);
+      const previewScale = 1.35 * previewProfile.worldScale / 8;
+      preview.fillStyle(border, 0.82);
+      for (const point of previewProfile.points) preview.fillRect(point.x * previewScale - 1.5, point.y * previewScale - 1.5, 3, 3);
+      preview.setPosition(0, 9);
+      container.add(preview);
+    } else if (isVector) {
+      const glyph = this.add.graphics().lineStyle(3, border, 0.82); glyph.lineBetween(-28, 8, 28, -8); glyph.strokeCircle(25, -7, 5); glyph.setPosition(0, 2); container.add(glyph);
+    } else if (isOrbit) {
+      const previewProfile = this.orbitProfile(choice.toRank ?? 1);
+      const glyph = this.add.graphics().lineStyle(2, border, 0.78); glyph.strokeCircle(0, 2, 27);
+      for (const angle of orbitNodeAngles(0, previewProfile.nodeCount)) { const nodeX = Math.cos(angle) * 27; const nodeY = 2 + Math.sin(angle) * 27; glyph.fillStyle(border, 0.95).fillRect(nodeX - 5, nodeY - 5, 10, 10); }
+      container.add(glyph);
+    } else if (isEcho) {
+      const glyph = this.add.graphics().lineStyle(2, border, 0.78); glyph.strokeCircle(0, 3, 25); glyph.fillStyle(border, 0.9).fillRect(-6, -3, 12, 12); glyph.lineBetween(-31, 3, -19, 3); glyph.lineBetween(19, 3, 31, 3); container.add(glyph);
+    } else if (isSignal) {
+      const glyph = this.add.graphics().lineStyle(2, border, 0.82); glyph.lineBetween(-30, 10, -7, -7); glyph.lineBetween(-7, -7, 13, 7); glyph.lineBetween(13, 7, 30, -10); glyph.fillStyle(border, 0.95).fillCircle(-30, 10, 4).fillCircle(-7, -7, 4).fillCircle(13, 7, 4).fillCircle(30, -10, 4); container.add(glyph);
+    } else if (category === "PROTOCOL") {
+      const glyph = this.add.graphics().lineStyle(2, border, 0.82); glyph.strokeCircle(0, 2, 24); glyph.lineBetween(-28, 2, 28, 2); glyph.lineBetween(0, -26, 0, 30); glyph.fillStyle(border, 0.9).fillRect(-5, -3, 10, 10); container.add(glyph);
+    } else {
+      const glyph = this.add.graphics().lineStyle(2, border, 0.62); glyph.strokeRect(-12, -3, 24, 24); glyph.lineBetween(-6, 9, 6, 9); glyph.setPosition(0, -2); container.add(glyph);
+    }
+    container.add(desc);
+    bg.on("pointerdown", () => this.chooseDraft(index));
+    return container;
+  }
+
+  private closeDraft(message: string): void {
+    for (const view of this.draftViews) view.destroy(true);
+    this.draftViews = [];
+    this.draftChoices = [];
+    this.refractView?.destroy(true);
+    this.refractView = null;
+    this.draftBackdrop?.destroy();
+    this.draftBackdrop = null;
+    this.draftOpen = false;
+    this.setCombatControlsEnabled(true);
+    this.statusText.setDepth(110).setText(message);
+    this.updateHud();
+    this.syncTestState();
+  }
+
+  private chooseDraft(index: number): void {
+    if (!this.draftOpen) return;
+    const choice = this.draftChoices[index];
+    if (!choice) return;
+    const projection = applyCR2CandidateToLive(this.liveSnapshot(), choice);
+    this.applyCR2Projection(projection);
+    this.closeDraft(choice.name + " selected // combat resumed.");
   }
 
   private updateMovement(dt: number): void {
@@ -1655,11 +1769,11 @@ class SurvivalScene extends Phaser.Scene {
   private installKeyboard(): void {
     this.input.keyboard?.on("keydown", (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
-      if (["arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d", " ", "1", "2", "3"].includes(key)) event.preventDefault();
-      if (event.repeat && key === " ") return;
+      if (["arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d", " ", "r", "1", "2", "3"].includes(key)) event.preventDefault();
+      if (event.repeat && (key === " " || key === "r")) return;
       if (key === "w" || key === "arrowup") this.moveUp = true; else if (key === "s" || key === "arrowdown") this.moveDown = true;
       else if (key === "a" || key === "arrowleft") this.moveLeft = true; else if (key === "d" || key === "arrowright") this.moveRight = true;
-      else if (key === " ") this.shift(); else if (this.draftOpen && /^[1-3]$/u.test(key)) this.chooseDraft(Number(key) - 1);
+      else if (key === " ") this.shift(); else if (this.draftOpen && key === "r") this.refractDraft(); else if (this.draftOpen && /^[1-3]$/u.test(key)) this.chooseDraft(Number(key) - 1);
     });
     this.input.keyboard?.on("keyup", (event: KeyboardEvent) => {
       const key = event.key.toLowerCase(); if (key === "w" || key === "arrowup") this.moveUp = false; else if (key === "s" || key === "arrowdown") this.moveDown = false; else if (key === "a" || key === "arrowleft") this.moveLeft = false; else if (key === "d" || key === "arrowright") this.moveRight = false;
@@ -1694,15 +1808,17 @@ class SurvivalScene extends Phaser.Scene {
     canvas.dataset.frameA = String(this.pair.a.index); canvas.dataset.frameB = String(this.pair.b.index); canvas.dataset.phase = this.phase;
     canvas.dataset.x = String(Math.round(this.friend?.x ?? 0)); canvas.dataset.y = String(Math.round(this.friend?.y ?? 0)); canvas.dataset.hp = String(this.hp);
     canvas.dataset.level = String(this.level); canvas.dataset.xp = String(this.xp); canvas.dataset.kills = String(this.kills); canvas.dataset.shifts = String(this.shifts);
-    canvas.dataset.deltaRank = String(this.deltaRank); canvas.dataset.pickupRadius = String(this.pickupRadius); canvas.dataset.draftOpen = this.draftOpen ? "true" : "false";
-    canvas.dataset.draftCount = String(this.draftChoices.length); canvas.dataset.draftIds = this.draftChoices.map(choice => choice.id).join(",");
+    canvas.dataset.deltaRank = String(this.deltaRank); canvas.dataset.pickupRadius = String(this.pickupRadius); canvas.dataset.effectivePickupRadius = String(this.effectivePickupRadius()); canvas.dataset.draftOpen = this.draftOpen ? "true" : "false";
+    canvas.dataset.draftCount = String(this.draftChoices.length); canvas.dataset.draftIds = this.draftChoices.map(cr2LegacyCompatibleDraftId).join(","); canvas.dataset.draftCandidateIds = this.draftChoices.map(choice => choice.candidateId).join(",");
     canvas.dataset.activeEnemies = String(this.enemies.filter(enemy => enemy.active).length); canvas.dataset.qualified = this.qualified ? "true" : "false"; canvas.dataset.dead = this.dead ? "true" : "false";
     canvas.dataset.directorStage = this.directorStage; canvas.dataset.directorElapsedMs = String(Math.round(this.elapsedActiveMs)); canvas.dataset.bossPending = this.bossPending ? "true" : "false";
-    canvas.dataset.spawnedCheckpoints = [...this.spawnedCheckpoints].join(","); canvas.dataset.elitesDefeated = String(this.elitesDefeated); canvas.dataset.evolutionCores = String(this.evolutionCores);
+    canvas.dataset.spawnedCheckpoints = [...this.spawnedCheckpoints].join(","); canvas.dataset.elitesDefeated = String(this.elitesDefeated); canvas.dataset.evolutionCores = String(this.evolutionCores); canvas.dataset.refracts = String(this.refracts); canvas.dataset.rerollNonce = String(this.rerollNonce);
+    canvas.dataset.protocolSlotsUsed = String(Object.values(this.protocols).filter(rank => rank !== undefined).length); canvas.dataset.protocols = V23_PROTOCOL_FAMILIES.filter(family => this.protocols[family] !== undefined).map(family => `${family}:${this.protocols[family]}`).join(",");
+    canvas.dataset.protocolCommonCore = String(this.protocols.COMMON_CORE ?? 0); canvas.dataset.protocolVectorLens = String(this.protocols.VECTOR_LENS ?? 0); canvas.dataset.protocolOrbitStabilizer = String(this.protocols.ORBIT_STABILIZER ?? 0); canvas.dataset.protocolMemoryFuse = String(this.protocols.MEMORY_FUSE ?? 0); canvas.dataset.protocolResonanceCoil = String(this.protocols.RESONANCE_COIL ?? 0);
     canvas.dataset.activeElites = String(this.enemies.filter(enemy => enemy.active && enemy.elite).length); canvas.dataset.beaconProjectiles = String(this.beaconProjectiles.length);
     canvas.dataset.enemyKinds = this.enemies.filter(enemy => enemy.active).map(enemy => enemy.kind).sort().join(",");
     canvas.dataset.seed = String(this.seed); canvas.dataset.controlsDimmed = this.draftOpen ? "true" : "false"; canvas.dataset.deltaFx = "canonical-exclusive";
-    const deltaProfile = buildDeltaProfile(this.pair.a.rows, this.pair.b.rows, this.phase, this.deltaRank);
+    const deltaProfile = this.deltaProfile();
     canvas.dataset.deltaDamage = String(deltaProfile.damage);
     canvas.dataset.deltaCooldownMs = String(deltaProfile.cooldownMs);
     canvas.dataset.deltaWorldScale = String(deltaProfile.worldScale);
@@ -1737,7 +1853,7 @@ class SurvivalScene extends Phaser.Scene {
     canvas.dataset.vectorQualificationFixture = this.vectorQualificationFixture;
     canvas.dataset.vectorInFlightRanks = this.vectorProjectiles.filter(projectile => projectile.active && projectile.profile).map(projectile => String(projectile.profile?.rank ?? 0)).join(",");
     canvas.dataset.vectorInFlightTransfer = this.vectorProjectiles.some(projectile => projectile.active && projectile.transferShot) ? "true" : "false";
-    const orbitProfile = buildOrbitProfile(this.orbitRank);
+    const orbitProfile = this.orbitProfile();
     canvas.dataset.orbitOwned = this.orbitOwned ? "true" : "false";
     canvas.dataset.orbitRank = String(this.orbitRank);
     canvas.dataset.orbitProfile = `rank${this.orbitRank}-phase-reversal`;
@@ -1758,7 +1874,7 @@ class SurvivalScene extends Phaser.Scene {
     const activeMines = this.echoMines
       .filter((runtime): runtime is EchoMineRuntime & { mine: EchoMineCore } => runtime.active && runtime.mine !== null)
       .sort((a, b) => a.mine.id - b.mine.id);
-    const echoProfile = buildEchoProfile(this.echoRank, 0);
+    const echoProfile = this.echoProfile(0);
     canvas.dataset.echoOwned = this.echoOwned ? "true" : "false";
     canvas.dataset.echoRank = String(this.echoRank);
     canvas.dataset.echoProfile = `rank${this.echoRank}-phase-memory`;
@@ -1780,7 +1896,7 @@ class SurvivalScene extends Phaser.Scene {
     canvas.dataset.echoQualificationFixture = this.echoQualificationFixture;
     canvas.dataset.echoMemoryDepths = activeMines.map(runtime => `${runtime.mine.id}:${runtime.mine.memoryDepth}`).join(",");
     canvas.dataset.echoMineStates = activeMines.map(runtime => `${runtime.mine.id}:${runtime.mine.recordedPhase}:${runtime.mine.state}:D${runtime.mine.memoryDepth}`).join("|");
-    const signalProfile = buildSignalArcProfile(this.signalRank);
+    const signalProfile = this.signalProfile();
     canvas.dataset.signalOwned = this.signalOwned ? "true" : "false";
     canvas.dataset.signalRank = String(this.signalRank);
     canvas.dataset.signalProfile = `rank${this.signalRank}-phase-chain`;
@@ -1804,7 +1920,7 @@ class SurvivalScene extends Phaser.Scene {
     canvas.dataset.signalLastChainCommonBonus = this.signalLastChainCommonBonus.map(value => value ? "1" : "0").join(",");
     canvas.dataset.signalLastChainForwardDegrees = this.signalLastChainForwardDegrees.map(value => value === null ? "" : String(value)).join(",");
     canvas.dataset.signalShiftGraphInvalidations = String(this.signalShiftGraphInvalidations);
-    canvas.dataset.signalCooldownReady = this.signalAccumulator >= buildSignalArcProfile(this.signalRank).cooldownMs ? "true" : "false";
+    canvas.dataset.signalCooldownReady = this.signalAccumulator >= this.signalProfile().cooldownMs ? "true" : "false";
   }
 }
 
