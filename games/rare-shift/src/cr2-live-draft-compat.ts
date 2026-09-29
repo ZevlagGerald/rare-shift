@@ -14,6 +14,8 @@ export type CR2LegacyCompatibleDraftId =
   | "SIGNAL_MAGNET"
   | string;
 
+// Browser regression harnesses intentionally keep the qualified legacy IDs for
+// inherited weapon/utility choices even though CR-2 uses normalized candidates.
 const ACQUIRE_ID: Readonly<Record<Exclude<V23WeaponFamily, "DELTA">, CR2LegacyCompatibleDraftId>> = Object.freeze({
   VECTOR: "VECTOR_NEEDLE",
   ORBIT: "ORBIT_NODES",
