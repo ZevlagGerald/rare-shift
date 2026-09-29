@@ -26,12 +26,18 @@ jobs:
         run: |
           set -euo pipefail
           test "${GITHUB_REF_NAME}" = "feature/v2-3b5-signal-ranks-clean"
+      - name: Repair helper literal escaping
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i 's/${choice.name}/\\${choice.name}/g' scripts/apply-v2-3b5-runtime.mjs
       - name: Apply bounded runtime patch
         run: node scripts/apply-v2-3b5-runtime.mjs
       - name: Diff guard
         shell: bash
         run: |
           set -euo pipefail
+          git checkout -- scripts/apply-v2-3b5-runtime.mjs
           git diff --check
           changed="$(git diff --name-only)"
           printf '%s\n' "$changed"
