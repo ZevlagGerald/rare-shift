@@ -64,17 +64,24 @@ export function buildCR2Draft(seed: number, level: number, state: V23BuildState)
   const eligible = eligibleCR2EvolutionFamilies(state);
   if (eligible.length === 0) return buildV23ADraft(seed, level, state);
 
-  const base = buildV23AFallbackDraft(seed, level, state);
+  const baseCandidates = enumerateV23ACandidates(level, state);
+  const baseDraft = buildV23AFallbackDraft(seed, level, state);
   const selectedFamily = deterministicEvolutionChoice(seed, level, state.rerollNonce, eligible);
   const evolution = evolutionCandidate(selectedFamily);
-  const remaining = base.choices.filter(choice => choice.candidateId !== evolution.candidateId).slice(0, 2);
-  if (remaining.length < 2) {
-    const allBase = enumerateV23ACandidates(level, state)
-      .filter(choice => choice.candidateId !== evolution.candidateId)
-      .slice(0, 2);
-    return frozenDraft([evolution, ...allBase], allBase.length + eligible.length, state.rerollNonce);
+  const allEvolutionCandidates = eligible.map(evolutionCandidate);
+  const supplemental = [
+    ...baseDraft.choices,
+    ...baseCandidates,
+    ...allEvolutionCandidates,
+  ].filter(candidate => candidate.candidateId !== evolution.candidateId);
+  const distinctSupplemental = supplemental.filter((candidate, index, list) => (
+    list.findIndex(item => item.candidateId === candidate.candidateId) === index
+  ));
+  const remaining = distinctSupplemental.slice(0, 2);
+  const legalCount = baseCandidates.length + eligible.length;
+  if (legalCount < 3 || remaining.length < 2) {
+    throw new Error(`CR-2 production draft exhausted: only ${legalCount} legal candidates at level ${level}.`);
   }
-  const legalCount = enumerateV23ACandidates(level, state).length + eligible.length;
   return frozenDraft([evolution, ...remaining], legalCount, state.rerollNonce);
 }
 
