@@ -38,6 +38,38 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Sanitize one-shot generator literals
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("scripts/apply-cr2b-live-integration.mjs")
+          source = path.read_text(encoding="utf-8")
+          replacements = [
+              ('`R // REFRACT · ${this.refracts}`', '"R // REFRACT · " + this.refracts'),
+              ('`LEVEL UP // choose 1 of ${this.draftChoices.length} · keys 1–${this.draftChoices.length}${refractHint}`', '"LEVEL UP // choose 1 of " + this.draftChoices.length + " · keys 1–" + this.draftChoices.length + refractHint'),
+              ('`REFRACT // deterministic reroll applied · ${this.refracts} remaining`', '"REFRACT // deterministic reroll applied · " + this.refracts + " remaining"'),
+              ('`${index + 1} // ${category}`', 'String(index + 1) + " // " + category'),
+              ('` ${romanRank(choice.toRank)}`', '" " + romanRank(choice.toRank)'),
+              ('`${choice.name}${rankSuffix}`', 'choice.name + rankSuffix'),
+              ('`RANK ${romanRank(choice.fromRank ?? 1)} → ${romanRank(choice.toRank ?? 1)}`', '"RANK " + romanRank(choice.fromRank ?? 1) + " → " + romanRank(choice.toRank ?? 1)'),
+              ('`PROTOCOL SLOT · RANK I`', '"PROTOCOL SLOT · RANK I"'),
+              ('`PROTOCOL ${romanRank(choice.fromRank ?? 1)} → ${romanRank(choice.toRank ?? 1)}`', '"PROTOCOL " + romanRank(choice.fromRank ?? 1) + " → " + romanRank(choice.toRank ?? 1)'),
+              ('`${choice.description}${protocolSuffix}`', 'choice.description + protocolSuffix'),
+              ('`${choice.name} selected // combat resumed.`', 'choice.name + " selected // combat resumed."'),
+          ]
+          for old, new in replacements:
+              count = source.count(old)
+              if count != 1:
+                  raise SystemExit(f"CR2B_GENERATOR_SANITIZE_ABORT: expected one occurrence of {old!r}, found {count}")
+              source = source.replace(old, new)
+          path.write_text(source, encoding="utf-8")
+          print("CR2B_GENERATOR_SANITIZE=PASS")
+          PY
+          node --check scripts/apply-cr2b-live-integration.mjs
+
       - name: Apply fail-closed Phaser patch
         shell: bash
         run: |
@@ -92,6 +124,7 @@ jobs:
           set -euo pipefail
           git config user.name "Zev"
           git config user.email "214125688+ZevlagGerald@users.noreply.github.com"
+          git restore scripts/apply-cr2b-live-integration.mjs
           git add games/rare-shift/src/phaser-survival.ts
           test -n "$(git diff --cached --name-only)"
           test "$(git diff --cached --name-only)" = "games/rare-shift/src/phaser-survival.ts"
