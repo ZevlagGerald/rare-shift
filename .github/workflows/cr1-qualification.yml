@@ -1,4 +1,5 @@
 name: RARE SHIFT CR-1 Qualification
+# Requalify the checkpoint-capacity reserve repair on an exact feature HEAD.
 
 on:
   push:
