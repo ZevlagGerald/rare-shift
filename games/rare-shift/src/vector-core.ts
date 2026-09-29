@@ -135,7 +135,7 @@ export function acquirePriorityVectorTarget(
   originY: number,
   lockedTargetId: number | null = null,
   range = VECTOR_RANK_I.range,
-  priorityBand = VECTOR_PRIORITY_BAND_PX,
+  priorityBand: number = VECTOR_PRIORITY_BAND_PX,
 ): VectorTargetResult | null {
   const legal = candidates
     .filter(candidate => isVectorTargetLegal(candidate, phase, originX, originY, range))
