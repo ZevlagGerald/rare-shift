@@ -61,6 +61,13 @@ test("Rank III PRIORITY TRACE applies D+120 band, priority, distance and stable 
   assert.equal(noTraceInBand?.id, 9);
 });
 
+test("VECTOR priority acquisition accepts a bounded non-default numeric band without changing the 120px default", () => {
+  const candidates = [A(9, 100, 0), TRACE(8, 225, 0)];
+  assert.equal(acquirePriorityVectorTarget(candidates, "A", 0, 0)?.id, 9, "default 120px band remains authoritative");
+  assert.equal(acquirePriorityVectorTarget(candidates, "A", 0, 0, null, 560, 126)?.id, 8, "explicit widened band may admit a legal priority target");
+  assert.equal(acquirePriorityVectorTarget([A(9, 100, 0), B(8, 225, 0)], "A", 0, 0, null, 560, 126)?.id, 9, "a wider band never legalizes an off-phase ghost");
+});
+
 test("Rank V lock preference only applies among tied highest-priority candidates", () => {
   const candidates = [TRACE(1, 130, 0), TRACE(2, 120, 0), A(3, 100, 0)];
   assert.equal(acquirePriorityVectorTarget(candidates, "A", 0, 0, 1)?.id, 1);
