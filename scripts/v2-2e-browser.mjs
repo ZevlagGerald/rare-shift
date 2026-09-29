@@ -110,6 +110,9 @@ function qualify(width) {
         assert.ok(count >= 1 && count <= 3, `${label} draft count must remain bounded`);
         let index = ids.indexOf("FIELD_REPAIR");
         if (index < 0) index = ids.indexOf("SIGNAL_MAGNET");
+        // Once the inherited four-slot acquisition boundary has been proven,
+        // later rank tranches may legally advance. Prefer DELTA so the optional
+        // ORBIT/ECHO/SIGNAL Rank-I interaction surface remains stable here.
         if (index < 0) index = ids.indexOf("DELTA_RANK");
         if (index < 0) index = 0;
         console.log(`V2_2E_SURVIVAL_DRAFT_${width}=L${await data("level")}:HP${await data("hp")}:${ids.join(",")}=>${ids[index]}`);
@@ -120,11 +123,11 @@ function qualify(width) {
       assert.equal(await data("draft-open"), "false", `${label} must resume combat after bounded legal draft resolution`);
     };
 
-    // V2-2E proves the inherited integrated Rank-I four-slot surface, not V2-3B1
-    // DELTA progression. Preserve the already-qualified onboarding route here:
-    // ORBIT -> ECHO -> SIGNAL. DELTA remains mandatory Rank I and occupies slot 1;
-    // the dedicated V2-3B1 proof owns DELTA II-V. No state is injected and every
-    // acquisition is made through the real draft UI.
+    // V2-2E proves the inherited Rank-I four-slot acquisition boundary:
+    // ORBIT -> ECHO -> SIGNAL with mandatory DELTA in slot 1. After the 4/4
+    // build is established, later rank tranches may legally advance through
+    // real post-build drafts; V2-3B1 separately owns DELTA II-V mechanics.
+    // No state is injected and every acquisition is made through the real UI.
     await moveUntilDraft(2, 58_000, "level-2 integrated-build draft");
     const level2Ids = list(await data("draft-ids"));
     assert.deepEqual(new Set(level2Ids), new Set(["ORBIT_NODES", "VECTOR_NEEDLE", "DELTA_RANK"]));
@@ -142,6 +145,10 @@ function qualify(width) {
     await chooseBuildCard("SIGNAL_ARC", "level-4 integrated-build draft");
     assert.equal(await data("signal-owned"), "true");
     assert.equal(await data("weapon-slots-used"), "4");
+    assert.equal(await data("delta-rank"), "1", "DELTA must remain Rank I through the 4/4 acquisition boundary");
+    assert.equal(await data("orbit-rank"), "1", "ORBIT must be Rank I at the 4/4 acquisition boundary");
+    assert.equal(await data("echo-rank"), "1", "ECHO must be Rank I at the 4/4 acquisition boundary");
+    assert.equal(await data("signal-rank"), "1", "SIGNAL must be Rank I at the 4/4 acquisition boundary");
 
     assert.equal(await data("orbit-owned"), "true");
     assert.equal(await data("echo-owned"), "true");
@@ -221,7 +228,11 @@ function qualify(width) {
     assertChainPhase(chainKinds, phase);
 
     assert.equal(await data("delta-fx"), "canonical-exclusive");
-    assert.equal(await data("delta-rank"), "1");
+    const deltaRankAfterObservation = Number(await data("delta-rank"));
+    assert.ok(deltaRankAfterObservation >= 1 && deltaRankAfterObservation <= 5, "post-build DELTA rank must stay within I-V");
+    assert.equal(await data("orbit-rank"), "1", "V2-2E keeps ORBIT on its inherited Rank-I interaction surface");
+    assert.equal(await data("echo-rank"), "1", "V2-2E keeps ECHO on its inherited Rank-I interaction surface");
+    assert.equal(await data("signal-rank"), "1", "V2-2E keeps SIGNAL on its inherited Rank-I interaction surface");
     assert.equal(await data("orbit-owned"), "true");
     assert.equal(await data("echo-owned"), "true");
     assert.equal(await data("signal-owned"), "true");
