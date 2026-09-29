@@ -75,13 +75,19 @@ function naturalQualification(width) {
       while (Date.now() < deadline && !(bool(await data("draft-open")) && Number(await data("level")) >= minimumLevel)) {
         if (bool(await data("dead"))) throw new Error(`died before ${label}; L${await data("level")}; HP${await data("hp")}; K${await data("kills")}`);
         if (!bool(await data("draft-open"))) {
-          const moveDelay = allowShift ? 520 : 680;
-          const settleDelay = allowShift ? 150 : 45;
+          // FriendSDK 0.1.3 changes host/test timing enough to expose survival
+          // variance in this long natural route. Reuse the already-qualified B3
+          // SHIFT cadence before ECHO ownership, then keep the ECHO evidence
+          // window strictly no-SHIFT with higher continuous movement duty. This
+          // changes no HP, XP, enemies, damage, ranks, pickups, spawns, drafts or
+          // production gameplay state.
+          const moveDelay = allowShift ? 520 : 760;
+          const settleDelay = allowShift ? 160 : 20;
           await canvas.press(route[routeIndex++ % route.length], { delay: moveDelay });
           await page.waitForTimeout(settleDelay);
-          if (allowShift && routeIndex % 6 === 0 && !bool(await data("draft-open"))) {
+          if (allowShift && routeIndex % 5 === 0 && !bool(await data("draft-open"))) {
             await shift(canvas, width);
-            await page.waitForTimeout(80);
+            await page.waitForTimeout(95);
           }
         }
       }
@@ -152,8 +158,8 @@ function naturalQualification(width) {
     while (Date.now() < fourDeadline && Number(await data("echo-active-mines")) < 4) {
       if (bool(await data("dead"))) throw new Error("died before four real Rank-II mines coexisted");
       if (bool(await data("draft-open"))) { await clearDraft(canvas, data); await page.waitForTimeout(90); continue; }
-      await canvas.press(route[routeIndex++ % route.length], { delay: 680 });
-      await page.waitForTimeout(45);
+      await canvas.press(route[routeIndex++ % route.length], { delay: 760 });
+      await page.waitForTimeout(20);
     }
     assert.equal(Number(await data("echo-active-mines")), 4, "Rank II must support four naturally placed mines");
     const states = String(await data("echo-mine-states")).split("|");
