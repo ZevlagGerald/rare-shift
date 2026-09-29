@@ -22,6 +22,21 @@ async function clickDraft(canvas, index, count) {
   assert.ok(box, "draft canvas must have a bounding box");
   await canvas.click({ position: { x: box.width * centers(count)[index] / 960, y: box.height * 320 / 640 } });
 }
+async function armVectorRankSelectionSnapshot(canvas, targetRank) {
+  await canvas.evaluate((node, rank) => {
+    node.removeAttribute("data-vector-rank-selection-shots");
+    const observer = new MutationObserver(() => {
+      if (node.dataset.vectorRank === String(rank) && node.dataset.draftOpen === "false") {
+        node.dataset.vectorRankSelectionShots = node.dataset.vectorShots ?? "";
+        observer.disconnect();
+      }
+    });
+    observer.observe(node, {
+      attributes: true,
+      attributeFilter: ["data-vector-rank", "data-draft-open", "data-vector-shots"],
+    });
+  }, targetRank);
+}
 async function shift(canvas, width) {
   if (width === 390) {
     const box = await canvas.boundingBox();
@@ -129,9 +144,22 @@ function naturalQualification(width) {
       if (vectorIndex >= 0) {
         const shotsBefore = Number(await data("vector-shots"));
         console.log(`V2_3B2_RANK2_DRAFT_${width}=L${await data("level")}:HP${await data("hp")}:${ids.join(",")}=>VECTOR_RANK`);
+        // Playwright may resolve the click after Phaser has already advanced one
+        // resumed frame. Capture the first synchronous dataset state where the
+        // rank is applied and the draft closes; MutationObserver runs before the
+        // next animation frame, so a legitimate cooldown-ready post-resume shot
+        // cannot be misclassified as a rank-up side effect.
+        await armVectorRankSelectionSnapshot(canvas, 2);
         await clickDraft(canvas, vectorIndex, count);
         assert.equal(await data("vector-rank"), "2");
-        assert.equal(Number(await data("vector-shots")), shotsBefore, "rank selection itself must not manufacture a free VECTOR projectile");
+        let selectionShots = await canvas.getAttribute("data-vector-rank-selection-shots");
+        const snapshotDeadline = Date.now() + 1_500;
+        while (selectionShots === null && Date.now() < snapshotDeadline) {
+          await page.waitForTimeout(5);
+          selectionShots = await canvas.getAttribute("data-vector-rank-selection-shots");
+        }
+        assert.notEqual(selectionShots, null, "rank application snapshot must be observed before the next animation frame");
+        assert.equal(Number(selectionShots), shotsBefore, "rank selection itself must not manufacture a free VECTOR projectile");
         rankSelected = true;
         break;
       }
