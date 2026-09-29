@@ -1,0 +1,76 @@
+name: Publish RARE SHIFT FriendSDK Preview
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/publish-preview.yml"
+      - "games/rare-shift/**"
+      - "package.json"
+      - "tsconfig.core.json"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Build, validate, and publish preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FRIENDSDK_ARCHIVE: vendor/rarefriends-friendsdk-0.1.2.tgz
+      FRIENDSDK_SHA256: a6352e187916089b6829c5387fe87f386c5774004f181990e4e3c8ae641cfe83
+      FRIENDSDK_URL: https://github.com/spokesz/friendsdk/releases/download/v0.1.2/rarefriends-friendsdk-0.1.2.tgz
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Fetch and verify FriendSDK v0.1.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p vendor
+          curl --fail --location --retry 5 --retry-all-errors --connect-timeout 20 --max-time 180 --output "$FRIENDSDK_ARCHIVE" "$FRIENDSDK_URL"
+          printf '%s  %s\n' "$FRIENDSDK_SHA256" "$FRIENDSDK_ARCHIVE" | sha256sum --check --strict
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build FriendSDK preview
+        run: npm run build
+
+      - name: Validate FriendSDK game
+        run: npm run check
+
+      - name: Prepare static site
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/rare-shift-preview
+          mkdir -p /tmp/rare-shift-preview
+          cp -a games/rare-shift/.friendsdk/. /tmp/rare-shift-preview/
+          touch /tmp/rare-shift-preview/.nojekyll
+
+      - name: Publish generated site to gh-pages
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd /tmp/rare-shift-preview
+          git init
+          git checkout -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "deploy: RARE SHIFT preview from ${GITHUB_SHA}"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --force origin gh-pages
