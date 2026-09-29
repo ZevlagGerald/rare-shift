@@ -70,22 +70,20 @@ function naturalQualification(width) {
     const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
     let routeIndex = 0;
 
-    const moveUntilDraft = async (minimumLevel, deadlineMs, label, allowShift = true) => {
+    const moveUntilDraft = async (minimumLevel, deadlineMs, label) => {
       const deadline = Date.now() + deadlineMs;
       while (Date.now() < deadline && !(bool(await data("draft-open")) && Number(await data("level")) >= minimumLevel)) {
-        if (bool(await data("dead"))) throw new Error(`died before ${label}; L${await data("level")}; HP${await data("hp")}; K${await data("kills")}`);
+        if (bool(await data("dead"))) throw new Error(`died before ${label}; L${await data("level")}; HP${await data("hp")}; K${await data("kills")}; E${await data("director-elapsed-ms")}`);
         if (!bool(await data("draft-open"))) {
-          const moveDelay = allowShift ? 520 : 680;
-          const settleDelay = allowShift ? 150 : 45;
-          await canvas.press(route[routeIndex++ % route.length], { delay: moveDelay });
-          await page.waitForTimeout(settleDelay);
-          if (allowShift && routeIndex % 6 === 0 && !bool(await data("draft-open"))) {
+          await canvas.press(route[routeIndex++ % route.length], { delay: 520 });
+          await page.waitForTimeout(150);
+          if (routeIndex % 6 === 0 && !bool(await data("draft-open"))) {
             await shift(canvas, width);
             await page.waitForTimeout(80);
           }
         }
       }
-      assert.equal(await data("draft-open"), "true", `expected ${label}`);
+      assert.equal(await data("draft-open"), "true", `expected ${label}; L${await data("level")}; HP${await data("hp")}; K${await data("kills")}; E${await data("director-elapsed-ms")}`);
       assert.ok(Number(await data("level")) >= minimumLevel, `${label} must be level ${minimumLevel}+`);
     };
 
@@ -111,17 +109,16 @@ function naturalQualification(width) {
     assert.equal(await data("echo-rank"), "1");
     assert.equal(await data("echo-max-active"), "3");
 
-    // From ECHO acquisition through the Rank-II capacity observation, do not
-    // SHIFT. Mines used by this proof must remain genuine DORMANT_HOME path memory.
-    // Because SHIFT is deliberately unavailable here, keep movement duty high
-    // instead of compensating with HP/XP/enemy mutations.
-    await moveUntilDraft(4, 85_000, "level-4 SIGNAL draft", false);
+    // Natural I→II progression should use ordinary player mechanics, including
+    // SHIFT. Four-mine DORMANT_HOME capacity is qualified independently below
+    // so that capacity correctness is not coupled to a one-hit endurance margin.
+    await moveUntilDraft(4, 85_000, "level-4 SIGNAL draft");
     await choose("SIGNAL_ARC", "level-4 SIGNAL draft");
     assert.equal(await data("weapon-slots-used"), "4");
 
     let rankSelected = false;
     for (let targetLevel = 5; targetLevel <= 9 && !rankSelected; targetLevel += 1) {
-      await moveUntilDraft(targetLevel, 95_000, `level-${targetLevel} ECHO higher-rank draft`, false);
+      await moveUntilDraft(targetLevel, 95_000, `level-${targetLevel} ECHO higher-rank draft`);
       const ids = list(await data("draft-ids"));
       const count = Number(await data("draft-count"));
       const echoIndex = ids.indexOf("ECHO_RANK");
@@ -147,23 +144,47 @@ function naturalQualification(width) {
       await page.waitForTimeout(130);
     }
     assert.equal(rankSelected, true, "natural production route must expose ECHO I→II without injected progression state");
-
-    const fourDeadline = Date.now() + 16_000;
-    while (Date.now() < fourDeadline && Number(await data("echo-active-mines")) < 4) {
-      if (bool(await data("dead"))) throw new Error("died before four real Rank-II mines coexisted");
-      if (bool(await data("draft-open"))) { await clearDraft(canvas, data); await page.waitForTimeout(90); continue; }
-      await canvas.press(route[routeIndex++ % route.length], { delay: 680 });
-      await page.waitForTimeout(45);
-    }
-    assert.equal(Number(await data("echo-active-mines")), 4, "Rank II must support four naturally placed mines");
-    const states = String(await data("echo-mine-states")).split("|");
-    assert.equal(states.length, 4);
-    assert.ok(states.every(state => state.includes("DORMANT_HOME")), states.join("|"));
     assert.equal(await data("echo-qualification-fixture"), "");
     assert.equal(await data("dead"), "false");
     if (width === 390) assert.equal(await reduced.isChecked(), true);
     await page.locator(".rf-game-frame").screenshot({ path: resolve(`artifacts/rare-shift-v2-3b4-natural-rank2-${width}.png`) });
     console.log(`RARE_SHIFT_V2_3B4_NATURAL_ECHO_RANK2_${width}=PASS`);
+  };
+}
+
+function rank2CapacityQualification(width) {
+  return async ({ page, game }) => {
+    await game.locator('[data-stage="scan"]').waitFor({ state: "visible" });
+    const reduced = await enableReducedMotion(game, width);
+    await setFixture(game, 2);
+    const canvas = await mount(game);
+    const data = name => canvas.getAttribute(`data-${name}`);
+    const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
+    let routeIndex = 0;
+
+    assert.equal(await data("echo-qualification-fixture"), "ECHO_RANK_2");
+    assert.equal(await data("echo-rank"), "2");
+    assert.equal(await data("echo-max-active"), "4");
+    assert.equal(await data("echo-placements"), "0", "Rank-II fixture must not fabricate placements");
+    assert.equal(await data("echo-active-mines"), "0", "Rank-II fixture must start without fabricated mines");
+
+    const fourDeadline = Date.now() + 20_000;
+    while (Date.now() < fourDeadline && Number(await data("echo-active-mines")) < 4) {
+      if (bool(await data("dead"))) throw new Error(`died before four real Rank-II mines coexisted; HP${await data("hp")}; K${await data("kills")}; E${await data("director-elapsed-ms")}`);
+      if (bool(await data("draft-open"))) { await clearDraft(canvas, data); await page.waitForTimeout(90); continue; }
+      await canvas.press(route[routeIndex++ % route.length], { delay: 680 });
+      await page.waitForTimeout(45);
+    }
+
+    assert.equal(Number(await data("echo-active-mines")), 4, "Rank II must support four naturally timed mines");
+    assert.equal(Number(await data("echo-placements")), 4, "capacity proof must contain exactly four real placements");
+    const states = String(await data("echo-mine-states")).split("|");
+    assert.equal(states.length, 4);
+    assert.ok(states.every(state => state.includes("DORMANT_HOME")), states.join("|"));
+    assert.equal(await data("echo-triggers"), "0", "no-SHIFT capacity proof must not trigger a mine");
+    assert.equal(await data("dead"), "false");
+    if (width === 390) assert.equal(await reduced.isChecked(), true);
+    await page.locator(".rf-game-frame").screenshot({ path: resolve(`artifacts/rare-shift-v2-3b4-rank2-capacity-${width}.png`) });
     console.log(`RARE_SHIFT_V2_3B4_ECHO_FOUR_MINE_CAPACITY_${width}=PASS`);
   };
 }
@@ -285,6 +306,13 @@ for (const width of [960, 390]) {
     timeout: 160_000,
     screenshot: resolve(`artifacts/rare-shift-v2-3b4-natural-host-${width}.png`),
     check: naturalQualification(width),
+  });
+  await testGame(gameDirectory, {
+    width,
+    height: width === 960 ? 800 : 844,
+    timeout: 55_000,
+    screenshot: resolve(`artifacts/rare-shift-v2-3b4-rank2-capacity-host-${width}.png`),
+    check: rank2CapacityQualification(width),
   });
   await testGame(gameDirectory, {
     width,
