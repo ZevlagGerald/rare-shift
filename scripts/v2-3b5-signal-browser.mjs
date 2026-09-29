@@ -67,20 +67,11 @@ function naturalQualification(width) {
     const reduced = await enableReducedMotion(game, width);
     const canvas = await mount(game);
     const data = name => canvas.getAttribute(`data-${name}`);
+    const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
     let moveTicks = 0;
 
-    const moveTowardSafeLane = async () => {
-      const x = Number(await data("x"));
-      const y = Number(await data("y"));
-      let key;
-      if (y < 250 && x < 1500) key = "ArrowRight";
-      else if (x >= 1500 && y < 950) key = "ArrowDown";
-      else if (y >= 950 && x > 300) key = "ArrowLeft";
-      else if (x <= 300 && y > 250) key = "ArrowUp";
-      else {
-        const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
-        key = route[Math.floor(moveTicks / 10) % route.length];
-      }
+    const moveCentralPatrol = async () => {
+      const key = route[Math.floor(moveTicks / 3) % route.length];
       await canvas.press(key, { delay: 520 });
       moveTicks += 1;
     };
@@ -90,7 +81,7 @@ function naturalQualification(width) {
       while (Date.now() < deadline && !(bool(await data("draft-open")) && Number(await data("level")) >= minimumLevel)) {
         if (bool(await data("dead"))) throw new Error(`died before ${label}; L${await data("level")}; HP${await data("hp")}; K${await data("kills")}; E${await data("director-elapsed-ms")}`);
         if (!bool(await data("draft-open"))) {
-          await moveTowardSafeLane();
+          await moveCentralPatrol();
           await page.waitForTimeout(160);
           if (moveTicks % 5 === 0 && !bool(await data("draft-open"))) {
             await shift(canvas, width);
@@ -98,7 +89,7 @@ function naturalQualification(width) {
           }
         }
       }
-      assert.equal(await data("draft-open"), "true", `expected ${label}`);
+      assert.equal(await data("draft-open"), "true", `expected ${label}; L${await data("level")}; HP${await data("hp")}; K${await data("kills")}; E${await data("director-elapsed-ms")}`);
       assert.ok(Number(await data("level")) >= minimumLevel, `${label} must be level ${minimumLevel}+`);
     };
 
