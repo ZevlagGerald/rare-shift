@@ -20,6 +20,10 @@ function rows(active: readonly [number, number][]): FrameRows {
   return Object.freeze(grid.map(row => row.join("")));
 }
 
+function assertNear(actual: number, expected: number, tolerance = 1e-9): void {
+  assert.ok(Math.abs(actual - expected) <= tolerance, `expected ${actual} to be within ${tolerance} of ${expected}`);
+}
+
 test("COMMON CORE composes only bounded DELTA cadence/field support and preserves canonical authority", () => {
   const a = rows([[2, 2], [7, 7]]);
   const b = rows([[13, 13], [7, 7]]);
@@ -31,7 +35,7 @@ test("COMMON CORE composes only bounded DELTA cadence/field support and preserve
   assert.equal(tuned.profile.pixelCount, base.pixelCount);
   assert.strictEqual(tuned.profile.points, base.points);
   assert.equal(tuned.profile.cooldownMs, 648);
-  assert.equal(tuned.profile.worldScale, 10.26);
+  assertNear(tuned.profile.worldScale, 10.26);
   assert.equal(tuned.profile.hitRadius, base.hitRadius);
   assert.equal(tuned.profile.staggerMs, base.staggerMs);
   assert.equal(tuned.postShiftStabilityMs, 120);
@@ -46,8 +50,8 @@ test("VECTOR LENS improves travel/acquisition only and cannot fabricate hits or 
   assert.equal(tuned.profile.maxInFlight, base.maxInFlight);
   assert.equal(tuned.profile.maxHits, base.maxHits);
   assert.strictEqual(tuned.profile.damageSequence, base.damageSequence);
-  assert.equal(tuned.profile.speed, 1132.8);
-  assert.equal(tuned.profile.range, 604.8000000000001);
+  assertNear(tuned.profile.speed, 1132.8);
+  assertNear(tuned.profile.range, 604.8);
   assert.equal(tuned.postShiftRangeBonus, 24);
 });
 
@@ -58,7 +62,7 @@ test("ORBIT STABILIZER preserves node count/rotation identity and only strengthe
   assert.equal(tuned.nodeCount, base.nodeCount);
   assert.equal(tuned.angularSpeed, base.angularSpeed);
   assert.equal(tuned.rank, base.rank);
-  assert.equal(tuned.radius, 84.80000000000001);
+  assertNear(tuned.radius, 84.8);
   assert.equal(tuned.contactIntervalMs, 585);
   assert.equal(tuned.shearContactRadius, 46);
   assert.equal(tuned.shearDamage, base.shearDamage);
@@ -89,7 +93,7 @@ test("MEMORY FUSE preserves ECHO memory/depth/damage and only improves bounded p
   assert.equal(tuned.lifetimeMs, 14160);
   assert.equal(tuned.returnDelayMs, 126);
   assert.ok(tuned.returnDelayMs >= ECHO_RETURN_DELAY_FLOOR_MS);
-  assert.equal(tuned.triggerRadius, 90.72000000000001);
+  assertNear(tuned.triggerRadius, 90.72);
 });
 
 test("RESONANCE COIL preserves SIGNAL graph cap/damage/routing and only improves bounded cadence/relay reach", () => {
