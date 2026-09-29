@@ -1,6 +1,6 @@
 import { deterministicUnit } from "./survival-core.ts";
 
-export type V21DraftId = "DELTA_RANK" | "VECTOR_NEEDLE" | "VECTOR_RANK" | "ORBIT_NODES" | "ORBIT_RANK" | "ECHO_MINE" | "ECHO_RANK" | "SIGNAL_ARC" | "FIELD_REPAIR" | "SIGNAL_MAGNET";
+export type V21DraftId = "DELTA_RANK" | "VECTOR_NEEDLE" | "VECTOR_RANK" | "ORBIT_NODES" | "ORBIT_RANK" | "ECHO_MINE" | "ECHO_RANK" | "SIGNAL_ARC" | "SIGNAL_RANK" | "FIELD_REPAIR" | "SIGNAL_MAGNET";
 
 export interface V21DraftChoice {
   readonly id: V21DraftId;
@@ -29,6 +29,8 @@ export interface V21BuildState {
   readonly echoRank?: number;
   readonly signalEnabled?: boolean;
   readonly signalOwned?: boolean;
+  readonly signalRankEnabled?: boolean;
+  readonly signalRank?: number;
   readonly weaponSlotsUsed?: number;
   readonly weaponSlotCap?: number;
 }
@@ -37,6 +39,7 @@ export const V21_DELTA_MAX_RANK = 5;
 export const V21_VECTOR_MAX_RANK = 5;
 export const V21_ORBIT_MAX_RANK = 5;
 export const V21_ECHO_MAX_RANK = 5;
+export const V21_SIGNAL_MAX_RANK = 5;
 export const V21_SIGNAL_MAGNET_MAX_RADIUS = 220;
 export const V22_ACTIVE_WEAPON_SLOT_CAP = 4;
 export const V22C_ECHO_DISCOVERY_LEVEL = 3;
@@ -51,6 +54,7 @@ const DEFINITIONS: Readonly<Record<V21DraftId, Omit<V21DraftChoice, "disabled">>
   ECHO_MINE: Object.freeze({ id: "ECHO_MINE", name: "ECHO MINE", category: "WEAPON", description: "Leave phase-memory mines on your path. Leave their reality, then return to make them live." }),
   ECHO_RANK: Object.freeze({ id: "ECHO_RANK", name: "ECHO MINE", category: "WEAPON", description: "Advance ECHO MINE to its next deterministic phase-memory behavior rank." }),
   SIGNAL_ARC: Object.freeze({ id: "SIGNAL_ARC", name: "SIGNAL ARC", category: "WEAPON", description: "Chain through the current corporeal graph. SHIFT rewrites which clusters and COMMON relays are legal." }),
+  SIGNAL_RANK: Object.freeze({ id: "SIGNAL_RANK", name: "SIGNAL ARC", category: "WEAPON", description: "Advance SIGNAL ARC to its next deterministic corporeal-graph behavior rank." }),
   FIELD_REPAIR: Object.freeze({ id: "FIELD_REPAIR", name: "FIELD REPAIR", category: "UTILITY", description: "Restore 25 HP immediately. Does not increase maximum HP." }),
   SIGNAL_MAGNET: Object.freeze({ id: "SIGNAL_MAGNET", name: "SIGNAL MAGNET", category: "UTILITY", description: "Increase Signal XP pickup radius for this run." }),
 });
@@ -76,6 +80,11 @@ function echoRank(state: V21BuildState): number {
   return state.echoRank ?? 1;
 }
 
+function signalRank(state: V21BuildState): number {
+  if (state.signalOwned !== true) return 0;
+  return state.signalRank ?? 1;
+}
+
 export function isV21DraftChoiceValid(state: V21BuildState, id: V21DraftId): boolean {
   if (id === "DELTA_RANK") return state.deltaRank < V21_DELTA_MAX_RANK;
   if (id === "VECTOR_NEEDLE") return state.vectorEnabled === true && state.vectorOwned !== true && weaponSlotAvailable(state);
@@ -85,6 +94,7 @@ export function isV21DraftChoiceValid(state: V21BuildState, id: V21DraftId): boo
   if (id === "ECHO_MINE") return state.echoEnabled === true && state.echoOwned !== true && weaponSlotAvailable(state);
   if (id === "ECHO_RANK") return state.echoRankEnabled === true && state.echoOwned === true && echoRank(state) < V21_ECHO_MAX_RANK;
   if (id === "SIGNAL_ARC") return state.signalEnabled === true && state.signalOwned !== true && weaponSlotAvailable(state);
+  if (id === "SIGNAL_RANK") return state.signalRankEnabled === true && state.signalOwned === true && signalRank(state) < V21_SIGNAL_MAX_RANK;
   if (id === "FIELD_REPAIR") return state.hp < state.maxHp;
   return state.pickupRadius < V21_SIGNAL_MAGNET_MAX_RADIUS;
 }
@@ -102,6 +112,7 @@ export function buildV21Draft(seed: number, level: number, state: V21BuildState)
   if (state.vectorRankEnabled === true) baseIds.push("VECTOR_RANK");
   if (state.orbitRankEnabled === true) baseIds.push("ORBIT_RANK");
   if (state.echoRankEnabled === true) baseIds.push("ECHO_RANK");
+  if (state.signalRankEnabled === true) baseIds.push("SIGNAL_RANK");
   baseIds.push("FIELD_REPAIR", "SIGNAL_MAGNET");
   const validBase = rotateDeterministically(seed, level, baseIds).filter(id => isV21DraftChoiceValid(state, id));
   const acquisitions: V21DraftId[] = [];
@@ -169,6 +180,11 @@ export function applyV21Draft(state: V21BuildState, id: V21DraftId): V21BuildSta
       if (state.signalOwned === true) throw new Error("SIGNAL ARC is already owned.");
       throw new Error("No active weapon slot is available for SIGNAL ARC.");
     }
+    if (id === "SIGNAL_RANK") {
+      if (state.signalRankEnabled !== true) throw new Error("SIGNAL rank progression is not enabled in this tranche.");
+      if (state.signalOwned !== true) throw new Error("Cannot rank SIGNAL ARC before acquisition.");
+      throw new Error("SIGNAL ARC is already rank V.");
+    }
     if (id === "FIELD_REPAIR") throw new Error("FIELD REPAIR requires missing HP.");
     throw new Error("SIGNAL MAGNET is already at its V2-1 pickup-radius cap.");
   }
@@ -193,7 +209,10 @@ export function applyV21Draft(state: V21BuildState, id: V21DraftId): V21BuildSta
     return Object.freeze({ ...state, echoRank: echoRank(state) + 1 });
   }
   if (id === "SIGNAL_ARC") {
-    return Object.freeze({ ...state, signalOwned: true, weaponSlotsUsed: (state.weaponSlotsUsed ?? 1) + 1 });
+    return Object.freeze({ ...state, signalOwned: true, signalRank: 1, weaponSlotsUsed: (state.weaponSlotsUsed ?? 1) + 1 });
+  }
+  if (id === "SIGNAL_RANK") {
+    return Object.freeze({ ...state, signalRank: signalRank(state) + 1 });
   }
   if (id === "FIELD_REPAIR") return Object.freeze({ ...state, hp: Math.min(state.maxHp, state.hp + 25) });
   return Object.freeze({ ...state, pickupRadius: Math.min(V21_SIGNAL_MAGNET_MAX_RADIUS, state.pickupRadius + 35) });
