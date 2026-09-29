@@ -92,6 +92,9 @@ jobs:
       - name: Inherited browser regression through B5
         shell: bash
         run: |
+          # Fail fast on the currently sensitive inherited B5 natural route,
+          # then execute every remaining inherited browser suite exactly once.
+          npm run test:v2-3b5-signal-browser
           npm run test:v2-1-browser
           npm run test:v2-2a-browser
           npm run test:v2-2b-browser
@@ -102,7 +105,6 @@ jobs:
           npm run test:v2-3b2-vector-browser
           npm run test:v2-3b3-orbit-browser
           npm run test:v2-3b4-echo-browser
-          npm run test:v2-3b5-signal-browser
 
       - name: Natural CR-1 Stage-IV browser qualification
         run: npm run test:cr-1-browser
