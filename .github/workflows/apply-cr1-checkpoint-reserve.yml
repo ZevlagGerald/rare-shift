@@ -1,0 +1,76 @@
+name: CR-1 Checkpoint Reserve Repair
+
+on:
+  push:
+    branches:
+      - ops/cr1-checkpoint-reserve-fix
+    paths:
+      - ".github/workflows/apply-cr1-checkpoint-reserve.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout CR-1 feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/cr-1-survival-director
+          fetch-depth: 0
+
+      - name: Apply bounded reserve repair
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          core_path = Path('games/rare-shift/src/cr1-director-core.ts')
+          core = core_path.read_text()
+          anchor = '''export const CR1_CHECKPOINTS: readonly CR1CheckpointSpec[] = Object.freeze([\n  Object.freeze({ id: "ELITE_I", atMs: 80_000, kind: "ANCHOR", hpMultiplier: 2.2, label: "ELITE I // BULWARK" }),\n  Object.freeze({ id: "CHECKPOINT_ELITE", atMs: 180_000, kind: "BEACON", hpMultiplier: 3.4, label: "CHECKPOINT ELITE // OVERWATCH" }),\n  Object.freeze({ id: "ELITE_II", atMs: 285_000, kind: "FLICKER_A", hpMultiplier: 4.2, label: "ELITE II // PHASE HUNTER" }),\n]);\n\nexport function stageForElapsedMs'''
+          replacement = '''export const CR1_CHECKPOINTS: readonly CR1CheckpointSpec[] = Object.freeze([\n  Object.freeze({ id: "ELITE_I", atMs: 80_000, kind: "ANCHOR", hpMultiplier: 2.2, label: "ELITE I // BULWARK" }),\n  Object.freeze({ id: "CHECKPOINT_ELITE", atMs: 180_000, kind: "BEACON", hpMultiplier: 3.4, label: "CHECKPOINT ELITE // OVERWATCH" }),\n  Object.freeze({ id: "ELITE_II", atMs: 285_000, kind: "FLICKER_A", hpMultiplier: 4.2, label: "ELITE II // PHASE HUNTER" }),\n]);\n\nexport const CR1_RESERVED_CHECKPOINT_SLOTS = 3 as const;\n\nexport function canSpawnRegularEnemy(activeRegularEnemies: number, maxActiveEnemies: number): boolean {\n  if (!Number.isInteger(activeRegularEnemies) || activeRegularEnemies < 0) throw new Error("activeRegularEnemies must be a non-negative integer.");\n  if (!Number.isInteger(maxActiveEnemies) || maxActiveEnemies < CR1_RESERVED_CHECKPOINT_SLOTS) throw new Error("maxActiveEnemies must reserve all CR-1 checkpoint slots.");\n  if (CR1_RESERVED_CHECKPOINT_SLOTS !== CR1_CHECKPOINTS.length) throw new Error("CR-1 checkpoint reserve must match checkpoint count.");\n  return activeRegularEnemies < maxActiveEnemies - CR1_RESERVED_CHECKPOINT_SLOTS;\n}\n\nexport function stageForElapsedMs'''
+          if anchor not in core:
+              raise SystemExit('core anchor mismatch')
+          core_path.write_text(core.replace(anchor, replacement, 1))
+
+          runtime_path = Path('games/rare-shift/src/phaser-survival.ts')
+          runtime = runtime_path.read_text()
+          import_anchor = '''  buildCheckpointSpawnPosition,\n  buildDirectedSpawnSpec,\n  claimCheckpointRewards,'''
+          import_replacement = '''  buildCheckpointSpawnPosition,\n  buildDirectedSpawnSpec,\n  canSpawnRegularEnemy,\n  claimCheckpointRewards,'''
+          if import_anchor not in runtime:
+              raise SystemExit('runtime import anchor mismatch')
+          runtime = runtime.replace(import_anchor, import_replacement, 1)
+          spawn_anchor = '''  private spawnEnemy(): void {\n    const slot = this.enemies.find(enemy => !enemy.active);\n    if (!slot) return;\n    const spec = buildDirectedSpawnSpec(this.seed, this.spawnIndex, this.elapsedActiveMs, { x: this.friend.x, y: this.friend.y });'''
+          spawn_replacement = '''  private spawnEnemy(): void {\n    const activeRegularEnemies = this.enemies.filter(enemy => enemy.active && !enemy.elite).length;\n    if (!canSpawnRegularEnemy(activeRegularEnemies, this.enemies.length)) return;\n    const slot = this.enemies.find(enemy => !enemy.active);\n    if (!slot) return;\n    const spec = buildDirectedSpawnSpec(this.seed, this.spawnIndex, this.elapsedActiveMs, { x: this.friend.x, y: this.friend.y });'''
+          if spawn_anchor not in runtime:
+              raise SystemExit('runtime spawn anchor mismatch')
+          runtime_path.write_text(runtime.replace(spawn_anchor, spawn_replacement, 1))
+
+          test_path = Path('games/rare-shift/tests/cr-1-survival-director.test.ts')
+          tests = test_path.read_text()
+          import_anchor = '''  CR1_CHECKPOINTS,\n  CR1_STAGES,\n  buildDirectedSpawnSpec,'''
+          import_replacement = '''  CR1_CHECKPOINTS,\n  CR1_RESERVED_CHECKPOINT_SLOTS,\n  CR1_STAGES,\n  buildDirectedSpawnSpec,\n  canSpawnRegularEnemy,'''
+          if import_anchor not in tests:
+              raise SystemExit('test import anchor mismatch')
+          tests = tests.replace(import_anchor, import_replacement, 1)
+          test_anchor = '''  spawned.add("CHECKPOINT_ELITE");\n  assert.deepEqual(dueCheckpoints(285_000, spawned).map(item => item.id), ["ELITE_II"]);\n});\n\ntest("CR-1 elite reward ledger is exactly-once and checkpoint core rule is bounded", () => {'''
+          test_replacement = '''  spawned.add("CHECKPOINT_ELITE");\n  assert.deepEqual(dueCheckpoints(285_000, spawned).map(item => item.id), ["ELITE_II"]);\n});\n\ntest("CR-1 ordinary spawning reserves capacity for all mandatory checkpoints", () => {\n  assert.equal(CR1_RESERVED_CHECKPOINT_SLOTS, 3);\n  assert.equal(CR1_RESERVED_CHECKPOINT_SLOTS, CR1_CHECKPOINTS.length);\n  assert.equal(canSpawnRegularEnemy(44, 48), true);\n  assert.equal(canSpawnRegularEnemy(45, 48), false);\n  assert.equal(canSpawnRegularEnemy(46, 48), false);\n  assert.throws(() => canSpawnRegularEnemy(-1, 48), /non-negative integer/u);\n  assert.throws(() => canSpawnRegularEnemy(0, 2), /reserve all CR-1 checkpoint slots/u);\n});\n\ntest("CR-1 elite reward ledger is exactly-once and checkpoint core rule is bounded", () => {'''
+          if test_anchor not in tests:
+              raise SystemExit('test body anchor mismatch')
+          test_path.write_text(tests.replace(test_anchor, test_replacement, 1))
+          PY
+
+          git diff --check
+          git diff -- games/rare-shift/src/cr1-director-core.ts games/rare-shift/src/phaser-survival.ts games/rare-shift/tests/cr-1-survival-director.test.ts
+
+      - name: Commit and push repaired candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add games/rare-shift/src/cr1-director-core.ts games/rare-shift/src/phaser-survival.ts games/rare-shift/tests/cr-1-survival-director.test.ts
+          git diff --cached --quiet && { echo "No repair diff produced"; exit 1; }
+          git commit -m "fix(cr-1): reserve checkpoint enemy capacity"
+          git push origin HEAD:feature/cr-1-survival-director
