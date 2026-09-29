@@ -75,11 +75,11 @@ function naturalQualification(width) {
       while (Date.now() < deadline && !(bool(await data("draft-open")) && Number(await data("level")) >= minimumLevel)) {
         if (bool(await data("dead"))) throw new Error(`died before ${label}; L${await data("level")}; HP${await data("hp")}; K${await data("kills")}`);
         if (!bool(await data("draft-open"))) {
-          await canvas.press(route[routeIndex++ % route.length], { delay: 620 });
-          await page.waitForTimeout(70);
-          if (routeIndex % 6 === 0 && !bool(await data("draft-open"))) {
+          await canvas.press(route[routeIndex++ % route.length], { delay: 520 });
+          await page.waitForTimeout(160);
+          if (routeIndex % 5 === 0 && !bool(await data("draft-open"))) {
             await shift(canvas, width);
-            await page.waitForTimeout(70);
+            await page.waitForTimeout(95);
           }
         }
       }
