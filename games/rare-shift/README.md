@@ -1,89 +1,107 @@
-# RARE//SHIFT — T1 SCAN + CHAMBER I / DISCOVER
+# RARE//SHIFT — Vibeathon Submission Build
 
-**Status:** bounded T1 implementation; Chamber II/III and reconstruction remain out of scope.
+**Status:** submission-ready V2 survival-action MVP with DELTA, VECTOR, ORBIT, ECHO, and SIGNAL weapon progression qualified through Rank V.
 
-RARE//SHIFT reads the selected ownership-verified Generations Friend through FriendSDK v0.1.2, evaluates its 64 canonical 16×16 frames, selects a deterministic useful pair, and turns the exact pixel delta into phase-controlled world rules.
+RARE//SHIFT uses FriendSDK v0.1.2 to ownership-verify a selected Rare Friends Generations NFT, reads its canonical animation, and makes that animation part of the combat rules. The Friend's canonical frame delta drives DELTA weapon geometry while the arena flips between Phase A and Phase B.
 
 > **Your Friend is not a skin. Its animation is the rules.**
 
-## T1 sequence
+## Public preview
 
-1. **SCAN** — selected Friend identity and canonical family are shown before gameplay.
-2. Exact canonical frame A/B pixel maps are displayed.
-3. `COMMON`, `A_ONLY`, `B_ONLY`, and `VOID` are displayed as the canonical XOR/phase field.
-4. Pair delta/balance, clip group, proof fingerprint and solver minimum are surfaced.
-5. The player explicitly enters **CHAMBER I / DISCOVER**.
-6. The qualified two-gate tutorial teaches SPACE/touch SHIFT.
-7. Gate A requires the first SHIFT, Gate B requires the second, and EXIT completes Chamber I.
+https://zevlaggerald.github.io/rare-shift/
 
-The T0/T0.5 deterministic selector thresholds, chamber topology and solver are unchanged in this tranche.
+Requirements:
 
-## Phase authority
+- browser wallet;
+- Robinhood mainnet (`4663`);
+- hardwired Generations NFT, generation 1 or higher.
 
-- `COMMON = A ∩ B`
-- `A_ONLY = A − B`
-- `B_ONLY = B − A`
-- `DELTA = A XOR B`
-- one `A_ONLY` canonical pixel deterministically controls the Phase-A gate
-- one `B_ONLY` canonical pixel deterministically controls the Phase-B gate
-- the chamber begins in Phase B
-- solver minimum is exactly two accepted SHIFT actions for the qualified topology
+No RF funding or transaction signature is required for the submitted MVP.
 
-## Controls
+## Gameplay
 
-- `WASD` / arrow keys: move one cell
-- `Space`: SHIFT Phase A ↔ B
-- touch directional buttons + SHIFT: mobile input
+RARE//SHIFT is a movement-and-phase-reading survival game with auto-fire.
 
-The physical Shift key is not bound. SHIFT is rejected when the destination phase would materialize collision under the player's current cell.
+- A-aligned threats are corporeal in Phase A and ghosted in Phase B.
+- B-aligned threats are corporeal in Phase B and ghosted in Phase A.
+- COMMON threats remain corporeal in both phases.
+- SHIFT changes target authority and phase-sensitive weapon behavior.
+- Level-up drafts expand the build through weapon acquisition and rank progression.
 
-## FriendSDK boundary
+### Controls
 
-FriendSDK remains responsible for wallet connection, hardwired generation eligibility, owned-Friend selection and the sandbox/runtime boundary. Phaser receives only already-selected, solver-qualified game data. No parallel wallet flow is implemented.
+- `WASD` / arrow keys — move
+- `Space` — SHIFT Phase A ↔ B
+- touch controls — move and SHIFT on supported narrow screens
+- click/tap draft cards — choose upgrades
+- weapons auto-fire
 
-The economy schema in `game.json` is a FriendSDK reference definition. T1 never invokes `buy`, `play`, `settle`, or `redeem`, spends no RF, and makes no Token Activity claim.
+## Active weapons
+
+Exactly four active weapon slots are available; DELTA is mandatory.
+
+- **DELTA BURST** — canonical Friend geometry, stronger cadence/scale, phase echo progression
+- **VECTOR NEEDLE** — penetration, priority trace, post-SHIFT transfer, vector lock
+- **ORBIT NODES** — multi-node coverage, stable orbit, phase shear, synchronized ring
+- **ECHO MINE** — leave/return phase memory, wider collapse, fast recall, deep memory
+- **SIGNAL ARC** — extra relay, lower decay, resonant COMMON relay, chain-control routing
+
+Each family is qualified from Rank I through Rank V.
 
 ## Development
 
-On Windows PowerShell from the repository root:
+From the repository root with Node.js 22+:
 
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\scripts\bootstrap.ps1
+```sh
+mkdir -p vendor
+curl -L -o vendor/rarefriends-friendsdk-0.1.2.tgz \
+  https://github.com/spokesz/friendsdk/releases/download/v0.1.2/rarefriends-friendsdk-0.1.2.tgz
+npm install --no-audit --no-fund
 npm run dev
 ```
 
-The bootstrap downloads the official FriendSDK v0.1.2 release archive and verifies SHA-256:
+The FriendSDK release archive is verified in CI against SHA-256:
 
 `a6352e187916089b6829c5387fe87f386c5774004f181990e4e3c8ae641cfe83`
 
-A playable FriendSDK preview requires a browser wallet on Robinhood mainnet (`4663`) holding a hardwired Generations NFT with generation >= 1.
+## Build and validate
 
-## Qualification
-
-```powershell
-.\scripts\qualify.ps1
+```sh
+npm run typecheck
+npm run check
+npm run build
+npm run test:sdk
 ```
 
-CI additionally runs FriendSDK smoke and the custom browser proof at 960px and 390px. T1 browser proof must verify both the SCAN stage and the complete Chamber I two-SHIFT traversal.
+Higher-rank deterministic/browser qualification includes:
 
-## T1 acceptance criteria
+```sh
+npm run test:v2-3b1-delta
+npm run test:v2-3b2-vector
+npm run test:v2-3b3-orbit
+npm run test:v2-3b4-echo
+npm run test:v2-3b5-signal
+npm run test:v2-3b5-signal-browser
+```
 
-- selected Friend/session equality is preserved;
-- canonical 64-frame read works;
-- SCAN visibly exposes Friend identity, family, frame A/B and phase field;
-- pair selection and fingerprint remain deterministic;
-- ENTER CHAMBER I explicitly transitions into gameplay;
-- SHIFT modifies collision/passability;
-- Gate A/Gate B behavior remains phase-correct;
-- solver proves completion and SHIFT dependency;
-- desktop and narrow browser proofs pass;
-- reduced-motion mode remains playable;
-- no persistent browser storage is required.
+Exact qualified B5 gameplay/test head:
 
-## Current limitations
+`66e2b17cfaa94ba197cd4f77875008bfc87a3b81`
 
-- Chamber I intentionally retains the proven simple authored barrier geometry around source-derived gates.
-- Chamber II timing, Chamber III synchronization, reconstruction, final audio and final submission polish are deferred.
-- real cross-clip fallback occurrence remains unproven because the canonical nine-family T0.5 corpus qualified entirely through same-clip pairs.
-- physical-phone touch qualification remains a separate pre-submission requirement.
+Authoritative workflow run:
+
+`36530277127` — PASS
+
+## FriendSDK boundary
+
+FriendSDK remains responsible for wallet connection, Robinhood-network handling, hardwired generation eligibility, owned-Friend selection, and the sandbox/runtime boundary. RARE//SHIFT does not implement a parallel wallet flow.
+
+The submitted gameplay does not invoke live RF spending or real-money transactions. Economy expansion remains simulated/deferred.
+
+## Known limitations / deferred work
+
+- Protocol/evolution runtime is not part of the submission-critical MVP.
+- Elite/boss pacing and final tournament-scale progression are future tranches.
+- Persistent saves are not supplied by the current FriendSDK session model.
+- Direct browser observation of Rank-V ECHO third-hit suppression is deferred until a legitimate higher-HP threat exists; the burst ledger is deterministic-tested.
+- Final audio/presentation polish can continue after the contest submission is safely open.
