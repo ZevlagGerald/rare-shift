@@ -1,7 +1,7 @@
 import { exclusiveDeltaRows } from "./v2-art-core.ts";
 import type { FrameRows, Phase } from "./types.ts";
 
-export type V2EnemyKind = "TRACE" | "SPLIT_A" | "SPLIT_B";
+export type V2EnemyKind = "TRACE" | "SPLIT_A" | "SPLIT_B" | "BEACON" | "ANCHOR" | "FLICKER_A" | "FLICKER_B";
 export type V2ThreatPhase = "COMMON" | "A" | "B";
 export type DeltaTargetRole = "NORMAL" | "ELITE" | "BOSS";
 
@@ -40,8 +40,9 @@ export const DELTA_ECHO_WORLD_SCALE = 9.5;
 export const DELTA_ECHO_HIT_RADIUS = 18;
 
 export function enemyThreatPhase(kind: V2EnemyKind): V2ThreatPhase {
-  if (kind === "TRACE") return "COMMON";
-  return kind === "SPLIT_A" ? "A" : "B";
+  if (kind === "SPLIT_A" || kind === "FLICKER_A") return "A";
+  if (kind === "SPLIT_B" || kind === "FLICKER_B") return "B";
+  return "COMMON";
 }
 
 export function isEnemyCorporeal(kind: V2EnemyKind, phase: Phase): boolean {
@@ -50,14 +51,23 @@ export function isEnemyCorporeal(kind: V2EnemyKind, phase: Phase): boolean {
 }
 
 export function enemyContactDamage(kind: V2EnemyKind): number {
-  return kind === "TRACE" ? 4 : 5;
+  if (kind === "ANCHOR") return 9;
+  if (kind === "BEACON") return 3;
+  if (kind === "TRACE") return 4;
+  return 5;
 }
 
 export function enemyBaseHp(kind: V2EnemyKind): number {
+  if (kind === "ANCHOR") return 72;
+  if (kind === "BEACON") return 30;
+  if (kind === "FLICKER_A" || kind === "FLICKER_B") return 28;
   return kind === "TRACE" ? 20 : 16;
 }
 
 export function enemyMoveSpeed(kind: V2EnemyKind): number {
+  if (kind === "ANCHOR") return 24;
+  if (kind === "BEACON") return 42;
+  if (kind === "FLICKER_A" || kind === "FLICKER_B") return 58;
   return kind === "TRACE" ? 54 : 62;
 }
 
