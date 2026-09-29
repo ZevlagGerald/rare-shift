@@ -1,0 +1,99 @@
+name: RARE SHIFT CR-2B Apply Live Integration
+
+on:
+  push:
+    branches:
+      - feature/cr-2b-live-integration
+    paths:
+      - ".github/workflows/cr2b-apply-live.yml"
+      - "scripts/apply-cr2b-live-integration.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-live-integration:
+    name: Apply and prequalify CR-2B Phaser integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --init
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      FRIENDSDK_ARCHIVE: vendor/rarefriends-friendsdk-0.1.3.tgz
+      FRIENDSDK_SHA256: 8f156c469a15786e3c649b35d092e86ec6242ff30415b7ee7c451763a816e789
+      FRIENDSDK_URL: https://github.com/spokesz/friendsdk/releases/download/v0.1.3/rarefriends-friendsdk-0.1.3.tgz
+
+    steps:
+      - name: Checkout exact CR-2B head
+        uses: actions/checkout@v4
+        with:
+          ref: feature/cr-2b-live-integration
+          fetch-depth: 0
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Apply fail-closed Phaser patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/apply-cr2b-live-integration.mjs
+          git diff --check
+          git diff -- games/rare-shift/src/phaser-survival.ts
+          test -n "$(git status --porcelain -- games/rare-shift/src/phaser-survival.ts)"
+
+      - name: Fetch and verify FriendSDK v0.1.3
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p vendor
+          curl --fail --location --retry 5 --retry-all-errors --connect-timeout 20 --max-time 180 --output "$FRIENDSDK_ARCHIVE" "$FRIENDSDK_URL"
+          printf '%s  %s\n' "$FRIENDSDK_SHA256" "$FRIENDSDK_ARCHIVE" | sha256sum --check --strict
+
+      - name: Install project dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: CR-2B deterministic qualification
+        shell: bash
+        run: |
+          npm run test:cr-2a
+          npm run test:v2-3a
+          npm run test:cr-1
+          npm run test:core
+          npm run test:v2-combat
+          npm run test:v2-2e-cross
+          npm run test:v2-3b1-delta
+          npm run test:v2-3b2-vector
+          npm run test:v2-3b3-orbit
+          npm run test:v2-3b4-echo
+          npm run test:v2-3b5-signal
+
+      - name: TypeScript qualification
+        shell: bash
+        run: |
+          npm run typecheck:core
+          npm run typecheck
+
+      - name: FriendSDK check build smoke
+        shell: bash
+        run: |
+          npm run check
+          npm run build
+          npm run test:sdk
+
+      - name: Commit live integration to feature branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Zev"
+          git config user.email "214125688+ZevlagGerald@users.noreply.github.com"
+          git add games/rare-shift/src/phaser-survival.ts
+          test -n "$(git diff --cached --name-only)"
+          test "$(git diff --cached --name-only)" = "games/rare-shift/src/phaser-survival.ts"
+          git commit -m "feat(cr-2b): integrate Protocol runtime into Phaser"
+          git push origin HEAD:feature/cr-2b-live-integration
