@@ -1,4 +1,4 @@
-import { deterministicUnit, V21_WORLD_HEIGHT, V21_WORLD_WIDTH, type Vec2 } from "./survival-core.ts";
+import { buildSpawnSpec, deterministicUnit, V21_WORLD_HEIGHT, V21_WORLD_WIDTH, type Vec2 } from "./survival-core.ts";
 import type { V2EnemyKind } from "./phase-combat-core.ts";
 
 export type CR1StageId = "STAGE_I" | "STAGE_II" | "STAGE_III" | "STAGE_IV" | "BOSS_PENDING";
@@ -125,7 +125,6 @@ function directedKind(seed: number, spawnIndex: number, stage: CR1StageId): V2En
   const split = phaseRoll < 0.5 ? "SPLIT_A" : "SPLIT_B";
   const flicker = phaseRoll < 0.5 ? "FLICKER_A" : "FLICKER_B";
 
-  if (stage === "STAGE_I") return roll < 0.58 ? "TRACE" : split;
   if (stage === "STAGE_II") {
     if (roll < 0.30) return "TRACE";
     if (roll < 0.78) return split;
@@ -167,6 +166,7 @@ export function buildDirectedSpawnSpec(seed: number, spawnIndex: number, elapsed
   if (!Number.isInteger(spawnIndex) || spawnIndex < 0) throw new Error("spawnIndex must be a non-negative integer.");
   const stage = stageForElapsedMs(elapsedMs);
   if (stage.id === "BOSS_PENDING") return null;
+  if (stage.id === "STAGE_I") return buildSpawnSpec(seed, spawnIndex, elapsedMs, player);
   return Object.freeze({
     id: spawnIndex,
     kind: directedKind(seed, spawnIndex, stage.id),

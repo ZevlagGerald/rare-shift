@@ -14,6 +14,7 @@ import {
   stageForElapsedMs,
 } from "../src/cr1-director-core.ts";
 import { enemyBaseHp, enemyContactDamage, enemyMoveSpeed, enemyThreatPhase, isEnemyCorporeal } from "../src/phase-combat-core.ts";
+import { buildSpawnSpec } from "../src/survival-core.ts";
 
 test("CR-1 finite stage timeline has exact deterministic boundaries", () => {
   assert.deepEqual(CR1_STAGES.map(stage => stage.id), ["STAGE_I", "STAGE_II", "STAGE_III", "STAGE_IV", "BOSS_PENDING"]);
@@ -27,6 +28,18 @@ test("CR-1 finite stage timeline has exact deterministic boundaries", () => {
   assert.equal(stageForElapsedMs(359_999).id, "STAGE_IV");
   assert.equal(stageForElapsedMs(360_000).id, "BOSS_PENDING");
   assert.equal(stageForElapsedMs(999_999).spawnIntervalMs, null);
+});
+
+test("CR-1 Stage I preserves the qualified legacy spawn contract exactly", () => {
+  const player = { x: 900, y: 600 };
+  for (const elapsedMs of [0, 11_999, 12_000, 29_999, 30_000, 79_999]) {
+    for (let spawnIndex = 0; spawnIndex < 64; spawnIndex += 1) {
+      assert.deepEqual(
+        buildDirectedSpawnSpec(13699, spawnIndex, elapsedMs, player),
+        buildSpawnSpec(13699, spawnIndex, elapsedMs, player),
+      );
+    }
+  }
 });
 
 test("CR-1 directed spawn sequence is deterministic and stage-gated", () => {
