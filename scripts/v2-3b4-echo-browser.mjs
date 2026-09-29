@@ -75,8 +75,10 @@ function naturalQualification(width) {
       while (Date.now() < deadline && !(bool(await data("draft-open")) && Number(await data("level")) >= minimumLevel)) {
         if (bool(await data("dead"))) throw new Error(`died before ${label}; L${await data("level")}; HP${await data("hp")}; K${await data("kills")}`);
         if (!bool(await data("draft-open"))) {
-          await canvas.press(route[routeIndex++ % route.length], { delay: 520 });
-          await page.waitForTimeout(150);
+          const moveDelay = allowShift ? 520 : 680;
+          const settleDelay = allowShift ? 150 : 45;
+          await canvas.press(route[routeIndex++ % route.length], { delay: moveDelay });
+          await page.waitForTimeout(settleDelay);
           if (allowShift && routeIndex % 6 === 0 && !bool(await data("draft-open"))) {
             await shift(canvas, width);
             await page.waitForTimeout(80);
@@ -111,6 +113,8 @@ function naturalQualification(width) {
 
     // From ECHO acquisition through the Rank-II capacity observation, do not
     // SHIFT. Mines used by this proof must remain genuine DORMANT_HOME path memory.
+    // Because SHIFT is deliberately unavailable here, keep movement duty high
+    // instead of compensating with HP/XP/enemy mutations.
     await moveUntilDraft(4, 85_000, "level-4 SIGNAL draft", false);
     await choose("SIGNAL_ARC", "level-4 SIGNAL draft");
     assert.equal(await data("weapon-slots-used"), "4");
@@ -148,8 +152,8 @@ function naturalQualification(width) {
     while (Date.now() < fourDeadline && Number(await data("echo-active-mines")) < 4) {
       if (bool(await data("dead"))) throw new Error("died before four real Rank-II mines coexisted");
       if (bool(await data("draft-open"))) { await clearDraft(canvas, data); await page.waitForTimeout(90); continue; }
-      await canvas.press(route[routeIndex++ % route.length], { delay: 540 });
-      await page.waitForTimeout(150);
+      await canvas.press(route[routeIndex++ % route.length], { delay: 680 });
+      await page.waitForTimeout(45);
     }
     assert.equal(Number(await data("echo-active-mines")), 4, "Rank II must support four naturally placed mines");
     const states = String(await data("echo-mine-states")).split("|");
