@@ -55,6 +55,8 @@ async function clearDraft(canvas, data) {
   const count = Number(await data("draft-count"));
   let index = ids.indexOf("FIELD_REPAIR");
   if (index < 0) index = ids.indexOf("SIGNAL_MAGNET");
+  if (index < 0) index = ids.indexOf("ECHO_RANK");
+  if (index < 0) index = ids.indexOf("ORBIT_RANK");
   if (index < 0) index = ids.indexOf("DELTA_RANK");
   if (index < 0) index = ids.findIndex(id => id !== "SIGNAL_RANK");
   if (index < 0) index = 0;
@@ -129,6 +131,7 @@ function naturalQualification(width) {
         break;
       }
       let fallback = ids.indexOf("FIELD_REPAIR");
+      if (fallback < 0) fallback = ids.indexOf("ECHO_RANK");
       if (fallback < 0) fallback = ids.indexOf("ORBIT_RANK");
       if (fallback < 0) fallback = ids.indexOf("DELTA_RANK");
       if (fallback < 0) fallback = ids.indexOf("SIGNAL_MAGNET");
