@@ -15,6 +15,7 @@ on:
       - "scripts/apply-cr2-b5-rank4-observation.py"
       - "scripts/apply-cr2-b2-vector-handoff.py"
       - "scripts/apply-cr2-b3-orbit-handoff.py"
+      - "scripts/apply-cr2-b4-echo-rank-observation.py"
       - "scripts/v2-*.mjs"
       - "package.json"
   workflow_dispatch:
@@ -111,9 +112,15 @@ jobs:
             python3 scripts/apply-cr2-b3-orbit-handoff.py
           fi
 
+          if grep -q 'echo-rank-choice-placement-delta' scripts/v2-3b4-echo-browser.mjs; then
+            echo "CR2_B4_ECHO_CAUSAL_OBSERVATION=ALREADY_PRESENT"
+          else
+            python3 scripts/apply-cr2-b4-echo-rank-observation.py
+          fi
+
           git diff --check
           echo "CANDIDATE_DIFF_BEGIN"
-          git status --short games/rare-shift/src/phaser-survival.ts scripts/v2-3b5-signal-browser.mjs scripts/v2-3b2-vector-browser.mjs scripts/v2-3b3-orbit-browser.mjs
+          git status --short games/rare-shift/src/phaser-survival.ts scripts/v2-3b5-signal-browser.mjs scripts/v2-3b2-vector-browser.mjs scripts/v2-3b3-orbit-browser.mjs scripts/v2-3b4-echo-browser.mjs
           echo "CANDIDATE_DIFF_END"
 
       - name: CR-2 deterministic contracts
@@ -165,13 +172,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet -- games/rare-shift/src/phaser-survival.ts scripts/v2-3b5-signal-browser.mjs scripts/v2-3b2-vector-browser.mjs scripts/v2-3b3-orbit-browser.mjs; then
+          if git diff --quiet -- games/rare-shift/src/phaser-survival.ts scripts/v2-3b5-signal-browser.mjs scripts/v2-3b2-vector-browser.mjs scripts/v2-3b3-orbit-browser.mjs scripts/v2-3b4-echo-browser.mjs; then
             echo "CR2_LIVE_WIRE_EXACT_HEAD=QUALIFIED_ALREADY_COMMITTED"
             exit 0
           fi
           git config user.name "Zev"
           git config user.email "214125688+ZevlagGerald@users.noreply.github.com"
-          git add games/rare-shift/src/phaser-survival.ts scripts/v2-3b5-signal-browser.mjs scripts/v2-3b2-vector-browser.mjs scripts/v2-3b3-orbit-browser.mjs
+          git add games/rare-shift/src/phaser-survival.ts scripts/v2-3b5-signal-browser.mjs scripts/v2-3b2-vector-browser.mjs scripts/v2-3b3-orbit-browser.mjs scripts/v2-3b4-echo-browser.mjs
           git diff --cached --check
           git commit -m "feat(cr-2): wire live Protocol progression"
           git push origin HEAD:feature/cr-2-protocols-evolutions
