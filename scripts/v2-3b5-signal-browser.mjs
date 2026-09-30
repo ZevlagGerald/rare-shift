@@ -266,49 +266,50 @@ function rank4Qualification(width) {
     assert.equal(geometry.relayDistance, 210, "controlled Rank-IV relay must require the 240px COMMON bonus");
     assert.equal(geometry.activeEnemies, 2, "controlled Rank-IV fixture must contain only its two qualification enemies");
 
-    // Capture the qualifying extended relay at the DOM mutation boundary. The
-    // controlled scene contains one COMMON TRACE 70px from the player and one
-    // Phase-B target exactly 210px from that TRACE. Rank IV therefore must spend
-    // its one 60px COMMON relay bonus on a real >180px <=240px edge.
-    const baseline = await canvas.evaluate(element => {
-      const observationKey = "__RARE_SHIFT_B5_EXTENDED_RELAY_OBSERVATION__";
-      const observerKey = "__RARE_SHIFT_B5_EXTENDED_RELAY_OBSERVER__";
+    // Exercise the real production SIGNAL update path at the exact cooldown
+    // boundary instead of waiting on browser frame scheduling. Geometry, target
+    // authority, planning, fireSignalArc(), counters and DOM synchronization are
+    // unchanged; only wall-clock observation is removed from this controlled proof.
+    const observation = await canvas.evaluate(element => {
+      const PhaserRef = window.__RARE_SHIFT_B5_PHASER__;
+      if (!PhaserRef || !Array.isArray(PhaserRef.GAMES)) throw new Error("Rank-IV qualification lost its Phaser game capture.");
+      const activeGame = PhaserRef.GAMES.find(candidate => candidate?.canvas === element);
+      if (!activeGame) throw new Error("Rank-IV qualification lost the canvas-owning Phaser game.");
+      const scene = activeGame.scene?.getScene?.("RareShiftV21Survival");
+      if (!scene) throw new Error("Rank-IV qualification lost the survival scene.");
+      if (typeof scene.updateSignalArc !== "function" || typeof scene.signalCombatProfile !== "function" || typeof scene.syncTestState !== "function") {
+        throw new Error("Rank-IV qualification SIGNAL runtime hooks are unavailable.");
+      }
+
       const extendedBefore = Number(element.dataset.signalExtendedCommonRelayCasts ?? "0");
       const commonBonusBefore = Number(element.dataset.signalCommonBonusCasts ?? "0");
-      window[observerKey]?.disconnect?.();
-      window[observationKey] = null;
-      let observer = null;
-      const capture = () => {
-        const extendedNow = Number(element.dataset.signalExtendedCommonRelayCasts ?? "0");
-        if (extendedNow <= extendedBefore || window[observationKey]) return;
-        window[observationKey] = {
-          extendedCounter: extendedNow,
-          commonBonusCasts: Number(element.dataset.signalCommonBonusCasts ?? "0"),
-          edgeRanges: String(element.dataset.signalLastChainEdgeRanges ?? "").split(",").filter(Boolean).map(Number),
-          commonBonus: String(element.dataset.signalLastChainCommonBonus ?? "").split(",").filter(Boolean),
-        };
-        observer?.disconnect();
+      const castsBefore = Number(element.dataset.signalCasts ?? "0");
+      const cooldownMs = scene.signalCombatProfile().cooldownMs;
+      scene.signalAccumulator = Math.max(0, cooldownMs - 1);
+      scene.updateSignalArc(1);
+      scene.syncTestState();
+
+      return {
+        castsBefore,
+        castsAfter: Number(element.dataset.signalCasts ?? "0"),
+        extendedBefore,
+        extendedCounter: Number(element.dataset.signalExtendedCommonRelayCasts ?? "0"),
+        commonBonusBefore,
+        commonBonusCasts: Number(element.dataset.signalCommonBonusCasts ?? "0"),
+        ids: String(element.dataset.signalLastChainIds ?? "").split(",").filter(Boolean).map(Number),
+        kinds: String(element.dataset.signalLastChainKinds ?? "").split(",").filter(Boolean),
+        damages: String(element.dataset.signalLastChainDamage ?? "").split(",").filter(Boolean).map(Number),
+        edgeRanges: String(element.dataset.signalLastChainEdgeRanges ?? "").split(",").filter(Boolean).map(Number),
+        commonBonus: String(element.dataset.signalLastChainCommonBonus ?? "").split(",").filter(Boolean),
       };
-      observer = new MutationObserver(capture);
-      observer.observe(element, { attributes: true, attributeFilter: ["data-signal-extended-common-relay-casts"] });
-      window[observerKey] = observer;
-      capture();
-      return { extendedBefore, commonBonusBefore };
     });
 
-    const deadline = Date.now() + 10_000;
-    let observation = null;
-    while (Date.now() < deadline && observation === null) {
-      if (bool(await data("dead"))) throw new Error("controlled Rank-IV fixture died before its extended COMMON relay");
-      assert.equal(await data("draft-open"), "false", "controlled Rank-IV fixture must not open a progression draft");
-      await page.waitForTimeout(75);
-      observation = await page.evaluate(() => window.__RARE_SHIFT_B5_EXTENDED_RELAY_OBSERVATION__ ?? null);
-    }
-    await page.evaluate(() => window.__RARE_SHIFT_B5_EXTENDED_RELAY_OBSERVER__?.disconnect?.());
-
-    assert.ok(observation, "Rank IV controlled fixture must produce a real >180px <=240px COMMON relay edge");
-    assert.ok(observation.extendedCounter > baseline.extendedBefore, "Rank IV observed relay must increment the extended-relay counter");
-    assert.ok(observation.commonBonusCasts > baseline.commonBonusBefore, "Rank IV observed relay must increment the COMMON-bonus cast counter");
+    assert.equal(observation.castsAfter, observation.castsBefore + 1, "controlled Rank-IV cooldown boundary must fire exactly one real SIGNAL cast");
+    assert.equal(observation.extendedCounter, observation.extendedBefore + 1, "Rank IV controlled fixture must increment the extended-relay counter exactly once");
+    assert.equal(observation.commonBonusCasts, observation.commonBonusBefore + 1, "Rank IV controlled fixture must increment the COMMON-bonus cast counter exactly once");
+    assert.deepEqual(observation.ids.slice(0, 2), [10001, 10002], "controlled Rank-IV cast must acquire TRACE then relay to SPLIT_B");
+    assert.deepEqual(observation.kinds.slice(0, 2), ["TRACE", "SPLIT_B"], "controlled Rank-IV cast must preserve injected enemy identities");
+    assert.deepEqual(observation.damages.slice(0, 2), [10, 9], "controlled Rank-IV cast must use the locked Rank-IV damage sequence");
     assert.ok(observation.edgeRanges.includes(240), `qualifying Rank-IV relay must expose a 240px edge range: ${observation.edgeRanges.join(",")}`);
     assert.ok(observation.commonBonus.includes("1"), `qualifying Rank-IV relay must mark the COMMON bonus edge: ${observation.commonBonus.join(",")}`);
 
