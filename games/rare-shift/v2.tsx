@@ -16,7 +16,7 @@ type Stage = "loading" | "scan" | "survival" | "error";
 
 type Rank4QualificationWindow = Window & {
   __RARE_SHIFT_V23B5_SIGNAL_RANK__?: unknown;
-  __RARE_SHIFT_B5_PHASER__?: typeof Phaser;
+  __RARE_SHIFT_B5_PHASER__?: { readonly GAMES: Phaser.Game[] };
 };
 
 interface PreparedV2 {
@@ -198,20 +198,39 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
 
   useEffect(() => {
     if (stage !== "survival" || !prepared || !host.current) return;
-    const mounted = mountPhaserSurvival({
-      parent: host.current,
-      pair: prepared.pair,
-      reducedMotion,
-      friendLabel: prepared.friendLabel,
-      familyName: prepared.familyName,
-    });
     const qualificationWindow = window as Rank4QualificationWindow;
-    if (qualificationWindow.__RARE_SHIFT_V23B5_SIGNAL_RANK__ === 4) qualificationWindow.__RARE_SHIFT_B5_PHASER__ = Phaser;
+    const rank4Qualification = qualificationWindow.__RARE_SHIFT_V23B5_SIGNAL_RANK__ === 4;
+    const capturedGames: Phaser.Game[] = [];
+    type QualificationGamePrototype = { boot: (...args: unknown[]) => unknown };
+    const gamePrototype = Phaser.Game.prototype as unknown as QualificationGamePrototype;
+    const originalBoot = gamePrototype.boot;
+
+    if (rank4Qualification) {
+      qualificationWindow.__RARE_SHIFT_B5_PHASER__ = { GAMES: capturedGames };
+      gamePrototype.boot = function (this: Phaser.Game, ...args: unknown[]) {
+        capturedGames.push(this);
+        return originalBoot.apply(this, args);
+      };
+    }
+
+    let mounted: PhaserSurvivalController;
+    try {
+      mounted = mountPhaserSurvival({
+        parent: host.current,
+        pair: prepared.pair,
+        reducedMotion,
+        friendLabel: prepared.friendLabel,
+        familyName: prepared.familyName,
+      });
+    } finally {
+      if (rank4Qualification) gamePrototype.boot = originalBoot;
+    }
+
     controller.current = mounted;
     mounted.setPaused(paused);
     return () => {
       mounted.destroy();
-      if (qualificationWindow.__RARE_SHIFT_B5_PHASER__ === Phaser) delete qualificationWindow.__RARE_SHIFT_B5_PHASER__;
+      if (rank4Qualification) delete qualificationWindow.__RARE_SHIFT_B5_PHASER__;
       if (controller.current === mounted) controller.current = null;
     };
   }, [stage, prepared]);
