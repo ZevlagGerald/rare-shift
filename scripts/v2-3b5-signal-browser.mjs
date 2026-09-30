@@ -230,32 +230,53 @@ function rank4Qualification(width) {
     await page.waitForTimeout(80);
     assert.ok(Number(await data("signal-shift-graph-invalidations")) > beforeInvalidations, "Rank IV SHIFT must invalidate prior graph evidence");
 
-    // The qualification fixture may cast before this observation loop begins.
-    // Use event-relative counters so an earlier qualifying cast cannot make us
-    // inspect a later ordinary cast as if it were the boosted relay event.
-    const extendedBefore = Number(await data("signal-extended-common-relay-casts"));
-    const commonBonusBefore = Number(await data("signal-common-bonus-casts"));
+    // Capture the qualifying extended relay at the DOM mutation boundary. Phaser
+    // publishes the counter and chain diagnostics during one synchronous
+    // syncTestState() call; MutationObserver therefore snapshots that exact cast
+    // before a later SHIFT or ordinary cast can clear/replace last-chain evidence.
+    const baseline = await canvas.evaluate(element => {
+      const observationKey = "__RARE_SHIFT_B5_EXTENDED_RELAY_OBSERVATION__";
+      const observerKey = "__RARE_SHIFT_B5_EXTENDED_RELAY_OBSERVER__";
+      const extendedBefore = Number(element.dataset.signalExtendedCommonRelayCasts ?? "0");
+      const commonBonusBefore = Number(element.dataset.signalCommonBonusCasts ?? "0");
+      window[observerKey]?.disconnect?.();
+      window[observationKey] = null;
+      let observer = null;
+      const capture = () => {
+        const extendedNow = Number(element.dataset.signalExtendedCommonRelayCasts ?? "0");
+        if (extendedNow <= extendedBefore || window[observationKey]) return;
+        window[observationKey] = {
+          extendedCounter: extendedNow,
+          commonBonusCasts: Number(element.dataset.signalCommonBonusCasts ?? "0"),
+          edgeRanges: String(element.dataset.signalLastChainEdgeRanges ?? "").split(",").filter(Boolean).map(Number),
+          commonBonus: String(element.dataset.signalLastChainCommonBonus ?? "").split(",").filter(Boolean),
+        };
+        observer?.disconnect();
+      };
+      observer = new MutationObserver(capture);
+      observer.observe(element, { attributes: true, attributeFilter: ["data-signal-extended-common-relay-casts"] });
+      window[observerKey] = observer;
+      capture();
+      return { extendedBefore, commonBonusBefore };
+    });
+
     const deadline = Date.now() + 65_000;
-    let extendedObserved = false;
-    let observedEdgeRanges = [];
-    let observedCommonBonus = [];
-    while (Date.now() < deadline && !extendedObserved) {
+    let observation = null;
+    while (Date.now() < deadline && observation === null) {
       if (bool(await data("dead"))) throw new Error("died before real Rank-IV extended COMMON relay");
       if (bool(await data("draft-open"))) { await clearDraft(canvas, data); await page.waitForTimeout(80); continue; }
       await canvas.press(route[routeIndex++ % route.length], { delay: 480 });
       await page.waitForTimeout(90);
       if (routeIndex % 5 === 0) { await shift(canvas, width); await page.waitForTimeout(70); }
-      const extendedNow = Number(await data("signal-extended-common-relay-casts"));
-      if (extendedNow > extendedBefore) {
-        observedEdgeRanges = list(await data("signal-last-chain-edge-ranges")).map(Number);
-        observedCommonBonus = list(await data("signal-last-chain-common-bonus"));
-        extendedObserved = true;
-      }
+      observation = await page.evaluate(() => window.__RARE_SHIFT_B5_EXTENDED_RELAY_OBSERVATION__ ?? null);
     }
-    assert.equal(extendedObserved, true, "Rank IV must produce a new real >180px <=240px COMMON relay edge during observation");
-    assert.ok(Number(await data("signal-common-bonus-casts")) > commonBonusBefore, "Rank IV observed relay must increment the COMMON-bonus cast counter");
-    assert.ok(observedEdgeRanges.includes(240), `qualifying Rank-IV relay must expose a 240px edge range: ${observedEdgeRanges.join(",")}`);
-    assert.ok(observedCommonBonus.includes("1"), `qualifying Rank-IV relay must mark the COMMON bonus edge: ${observedCommonBonus.join(",")}`);
+    await page.evaluate(() => window.__RARE_SHIFT_B5_EXTENDED_RELAY_OBSERVER__?.disconnect?.());
+
+    assert.ok(observation, "Rank IV must produce a new real >180px <=240px COMMON relay edge during observation");
+    assert.ok(observation.extendedCounter > baseline.extendedBefore, "Rank IV observed relay must increment the extended-relay counter");
+    assert.ok(observation.commonBonusCasts > baseline.commonBonusBefore, "Rank IV observed relay must increment the COMMON-bonus cast counter");
+    assert.ok(observation.edgeRanges.includes(240), `qualifying Rank-IV relay must expose a 240px edge range: ${observation.edgeRanges.join(",")}`);
+    assert.ok(observation.commonBonus.includes("1"), `qualifying Rank-IV relay must mark the COMMON bonus edge: ${observation.commonBonus.join(",")}`);
     assert.equal(await data("dead"), "false");
     if (width === 390) assert.equal(await reduced.isChecked(), true);
     await page.locator(".rf-game-frame").screenshot({ path: resolve(`artifacts/rare-shift-v2-3b5-rank4-common-relay-${width}.png`) });
