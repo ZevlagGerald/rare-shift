@@ -55,11 +55,23 @@ after = '''      let ids = list(await data("draft-ids"));
         rankSelected = true;
         break;
       }
-      let fallback = ids.indexOf("FIELD_REPAIR");
-      if (fallback < 0) fallback = ids.indexOf("ECHO_RANK");
-      if (fallback < 0) fallback = ids.indexOf("ORBIT_RANK");
-      if (fallback < 0) fallback = ids.indexOf("DELTA_RANK");
-      if (fallback < 0) fallback = ids.indexOf("SIGNAL_MAGNET");
+      const survivabilityOrder = [
+        "FIELD_REPAIR",
+        "PROTOCOL_ORBIT_STABILIZER",
+        "PROTOCOL_COMMON_CORE",
+        "PROTOCOL_RESONANCE_COIL",
+        "ECHO_RANK",
+        "ORBIT_RANK",
+        "DELTA_RANK",
+        "PROTOCOL_VECTOR_LENS",
+        "PROTOCOL_MEMORY_FUSE",
+        "SIGNAL_MAGNET",
+      ];
+      let fallback = -1;
+      for (const preferred of survivabilityOrder) {
+        fallback = ids.indexOf(preferred);
+        if (fallback >= 0) break;
+      }
       if (fallback < 0) fallback = 0;
       console.log(`V2_3B5_NATURAL_ROUTE_${width}=L${await data("level")}:${ids.join(",")}=>${ids[fallback]}`);
       await clickDraft(canvas, fallback, count);
