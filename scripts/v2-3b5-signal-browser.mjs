@@ -78,7 +78,10 @@ async function mount(game) {
   return canvas;
 }
 async function setFixture(game, rank) {
-  await game.locator("body").evaluate((_, value) => { window.__RARE_SHIFT_V23B5_SIGNAL_RANK__ = value; }, rank);
+  await game.locator("body").evaluate((_, value) => {
+    window.__RARE_SHIFT_V23B5_SIGNAL_RANK__ = value;
+    if (value !== 4) delete window.__RARE_SHIFT_B5_PHASER__;
+  }, rank);
 }
 async function clearDraft(canvas, data) {
   if (!bool(await data("draft-open"))) return;
@@ -217,23 +220,56 @@ function rank4Qualification(width) {
     await setFixture(game, 4);
     const canvas = await mount(game);
     const data = name => canvas.getAttribute(`data-${name}`);
-    const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
-    let routeIndex = 0;
 
     assert.equal(await data("signal-qualification-fixture"), "SIGNAL_RANK_4");
     assert.equal(await data("signal-rank"), "4");
     assert.equal(await data("signal-common-bonus-range"), "240");
     assert.equal(await data("signal-routing"), "NEAREST");
 
-    const beforeInvalidations = Number(await data("signal-shift-graph-invalidations"));
-    await shift(canvas, width);
-    await page.waitForTimeout(80);
-    assert.ok(Number(await data("signal-shift-graph-invalidations")) > beforeInvalidations, "Rank IV SHIFT must invalidate prior graph evidence");
+    const geometry = await canvas.evaluate(element => {
+      const PhaserRef = window.__RARE_SHIFT_B5_PHASER__;
+      if (!PhaserRef || !Array.isArray(PhaserRef.GAMES)) throw new Error("Rank-IV qualification Phaser singleton was not exposed.");
+      const activeGame = PhaserRef.GAMES.find(candidate => candidate?.canvas === element);
+      if (!activeGame) throw new Error("Rank-IV qualification could not locate the canvas-owning Phaser game.");
+      const scene = activeGame.scene?.getScene?.("RareShiftV21Survival");
+      if (!scene) throw new Error("Rank-IV qualification could not locate the survival scene.");
+      if (!Array.isArray(scene.enemies) || scene.enemies.length < 2) throw new Error("Rank-IV qualification enemy pool is unavailable.");
+      if (typeof scene.activateEnemy !== "function" || typeof scene.syncTestState !== "function") throw new Error("Rank-IV qualification scene hooks are unavailable.");
 
-    // Capture the qualifying extended relay at the DOM mutation boundary. Phaser
-    // publishes the counter and chain diagnostics during one synchronous
-    // syncTestState() call; MutationObserver therefore snapshots that exact cast
-    // before a later SHIFT or ordinary cast can clear/replace last-chain evidence.
+      for (const enemy of scene.enemies) {
+        enemy.active = false;
+        enemy.view?.setVisible(false);
+        enemy.telegraphView?.clear().setVisible(false);
+        enemy.healthView?.clear().setVisible(false);
+      }
+      const trace = scene.enemies[0];
+      const split = scene.enemies[1];
+      const originX = scene.friend.x;
+      const originY = scene.friend.y;
+      scene.activateEnemy(trace, 10001, "TRACE", originX + 70, originY, false, null, 1000);
+      scene.activateEnemy(split, 10002, "SPLIT_B", originX + 280, originY, false, null, 1000);
+      trace.staggerUntilMs = Number.POSITIVE_INFINITY;
+      split.staggerUntilMs = Number.POSITIVE_INFINITY;
+      scene.spawnAccumulator = -1_000_000;
+      scene.spawnIndex = 10003;
+      scene.signalAccumulator = 0;
+      scene.syncTestState();
+      return {
+        phase: scene.phase,
+        traceDistanceFromPlayer: Math.hypot(trace.x - originX, trace.y - originY),
+        relayDistance: Math.hypot(split.x - trace.x, split.y - trace.y),
+        activeEnemies: scene.enemies.filter(enemy => enemy.active).length,
+      };
+    });
+    assert.equal(geometry.phase, "B", "controlled Rank-IV relay geometry must start in Phase B");
+    assert.equal(geometry.traceDistanceFromPlayer, 70, "controlled Rank-IV TRACE must be the nearest acquisition target");
+    assert.equal(geometry.relayDistance, 210, "controlled Rank-IV relay must require the 240px COMMON bonus");
+    assert.equal(geometry.activeEnemies, 2, "controlled Rank-IV fixture must contain only its two qualification enemies");
+
+    // Capture the qualifying extended relay at the DOM mutation boundary. The
+    // controlled scene contains one COMMON TRACE 70px from the player and one
+    // Phase-B target exactly 210px from that TRACE. Rank IV therefore must spend
+    // its one 60px COMMON relay bonus on a real >180px <=240px edge.
     const baseline = await canvas.evaluate(element => {
       const observationKey = "__RARE_SHIFT_B5_EXTENDED_RELAY_OBSERVATION__";
       const observerKey = "__RARE_SHIFT_B5_EXTENDED_RELAY_OBSERVER__";
@@ -260,23 +296,26 @@ function rank4Qualification(width) {
       return { extendedBefore, commonBonusBefore };
     });
 
-    const deadline = Date.now() + 65_000;
+    const deadline = Date.now() + 10_000;
     let observation = null;
     while (Date.now() < deadline && observation === null) {
-      if (bool(await data("dead"))) throw new Error("died before real Rank-IV extended COMMON relay");
-      if (bool(await data("draft-open"))) { await clearDraft(canvas, data); await page.waitForTimeout(80); continue; }
-      await canvas.press(route[routeIndex++ % route.length], { delay: 480 });
-      await page.waitForTimeout(90);
-      if (routeIndex % 5 === 0) { await shift(canvas, width); await page.waitForTimeout(70); }
+      if (bool(await data("dead"))) throw new Error("controlled Rank-IV fixture died before its extended COMMON relay");
+      assert.equal(await data("draft-open"), "false", "controlled Rank-IV fixture must not open a progression draft");
+      await page.waitForTimeout(75);
       observation = await page.evaluate(() => window.__RARE_SHIFT_B5_EXTENDED_RELAY_OBSERVATION__ ?? null);
     }
     await page.evaluate(() => window.__RARE_SHIFT_B5_EXTENDED_RELAY_OBSERVER__?.disconnect?.());
 
-    assert.ok(observation, "Rank IV must produce a new real >180px <=240px COMMON relay edge during observation");
+    assert.ok(observation, "Rank IV controlled fixture must produce a real >180px <=240px COMMON relay edge");
     assert.ok(observation.extendedCounter > baseline.extendedBefore, "Rank IV observed relay must increment the extended-relay counter");
     assert.ok(observation.commonBonusCasts > baseline.commonBonusBefore, "Rank IV observed relay must increment the COMMON-bonus cast counter");
     assert.ok(observation.edgeRanges.includes(240), `qualifying Rank-IV relay must expose a 240px edge range: ${observation.edgeRanges.join(",")}`);
     assert.ok(observation.commonBonus.includes("1"), `qualifying Rank-IV relay must mark the COMMON bonus edge: ${observation.commonBonus.join(",")}`);
+
+    const beforeInvalidations = Number(await data("signal-shift-graph-invalidations"));
+    await shift(canvas, width);
+    await page.waitForTimeout(80);
+    assert.ok(Number(await data("signal-shift-graph-invalidations")) > beforeInvalidations, "Rank IV SHIFT must invalidate prior graph evidence");
     assert.equal(await data("dead"), "false");
     if (width === 390) assert.equal(await reduced.isChecked(), true);
     await page.locator(".rf-game-frame").screenshot({ path: resolve(`artifacts/rare-shift-v2-3b5-rank4-common-relay-${width}.png`) });
