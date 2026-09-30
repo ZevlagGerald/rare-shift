@@ -12,6 +12,7 @@ on:
       - "scripts/apply-cr2-phaser-live-wire.py"
       - "scripts/apply-cr2-player-passives-live-wire.py"
       - "scripts/apply-cr2-b5-refract-route.py"
+      - "scripts/apply-cr2-b5-rank4-observation.py"
       - "scripts/apply-cr2-b2-vector-handoff.py"
       - "scripts/apply-cr2-b3-orbit-handoff.py"
       - "scripts/v2-*.mjs"
@@ -90,6 +91,12 @@ jobs:
             echo "CR2_B5_NATURAL_HANDOFF=ALREADY_PRESENT"
           else
             python3 scripts/apply-cr2-b5-refract-route.py
+          fi
+
+          if grep -q 'qualifying Rank-IV relay must expose a 240px edge range' scripts/v2-3b5-signal-browser.mjs; then
+            echo "CR2_B5_RANK4_EVENT_OBSERVATION=ALREADY_PRESENT"
+          else
+            python3 scripts/apply-cr2-b5-rank4-observation.py
           fi
 
           if grep -q 'RARE_SHIFT_V2_3B2_NATURAL_CR2_HANDOFF_' scripts/v2-3b2-vector-browser.mjs; then
