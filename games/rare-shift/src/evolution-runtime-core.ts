@@ -262,6 +262,18 @@ export interface ChainResonanceShiftState {
   readonly phase: Phase | null;
 }
 
+export interface ChainResonanceProfile {
+  readonly rank: 5;
+  readonly cooldownMs: number;
+  readonly acquisitionRange: number;
+  readonly relayRange: number;
+  readonly maxTargets: number;
+  readonly damages: readonly number[];
+  readonly commonRelayBonus: number;
+  readonly commonBonusUses: 0 | 1 | 2;
+  readonly routing: "FORWARD_DEGREE";
+}
+
 export function emptyChainResonanceShiftState(): ChainResonanceShiftState {
   return Object.freeze({ armed: false, expiresAtMs: null, phase: null });
 }
@@ -281,7 +293,7 @@ export function isChainResonanceShiftArmed(state: ChainResonanceShiftState, nowM
 }
 
 export function consumeChainResonanceShift(
-  state: ChainResonanceShiftState,
+  _state: ChainResonanceShiftState,
   nowMs: number,
 ): ChainResonanceShiftState {
   if (!Number.isFinite(nowMs) || nowMs < 0) throw new Error("CHAIN RESONANCE cast time must be finite and non-negative.");
@@ -290,18 +302,34 @@ export function consumeChainResonanceShift(
 
 export function buildChainResonanceProfile(
   base: SignalArcRankProfile,
+  evolved: false,
+  shiftState?: ChainResonanceShiftState,
+  nowMs?: number,
+): SignalArcRankProfile;
+export function buildChainResonanceProfile(
+  base: SignalArcRankProfile,
+  evolved: true,
+  shiftState?: ChainResonanceShiftState,
+  nowMs?: number,
+): ChainResonanceProfile;
+export function buildChainResonanceProfile(
+  base: SignalArcRankProfile,
   evolved: boolean,
   shiftState: ChainResonanceShiftState = emptyChainResonanceShiftState(),
   nowMs = 0,
-): SignalArcRankProfile {
+): SignalArcRankProfile | ChainResonanceProfile {
   if (!evolved) return base;
   if (base.rank !== 5) throw new Error("CHAIN RESONANCE requires SIGNAL Rank V.");
   const postShiftCommon = isChainResonanceShiftArmed(shiftState, nowMs);
   return Object.freeze({
-    ...base,
+    rank: 5,
+    cooldownMs: base.cooldownMs,
+    acquisitionRange: base.acquisitionRange,
     relayRange: CHAIN_RESONANCE_RELAY_RANGE,
     maxTargets: CHAIN_RESONANCE_MAX_TARGETS,
     damages: CHAIN_RESONANCE_DAMAGES,
-    commonBonusUses: base.commonBonusUses + (postShiftCommon ? 1 : 0),
+    commonRelayBonus: base.commonRelayBonus,
+    commonBonusUses: (base.commonBonusUses + (postShiftCommon ? 1 : 0)) as 0 | 1 | 2,
+    routing: "FORWARD_DEGREE",
   });
 }
