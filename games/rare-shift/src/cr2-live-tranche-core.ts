@@ -9,7 +9,9 @@ import {
   applyOrbitStabilizerToOrbit,
   applyResonanceCoilToSignal,
   applyVectorLensToVector,
+  buildCR2PlayerProtocolRuntime,
   type CR2DeltaProtocolRuntime,
+  type CR2PlayerProtocolRuntime,
   type CR2SignalProtocolRuntime,
   type CR2VectorProtocolRuntime,
 } from "./cr2-protocol-runtime.ts";
@@ -30,6 +32,7 @@ import type { VectorRankProfile } from "./vector-core.ts";
 import {
   buildV23ADraft,
   useV23ARefract,
+  type V23BuildState,
   type V23DraftCandidate,
   type V23DraftResult,
   type V23ProtocolFamily,
@@ -52,6 +55,14 @@ function protocolRank(snapshot: CR2LiveSnapshot, family: V23ProtocolFamily): CR2
   if (rank === undefined) return null;
   if (rank < 1 || rank > 3) throw new Error(`${family} live Protocol rank is outside I-III.`);
   return rank as CR2ProtocolRank;
+}
+
+function applyCandidateWithUniversalPassives(state: V23BuildState, candidate: V23DraftCandidate): V23BuildState {
+  const next = applyCR2DraftCandidate(state, candidate);
+  if (candidate.candidateType !== "UTILITY" || candidate.familyId !== "FIELD_REPAIR") return next;
+  const repairBonusHp = buildCR2PlayerProtocolRuntime(state.protocols).repairBonusHp;
+  if (repairBonusHp <= 0 || next.hp >= next.maxHp) return next;
+  return Object.freeze({ ...next, hp: Math.min(next.maxHp, next.hp + repairBonusHp) });
 }
 
 export function buildCR2DraftFromLive(seed: number, level: number, snapshot: CR2LiveSnapshot): V23DraftResult {
@@ -80,7 +91,7 @@ export function applyCR2DraftChoiceToLive(
   if (!selected) throw new Error(`CR-2 draft choice ${candidateId} is not present in the current legal triple.`);
   return Object.freeze({
     selected,
-    projection: projectCR2StateToLive(applyCR2DraftCandidate(state, selected)),
+    projection: projectCR2StateToLive(applyCandidateWithUniversalPassives(state, selected)),
   });
 }
 
@@ -96,7 +107,7 @@ export function applyCR2ProtocolDraftChoiceToLive(
   if (!selected) throw new Error(`CR-2 Protocol draft choice ${candidateId} is not present in the current legal triple.`);
   return Object.freeze({
     selected,
-    projection: projectCR2StateToLive(applyCR2DraftCandidate(state, selected)),
+    projection: projectCR2StateToLive(applyCandidateWithUniversalPassives(state, selected)),
   });
 }
 
@@ -127,6 +138,10 @@ export function applyCR2CheckpointProgressionReward(
   const state = buildCR2StateFromLive(snapshot);
   if (!newlyClaimed || checkpoint !== "CHECKPOINT_ELITE") return projectCR2StateToLive(state);
   return restoreCR2RefractToLive(snapshot, 1);
+}
+
+export function resolveCR2PlayerProtocolRuntime(snapshot: CR2LiveSnapshot): CR2PlayerProtocolRuntime {
+  return buildCR2PlayerProtocolRuntime(buildCR2StateFromLive(snapshot).protocols);
 }
 
 export function resolveCR2DeltaProtocolRuntime(base: DeltaProfile, snapshot: CR2LiveSnapshot): CR2DeltaProtocolRuntime {
