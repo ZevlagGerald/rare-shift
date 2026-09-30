@@ -7,6 +7,7 @@ on:
     paths:
       - ".github/workflows/cr2-live-wire-apply.yml"
       - "scripts/apply-cr2-phaser-live-wire.py"
+      - "scripts/apply-cr2-b5-refract-route.py"
       - "scripts/v2-*.mjs"
 
 permissions:
@@ -71,8 +72,10 @@ jobs:
           print("LIVE_WIRE_VECTOR_PRIORITY_BAND=QUALIFIED_DEFAULT_120")
           PY
           python3 scripts/apply-cr2-phaser-live-wire.py
+          python3 scripts/apply-cr2-b5-refract-route.py
           git diff --check
           test -n "$(git status --short games/rare-shift/src/phaser-survival.ts)"
+          test -n "$(git status --short scripts/v2-3b5-signal-browser.mjs)"
 
       - name: CR-2 deterministic contracts
         run: npm run test:cr-2a
@@ -125,7 +128,7 @@ jobs:
           set -euo pipefail
           git config user.name "Zev"
           git config user.email "214125688+ZevlagGerald@users.noreply.github.com"
-          git add games/rare-shift/src/phaser-survival.ts
-          git diff --cached --quiet && { echo "No Phaser mutation to commit"; exit 1; }
+          git add games/rare-shift/src/phaser-survival.ts scripts/v2-3b5-signal-browser.mjs
+          git diff --cached --quiet && { echo "No qualified live-wire mutation to commit"; exit 1; }
           git commit -m "feat(cr-2): wire live Protocol progression"
           git push origin HEAD:feature/cr-2-protocols-evolutions
