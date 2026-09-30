@@ -84,8 +84,8 @@ jobs:
             python3 scripts/apply-cr2-player-passives-live-wire.py
           fi
 
-          if grep -q 'V2_3B5_NATURAL_REFRACT_' scripts/v2-3b5-signal-browser.mjs; then
-            echo "CR2_B5_REFRACT_ROUTE=ALREADY_PRESENT"
+          if grep -q 'RARE_SHIFT_V2_3B5_NATURAL_CR2_HANDOFF_' scripts/v2-3b5-signal-browser.mjs; then
+            echo "CR2_B5_NATURAL_HANDOFF=ALREADY_PRESENT"
           else
             python3 scripts/apply-cr2-b5-refract-route.py
           fi
