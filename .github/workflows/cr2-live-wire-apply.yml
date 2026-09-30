@@ -6,9 +6,15 @@ on:
       - feature/cr-2-protocols-evolutions
     paths:
       - ".github/workflows/cr2-live-wire-apply.yml"
+      - "games/rare-shift/src/cr2-*.ts"
+      - "games/rare-shift/src/phaser-survival.ts"
+      - "games/rare-shift/tests/cr-2-*.test.ts"
       - "scripts/apply-cr2-phaser-live-wire.py"
+      - "scripts/apply-cr2-player-passives-live-wire.py"
       - "scripts/apply-cr2-b5-refract-route.py"
       - "scripts/v2-*.mjs"
+      - "package.json"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -57,11 +63,14 @@ jobs:
       - name: Install project dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Apply exact guarded Phaser patch
+      - name: Apply exact guarded Phaser candidate when not yet wired
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
+          if grep -q 'resolveCR2PlayerProtocolRuntime' games/rare-shift/src/phaser-survival.ts; then
+            echo "CR2_PHASER_LIVE_WIRE=ALREADY_PRESENT"
+          else
+            python3 - <<'PY'
           from pathlib import Path
           path = Path("scripts/apply-cr2-phaser-live-wire.py")
           text = path.read_text(encoding="utf-8")
@@ -71,11 +80,20 @@ jobs:
           path.write_text(text.replace(old, "profile.range)", 1), encoding="utf-8")
           print("LIVE_WIRE_VECTOR_PRIORITY_BAND=QUALIFIED_DEFAULT_120")
           PY
-          python3 scripts/apply-cr2-phaser-live-wire.py
-          python3 scripts/apply-cr2-b5-refract-route.py
+            python3 scripts/apply-cr2-phaser-live-wire.py
+            python3 scripts/apply-cr2-player-passives-live-wire.py
+          fi
+
+          if grep -q 'V2_3B5_NATURAL_REFRACT_' scripts/v2-3b5-signal-browser.mjs; then
+            echo "CR2_B5_REFRACT_ROUTE=ALREADY_PRESENT"
+          else
+            python3 scripts/apply-cr2-b5-refract-route.py
+          fi
+
           git diff --check
-          test -n "$(git status --short games/rare-shift/src/phaser-survival.ts)"
-          test -n "$(git status --short scripts/v2-3b5-signal-browser.mjs)"
+          echo "CANDIDATE_DIFF_BEGIN"
+          git status --short games/rare-shift/src/phaser-survival.ts scripts/v2-3b5-signal-browser.mjs
+          echo "CANDIDATE_DIFF_END"
 
       - name: CR-2 deterministic contracts
         run: npm run test:cr-2a
@@ -122,13 +140,17 @@ jobs:
       - name: Natural CR-1 Stage-IV regression
         run: npm run test:cr-1-browser
 
-      - name: Commit qualified Phaser live wire
+      - name: Commit qualified Phaser live wire when candidate changed
         shell: bash
         run: |
           set -euo pipefail
+          if git diff --quiet -- games/rare-shift/src/phaser-survival.ts scripts/v2-3b5-signal-browser.mjs; then
+            echo "CR2_LIVE_WIRE_EXACT_HEAD=QUALIFIED_ALREADY_COMMITTED"
+            exit 0
+          fi
           git config user.name "Zev"
           git config user.email "214125688+ZevlagGerald@users.noreply.github.com"
           git add games/rare-shift/src/phaser-survival.ts scripts/v2-3b5-signal-browser.mjs
-          git diff --cached --quiet && { echo "No qualified live-wire mutation to commit"; exit 1; }
+          git diff --cached --check
           git commit -m "feat(cr-2): wire live Protocol progression"
           git push origin HEAD:feature/cr-2-protocols-evolutions
