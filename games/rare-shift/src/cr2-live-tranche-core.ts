@@ -27,10 +27,12 @@ import type { OrbitRankProfile } from "./orbit-core.ts";
 import type { DeltaProfile } from "./phase-combat-core.ts";
 import type { SignalArcRankProfile } from "./signal-arc-core.ts";
 import type { VectorRankProfile } from "./vector-core.ts";
-import type {
-  V23DraftCandidate,
-  V23DraftResult,
-  V23ProtocolFamily,
+import {
+  buildV23ADraft,
+  useV23ARefract,
+  type V23DraftCandidate,
+  type V23DraftResult,
+  type V23ProtocolFamily,
 } from "./progression-core.ts";
 import type { CR2ProtocolRank } from "./cr2-progression-core.ts";
 
@@ -56,6 +58,16 @@ export function buildCR2DraftFromLive(seed: number, level: number, snapshot: CR2
   return buildCR2Draft(seed, level, buildCR2StateFromLive(snapshot));
 }
 
+/**
+ * Live Protocol integration deliberately excludes Evolution candidates until
+ * the five evolved combat behaviors are wired and separately qualified.
+ * This keeps Protocol drafting real without ever exposing a selectable no-op
+ * Evolution in the Phaser scene.
+ */
+export function buildCR2ProtocolDraftFromLive(seed: number, level: number, snapshot: CR2LiveSnapshot): V23DraftResult {
+  return buildV23ADraft(seed, level, buildCR2StateFromLive(snapshot));
+}
+
 export function applyCR2DraftChoiceToLive(
   seed: number,
   level: number,
@@ -72,8 +84,29 @@ export function applyCR2DraftChoiceToLive(
   });
 }
 
+export function applyCR2ProtocolDraftChoiceToLive(
+  seed: number,
+  level: number,
+  snapshot: CR2LiveSnapshot,
+  candidateId: string,
+): CR2LiveDraftSelection {
+  const state = buildCR2StateFromLive(snapshot);
+  const draft = buildV23ADraft(seed, level, state);
+  const selected = draft.choices.find(candidate => candidate.candidateId === candidateId);
+  if (!selected) throw new Error(`CR-2 Protocol draft choice ${candidateId} is not present in the current legal triple.`);
+  return Object.freeze({
+    selected,
+    projection: projectCR2StateToLive(applyCR2DraftCandidate(state, selected)),
+  });
+}
+
 export function useCR2RefractFromLive(seed: number, level: number, snapshot: CR2LiveSnapshot): CR2LiveRefractResult {
   const result = useCR2Refract(seed, level, buildCR2StateFromLive(snapshot));
+  return Object.freeze({ projection: projectCR2StateToLive(result.state), draft: result.draft });
+}
+
+export function useCR2ProtocolRefractFromLive(seed: number, level: number, snapshot: CR2LiveSnapshot): CR2LiveRefractResult {
+  const result = useV23ARefract(seed, level, buildCR2StateFromLive(snapshot));
   return Object.freeze({ projection: projectCR2StateToLive(result.state), draft: result.draft });
 }
 
