@@ -6,6 +6,7 @@ on:
       - feature/cr-2-protocols-evolutions
     paths:
       - ".github/workflows/cr2-live-wire-apply.yml"
+      - "games/rare-shift/v2.tsx"
       - "games/rare-shift/src/cr2-*.ts"
       - "games/rare-shift/src/phaser-survival.ts"
       - "games/rare-shift/tests/cr-2-*.test.ts"
