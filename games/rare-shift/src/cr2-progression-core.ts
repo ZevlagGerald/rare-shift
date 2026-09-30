@@ -50,17 +50,22 @@ export interface CR2ProtocolProfile {
  * real bounded choice even when that weapon is not owned, as required by the
  * locked complete-run governance. None grant attacks, cooldown readiness,
  * weapon ownership, history or invulnerability.
+ *
+ * The three post-SHIFT extension fields are intentionally reserved at zero in
+ * CR-2. Their exact semantics were never locked for Protocol runtime, so they
+ * remain deferred rather than becoming hidden/dead gameplay promises. A later
+ * reviewed Evolution/runtime tranche may define them explicitly.
  */
 const PROTOCOL_PROFILES: Readonly<Record<V23ProtocolFamily, readonly CR2ProtocolProfile[]>> = Object.freeze({
   COMMON_CORE: Object.freeze([
     Object.freeze({ family: "COMMON_CORE", rank: 1, effects: Object.freeze({ deltaCooldownMultiplier: 0.97, deltaFieldScaleMultiplier: 1.02, deltaPostShiftStabilityMs: 0 }) }),
     Object.freeze({ family: "COMMON_CORE", rank: 2, effects: Object.freeze({ deltaCooldownMultiplier: 0.94, deltaFieldScaleMultiplier: 1.05, deltaPostShiftStabilityMs: 0 }) }),
-    Object.freeze({ family: "COMMON_CORE", rank: 3, effects: Object.freeze({ deltaCooldownMultiplier: 0.90, deltaFieldScaleMultiplier: 1.08, deltaPostShiftStabilityMs: 120 }) }),
+    Object.freeze({ family: "COMMON_CORE", rank: 3, effects: Object.freeze({ deltaCooldownMultiplier: 0.90, deltaFieldScaleMultiplier: 1.08, deltaPostShiftStabilityMs: 0 }) }),
   ]),
   VECTOR_LENS: Object.freeze([
     Object.freeze({ family: "VECTOR_LENS", rank: 1, effects: Object.freeze({ vectorProjectileSpeedMultiplier: 1.06, vectorAcquisitionRangeMultiplier: 1.02, vectorPostShiftRangeBonus: 0, playerMoveSpeedMultiplier: 1.01 }) }),
     Object.freeze({ family: "VECTOR_LENS", rank: 2, effects: Object.freeze({ vectorProjectileSpeedMultiplier: 1.12, vectorAcquisitionRangeMultiplier: 1.05, vectorPostShiftRangeBonus: 0, playerMoveSpeedMultiplier: 1.02 }) }),
-    Object.freeze({ family: "VECTOR_LENS", rank: 3, effects: Object.freeze({ vectorProjectileSpeedMultiplier: 1.18, vectorAcquisitionRangeMultiplier: 1.08, vectorPostShiftRangeBonus: 24, playerMoveSpeedMultiplier: 1.03 }) }),
+    Object.freeze({ family: "VECTOR_LENS", rank: 3, effects: Object.freeze({ vectorProjectileSpeedMultiplier: 1.18, vectorAcquisitionRangeMultiplier: 1.08, vectorPostShiftRangeBonus: 0, playerMoveSpeedMultiplier: 1.03 }) }),
   ]),
   ORBIT_STABILIZER: Object.freeze([
     Object.freeze({ family: "ORBIT_STABILIZER", rank: 1, effects: Object.freeze({ orbitContactIntervalMultiplier: 0.97, orbitRadiusMultiplier: 1.02, orbitShearRangeBonus: 0, contactInvulnBonusMs: 30 }) }),
@@ -75,7 +80,7 @@ const PROTOCOL_PROFILES: Readonly<Record<V23ProtocolFamily, readonly CR2Protocol
   RESONANCE_COIL: Object.freeze([
     Object.freeze({ family: "RESONANCE_COIL", rank: 1, effects: Object.freeze({ signalCooldownMultiplier: 0.97, signalRelayRangeBonus: 4, signalPostShiftCommonBonus: 0, pickupRadiusBonus: 4, pickupAttractionSpeedMultiplier: 1.03 }) }),
     Object.freeze({ family: "RESONANCE_COIL", rank: 2, effects: Object.freeze({ signalCooldownMultiplier: 0.94, signalRelayRangeBonus: 8, signalPostShiftCommonBonus: 0, pickupRadiusBonus: 8, pickupAttractionSpeedMultiplier: 1.06 }) }),
-    Object.freeze({ family: "RESONANCE_COIL", rank: 3, effects: Object.freeze({ signalCooldownMultiplier: 0.90, signalRelayRangeBonus: 12, signalPostShiftCommonBonus: 16, pickupRadiusBonus: 12, pickupAttractionSpeedMultiplier: 1.09 }) }),
+    Object.freeze({ family: "RESONANCE_COIL", rank: 3, effects: Object.freeze({ signalCooldownMultiplier: 0.90, signalRelayRangeBonus: 12, signalPostShiftCommonBonus: 0, pickupRadiusBonus: 12, pickupAttractionSpeedMultiplier: 1.09 }) }),
   ]),
 });
 

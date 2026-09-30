@@ -1,4 +1,4 @@
-name: RARE SHIFT CR-2 Live Wire Apply
+name: RARE SHIFT CR-2 Qualification
 
 on:
   push:
@@ -9,25 +9,20 @@ on:
       - "games/rare-shift/src/cr2-*.ts"
       - "games/rare-shift/src/phaser-survival.ts"
       - "games/rare-shift/tests/cr-2-*.test.ts"
-      - "scripts/apply-cr2-phaser-live-wire.py"
-      - "scripts/apply-cr2-player-passives-live-wire.py"
-      - "scripts/apply-cr2-b5-refract-route.py"
-      - "scripts/apply-cr2-b5-rank4-observation.py"
-      - "scripts/apply-cr2-b2-vector-handoff.py"
-      - "scripts/apply-cr2-b3-orbit-handoff.py"
-      - "scripts/apply-cr2-b4-echo-rank-observation.py"
+      - "scripts/cr2-protocol-live-browser.mjs"
       - "scripts/v2-*.mjs"
+      - "scripts/cr1-survival-director-browser.mjs"
       - "package.json"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  apply-and-qualify:
-    name: Guarded Phaser Protocol live wiring
+  qualify:
+    name: Exact-head CR-2 qualification
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 150
     container:
       image: mcr.microsoft.com/playwright:v1.63.0-noble
       options: --init
@@ -38,7 +33,7 @@ jobs:
       FRIENDSDK_URL: https://github.com/spokesz/friendsdk/releases/download/v0.1.3/rarefriends-friendsdk-0.1.3.tgz
 
     steps:
-      - name: Checkout exact live-wire source head
+      - name: Checkout exact CR-2 head
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -67,61 +62,17 @@ jobs:
       - name: Install project dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Apply exact guarded Phaser candidate when not yet wired
+      - name: Verify clean committed candidate
         shell: bash
         run: |
           set -euo pipefail
-          if grep -q 'resolveCR2PlayerProtocolRuntime' games/rare-shift/src/phaser-survival.ts; then
-            echo "CR2_PHASER_LIVE_WIRE=ALREADY_PRESENT"
-          else
-            python3 - <<'PY'
-          from pathlib import Path
-          path = Path("scripts/apply-cr2-phaser-live-wire.py")
-          text = path.read_text(encoding="utf-8")
-          old = "profile.range, profile.priorityBand)"
-          if text.count(old) != 1:
-              raise SystemExit(f"VECTOR priority-band correction anchor count={text.count(old)}")
-          path.write_text(text.replace(old, "profile.range)", 1), encoding="utf-8")
-          print("LIVE_WIRE_VECTOR_PRIORITY_BAND=QUALIFIED_DEFAULT_120")
-          PY
-            python3 scripts/apply-cr2-phaser-live-wire.py
-            python3 scripts/apply-cr2-player-passives-live-wire.py
-          fi
-
-          if grep -q 'RARE_SHIFT_V2_3B5_NATURAL_CR2_HANDOFF_' scripts/v2-3b5-signal-browser.mjs; then
-            echo "CR2_B5_NATURAL_HANDOFF=ALREADY_PRESENT"
-          else
-            python3 scripts/apply-cr2-b5-refract-route.py
-          fi
-
-          if grep -q 'qualifying Rank-IV relay must expose a 240px edge range' scripts/v2-3b5-signal-browser.mjs; then
-            echo "CR2_B5_RANK4_EVENT_OBSERVATION=ALREADY_PRESENT"
-          else
-            python3 scripts/apply-cr2-b5-rank4-observation.py
-          fi
-
-          if grep -q 'RARE_SHIFT_V2_3B2_NATURAL_CR2_HANDOFF_' scripts/v2-3b2-vector-browser.mjs; then
-            echo "CR2_B2_VECTOR_HANDOFF=ALREADY_PRESENT"
-          else
-            python3 scripts/apply-cr2-b2-vector-handoff.py
-          fi
-
-          if grep -q 'RARE_SHIFT_V2_3B3_NATURAL_CR2_HANDOFF_' scripts/v2-3b3-orbit-browser.mjs; then
-            echo "CR2_B3_ORBIT_HANDOFF=ALREADY_PRESENT"
-          else
-            python3 scripts/apply-cr2-b3-orbit-handoff.py
-          fi
-
-          if grep -q 'echo-rank-choice-placement-delta' scripts/v2-3b4-echo-browser.mjs; then
-            echo "CR2_B4_ECHO_CAUSAL_OBSERVATION=ALREADY_PRESENT"
-          else
-            python3 scripts/apply-cr2-b4-echo-rank-observation.py
-          fi
-
           git diff --check
-          echo "CANDIDATE_DIFF_BEGIN"
-          git status --short games/rare-shift/src/phaser-survival.ts scripts/v2-3b5-signal-browser.mjs scripts/v2-3b2-vector-browser.mjs scripts/v2-3b3-orbit-browser.mjs scripts/v2-3b4-echo-browser.mjs
-          echo "CANDIDATE_DIFF_END"
+          test -z "$(git status --short)"
+          if grep -q 'profile.range, profile.priorityBand)' scripts/*.py 2>/dev/null; then
+            echo "STALE_VECTOR_PRIORITY_BAND_PATCH=FOUND"
+            exit 1
+          fi
+          echo "CR2_COMMITTED_CANDIDATE=CLEAN"
 
       - name: CR-2 deterministic contracts
         run: npm run test:cr-2a
@@ -150,6 +101,9 @@ jobs:
           npm run build
           npm run test:sdk
 
+      - name: Live Protocol and REFRACT browser qualification
+        run: npm run test:cr-2-browser
+
       - name: Inherited browser regression through B5
         shell: bash
         run: |
@@ -167,18 +121,3 @@ jobs:
 
       - name: Natural CR-1 Stage-IV regression
         run: npm run test:cr-1-browser
-
-      - name: Commit qualified Phaser live wire when candidate changed
-        shell: bash
-        run: |
-          set -euo pipefail
-          if git diff --quiet -- games/rare-shift/src/phaser-survival.ts scripts/v2-3b5-signal-browser.mjs scripts/v2-3b2-vector-browser.mjs scripts/v2-3b3-orbit-browser.mjs scripts/v2-3b4-echo-browser.mjs; then
-            echo "CR2_LIVE_WIRE_EXACT_HEAD=QUALIFIED_ALREADY_COMMITTED"
-            exit 0
-          fi
-          git config user.name "Zev"
-          git config user.email "214125688+ZevlagGerald@users.noreply.github.com"
-          git add games/rare-shift/src/phaser-survival.ts scripts/v2-3b5-signal-browser.mjs scripts/v2-3b2-vector-browser.mjs scripts/v2-3b3-orbit-browser.mjs scripts/v2-3b4-echo-browser.mjs
-          git diff --cached --check
-          git commit -m "feat(cr-2): wire live Protocol progression"
-          git push origin HEAD:feature/cr-2-protocols-evolutions

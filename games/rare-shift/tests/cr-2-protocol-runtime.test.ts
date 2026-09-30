@@ -112,7 +112,7 @@ test("COMMON CORE composes only bounded DELTA cadence/field support and preserve
   assertNear(tuned.profile.worldScale, 10.26);
   assert.equal(tuned.profile.hitRadius, base.hitRadius);
   assert.equal(tuned.profile.staggerMs, base.staggerMs);
-  assert.equal(tuned.postShiftStabilityMs, 120);
+  assert.equal(tuned.postShiftStabilityMs, 0, "post-SHIFT Protocol semantics remain deferred in CR-2");
   assert.equal(base.cooldownMs, 720, "base DELTA profile must remain immutable");
 });
 
@@ -126,7 +126,7 @@ test("VECTOR LENS improves travel/acquisition only and cannot fabricate hits or 
   assert.strictEqual(tuned.profile.damageSequence, base.damageSequence);
   assertNear(tuned.profile.speed, 1132.8);
   assertNear(tuned.profile.range, 604.8);
-  assert.equal(tuned.postShiftRangeBonus, 24);
+  assert.equal(tuned.postShiftRangeBonus, 0, "post-SHIFT Protocol semantics remain deferred in CR-2");
 });
 
 test("ORBIT STABILIZER preserves node count/rotation identity and only strengthens bounded coverage cadence", () => {
@@ -181,5 +181,5 @@ test("RESONANCE COIL preserves SIGNAL graph cap/damage/routing and only improves
   assert.equal(tuned.profile.commonBonusUses, base.commonBonusUses);
   assert.equal(tuned.profile.cooldownMs, 1125);
   assert.equal(tuned.profile.relayRange, 192);
-  assert.equal(tuned.postShiftCommonBonus, 16);
+  assert.equal(tuned.postShiftCommonBonus, 0, "post-SHIFT Protocol semantics remain deferred in CR-2");
 });
