@@ -56,6 +56,14 @@ async function liveProgressionState(data) {
 ''',
 )
 
+replace_once(
+    "b5-natural-movement-duty",
+    '''          await canvas.press(route[routeIndex++ % route.length], { delay: 520 });
+          await page.waitForTimeout(160);''',
+    '''          await canvas.press(route[routeIndex++ % route.length], { delay: 680 });
+          await page.waitForTimeout(45);''',
+)
+
 before = '''      const ids = list(await data("draft-ids"));
       const count = Number(await data("draft-count"));
       const signalIndex = ids.indexOf("SIGNAL_RANK");
@@ -131,13 +139,13 @@ after = '''      let ids = list(await data("draft-ids"));
 
       const survivabilityOrder = [
         "FIELD_REPAIR",
-        "PROTOCOL_ORBIT_STABILIZER",
-        "SIGNAL_MAGNET",
-        "PROTOCOL_RESONANCE_COIL",
-        "PROTOCOL_COMMON_CORE",
         "ECHO_RANK",
-        "ORBIT_RANK",
         "DELTA_RANK",
+        "ORBIT_RANK",
+        "PROTOCOL_COMMON_CORE",
+        "PROTOCOL_RESONANCE_COIL",
+        "SIGNAL_MAGNET",
+        "PROTOCOL_ORBIT_STABILIZER",
         "PROTOCOL_VECTOR_LENS",
         "PROTOCOL_MEMORY_FUSE",
       ];
