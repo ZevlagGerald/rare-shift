@@ -3,13 +3,16 @@ import test from "node:test";
 import {
   applyCR2CheckpointProgressionReward,
   applyCR2DraftChoiceToLive,
+  applyCR2ProtocolDraftChoiceToLive,
   buildCR2DraftFromLive,
+  buildCR2ProtocolDraftFromLive,
   collectCR2EvolutionCoreLive,
   resolveCR2DeltaProtocolRuntime,
   resolveCR2EchoProtocolRuntime,
   resolveCR2OrbitProtocolRuntime,
   resolveCR2SignalProtocolRuntime,
   resolveCR2VectorProtocolRuntime,
+  useCR2ProtocolRefractFromLive,
   useCR2RefractFromLive,
 } from "../src/cr2-live-tranche-core.ts";
 import { buildEchoProfile } from "../src/echo-core.ts";
@@ -68,6 +71,19 @@ test("live CR-2 draft exposes Protocol choices from Level 5 through the normaliz
   assert.ok(allIds.length > 0);
 });
 
+test("Protocol-only live draft never exposes Evolution before evolved combat runtime is wired", () => {
+  const ready = snapshot({
+    deltaRank: 5,
+    protocols: { COMMON_CORE: 1 },
+    evolutionCores: 1,
+  });
+  const full = buildCR2DraftFromLive(SEED, 12, ready);
+  assert.equal(full.choices[0].candidateType, "EVOLUTION", "full CR-2 path should prove the gate is genuinely open");
+  const protocolOnly = buildCR2ProtocolDraftFromLive(SEED, 12, ready);
+  assert.equal(protocolOnly.choices.some(choice => choice.candidateType === "EVOLUTION"), false);
+  assert.equal(protocolOnly.choices.length, 3);
+});
+
 test("live CR-2 selection rejects candidates outside the current deterministic triple", () => {
   assert.throws(
     () => applyCR2DraftChoiceToLive(SEED, 2, snapshot(), "PROTOCOL_ACQUIRE:COMMON_CORE"),
@@ -81,6 +97,18 @@ test("live CR-2 selection applies the chosen normalized candidate without slot d
   assert.equal(result.projection.orbitOwned, true);
   assert.equal(result.projection.orbitRank, 1);
   assert.equal(result.projection.weaponSlotsUsed, 2);
+});
+
+test("Protocol-only live selection applies only a candidate from its own current triple", () => {
+  const before = snapshot({ hp: 100, pickupRadius: 220 });
+  const draft = buildCR2ProtocolDraftFromLive(SEED, 5, before);
+  const selected = draft.choices[0];
+  const applied = applyCR2ProtocolDraftChoiceToLive(SEED, 5, before, selected.candidateId);
+  assert.equal(applied.selected.candidateId, selected.candidateId);
+  assert.throws(
+    () => applyCR2ProtocolDraftChoiceToLive(SEED, 5, before, "EVOLUTION:DELTA:RECONSTRUCTION_FIELD"),
+    /not present in the current legal triple/u,
+  );
 });
 
 test("live Evolution Core collection mutates only Core inventory", () => {
@@ -110,6 +138,20 @@ test("live REFRACT consumes one charge and produces a deterministic replacement 
   assert.equal(rerolled.projection.rerollNonce, 1);
   assert.notDeepEqual(rerolled.draft.choices.map(choice => choice.candidateId), initial.choices.map(choice => choice.candidateId));
   assert.deepEqual(useCR2RefractFromLive(SEED, 5, before), rerolled);
+});
+
+test("Protocol-only REFRACT remains deterministic and cannot introduce an Evolution", () => {
+  const before = snapshot({
+    deltaRank: 5,
+    protocols: { COMMON_CORE: 1 },
+    evolutionCores: 1,
+    refracts: 1,
+  });
+  const rerolled = useCR2ProtocolRefractFromLive(SEED, 12, before);
+  assert.equal(rerolled.projection.refracts, 0);
+  assert.equal(rerolled.projection.rerollNonce, 1);
+  assert.equal(rerolled.draft.choices.some(choice => choice.candidateType === "EVOLUTION"), false);
+  assert.deepEqual(useCR2ProtocolRefractFromLive(SEED, 12, before), rerolled);
 });
 
 test("absent Protocols are exact combat-profile no-ops", () => {
