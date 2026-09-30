@@ -51,6 +51,20 @@ jobs:
           git rev-parse --show-toplevel
           git rev-parse HEAD
 
+      - name: Verify clean committed candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git diff --exit-code
+          git diff --cached --exit-code
+          test -z "$(git status --short)"
+          if grep -q 'profile.range, profile.priorityBand)' scripts/*.py 2>/dev/null; then
+            echo "STALE_VECTOR_PRIORITY_BAND_PATCH=FOUND"
+            exit 1
+          fi
+          echo "CR2_COMMITTED_CANDIDATE=CLEAN"
+
       - name: Fetch and verify FriendSDK v0.1.3
         shell: bash
         run: |
@@ -61,18 +75,6 @@ jobs:
 
       - name: Install project dependencies
         run: npm install --no-audit --no-fund
-
-      - name: Verify clean committed candidate
-        shell: bash
-        run: |
-          set -euo pipefail
-          git diff --check
-          test -z "$(git status --short)"
-          if grep -q 'profile.range, profile.priorityBand)' scripts/*.py 2>/dev/null; then
-            echo "STALE_VECTOR_PRIORITY_BAND_PATCH=FOUND"
-            exit 1
-          fi
-          echo "CR2_COMMITTED_CANDIDATE=CLEAN"
 
       - name: CR-2 deterministic contracts
         run: npm run test:cr-2a
