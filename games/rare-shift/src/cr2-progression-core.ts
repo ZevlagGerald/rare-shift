@@ -30,6 +30,12 @@ export interface CR2ProtocolEffects {
   readonly signalCooldownMultiplier?: number;
   readonly signalRelayRangeBonus?: number;
   readonly signalPostShiftCommonBonus?: number;
+  /** Matching-independent passives required by the locked CR-2 Protocol contract. */
+  readonly playerMoveSpeedMultiplier?: number;
+  readonly contactInvulnBonusMs?: number;
+  readonly repairBonusHp?: number;
+  readonly pickupRadiusBonus?: number;
+  readonly pickupAttractionSpeedMultiplier?: number;
 }
 
 export interface CR2ProtocolProfile {
@@ -39,9 +45,11 @@ export interface CR2ProtocolProfile {
 }
 
 /**
- * CR-2A tuning is deliberately conservative. These values establish deterministic,
- * bounded passive identities without granting free casts, fabricated history or
- * cooldown resets. They remain playtest-tunable inside the locked semantic contract.
+ * CR-2 tuning is deliberately conservative. Matching-weapon effects preserve
+ * each weapon's identity. Matching-independent passives make every Protocol a
+ * real bounded choice even when that weapon is not owned, as required by the
+ * locked complete-run governance. None grant attacks, cooldown readiness,
+ * weapon ownership, history or invulnerability.
  */
 const PROTOCOL_PROFILES: Readonly<Record<V23ProtocolFamily, readonly CR2ProtocolProfile[]>> = Object.freeze({
   COMMON_CORE: Object.freeze([
@@ -50,24 +58,24 @@ const PROTOCOL_PROFILES: Readonly<Record<V23ProtocolFamily, readonly CR2Protocol
     Object.freeze({ family: "COMMON_CORE", rank: 3, effects: Object.freeze({ deltaCooldownMultiplier: 0.90, deltaFieldScaleMultiplier: 1.08, deltaPostShiftStabilityMs: 120 }) }),
   ]),
   VECTOR_LENS: Object.freeze([
-    Object.freeze({ family: "VECTOR_LENS", rank: 1, effects: Object.freeze({ vectorProjectileSpeedMultiplier: 1.06, vectorAcquisitionRangeMultiplier: 1.02, vectorPostShiftRangeBonus: 0 }) }),
-    Object.freeze({ family: "VECTOR_LENS", rank: 2, effects: Object.freeze({ vectorProjectileSpeedMultiplier: 1.12, vectorAcquisitionRangeMultiplier: 1.05, vectorPostShiftRangeBonus: 0 }) }),
-    Object.freeze({ family: "VECTOR_LENS", rank: 3, effects: Object.freeze({ vectorProjectileSpeedMultiplier: 1.18, vectorAcquisitionRangeMultiplier: 1.08, vectorPostShiftRangeBonus: 24 }) }),
+    Object.freeze({ family: "VECTOR_LENS", rank: 1, effects: Object.freeze({ vectorProjectileSpeedMultiplier: 1.06, vectorAcquisitionRangeMultiplier: 1.02, vectorPostShiftRangeBonus: 0, playerMoveSpeedMultiplier: 1.01 }) }),
+    Object.freeze({ family: "VECTOR_LENS", rank: 2, effects: Object.freeze({ vectorProjectileSpeedMultiplier: 1.12, vectorAcquisitionRangeMultiplier: 1.05, vectorPostShiftRangeBonus: 0, playerMoveSpeedMultiplier: 1.02 }) }),
+    Object.freeze({ family: "VECTOR_LENS", rank: 3, effects: Object.freeze({ vectorProjectileSpeedMultiplier: 1.18, vectorAcquisitionRangeMultiplier: 1.08, vectorPostShiftRangeBonus: 24, playerMoveSpeedMultiplier: 1.03 }) }),
   ]),
   ORBIT_STABILIZER: Object.freeze([
-    Object.freeze({ family: "ORBIT_STABILIZER", rank: 1, effects: Object.freeze({ orbitContactIntervalMultiplier: 0.97, orbitRadiusMultiplier: 1.02, orbitShearRangeBonus: 0 }) }),
-    Object.freeze({ family: "ORBIT_STABILIZER", rank: 2, effects: Object.freeze({ orbitContactIntervalMultiplier: 0.94, orbitRadiusMultiplier: 1.04, orbitShearRangeBonus: 0 }) }),
-    Object.freeze({ family: "ORBIT_STABILIZER", rank: 3, effects: Object.freeze({ orbitContactIntervalMultiplier: 0.90, orbitRadiusMultiplier: 1.06, orbitShearRangeBonus: 16 }) }),
+    Object.freeze({ family: "ORBIT_STABILIZER", rank: 1, effects: Object.freeze({ orbitContactIntervalMultiplier: 0.97, orbitRadiusMultiplier: 1.02, orbitShearRangeBonus: 0, contactInvulnBonusMs: 30 }) }),
+    Object.freeze({ family: "ORBIT_STABILIZER", rank: 2, effects: Object.freeze({ orbitContactIntervalMultiplier: 0.94, orbitRadiusMultiplier: 1.04, orbitShearRangeBonus: 0, contactInvulnBonusMs: 60 }) }),
+    Object.freeze({ family: "ORBIT_STABILIZER", rank: 3, effects: Object.freeze({ orbitContactIntervalMultiplier: 0.90, orbitRadiusMultiplier: 1.06, orbitShearRangeBonus: 16, contactInvulnBonusMs: 90 }) }),
   ]),
   MEMORY_FUSE: Object.freeze([
-    Object.freeze({ family: "MEMORY_FUSE", rank: 1, effects: Object.freeze({ echoLifetimeMultiplier: 1.06, echoReturnDelayMultiplier: 0.97, echoTriggerRadiusMultiplier: 1.02 }) }),
-    Object.freeze({ family: "MEMORY_FUSE", rank: 2, effects: Object.freeze({ echoLifetimeMultiplier: 1.12, echoReturnDelayMultiplier: 0.94, echoTriggerRadiusMultiplier: 1.05 }) }),
-    Object.freeze({ family: "MEMORY_FUSE", rank: 3, effects: Object.freeze({ echoLifetimeMultiplier: 1.18, echoReturnDelayMultiplier: 0.90, echoTriggerRadiusMultiplier: 1.08 }) }),
+    Object.freeze({ family: "MEMORY_FUSE", rank: 1, effects: Object.freeze({ echoLifetimeMultiplier: 1.06, echoReturnDelayMultiplier: 0.97, echoTriggerRadiusMultiplier: 1.02, repairBonusHp: 2 }) }),
+    Object.freeze({ family: "MEMORY_FUSE", rank: 2, effects: Object.freeze({ echoLifetimeMultiplier: 1.12, echoReturnDelayMultiplier: 0.94, echoTriggerRadiusMultiplier: 1.05, repairBonusHp: 4 }) }),
+    Object.freeze({ family: "MEMORY_FUSE", rank: 3, effects: Object.freeze({ echoLifetimeMultiplier: 1.18, echoReturnDelayMultiplier: 0.90, echoTriggerRadiusMultiplier: 1.08, repairBonusHp: 6 }) }),
   ]),
   RESONANCE_COIL: Object.freeze([
-    Object.freeze({ family: "RESONANCE_COIL", rank: 1, effects: Object.freeze({ signalCooldownMultiplier: 0.97, signalRelayRangeBonus: 4, signalPostShiftCommonBonus: 0 }) }),
-    Object.freeze({ family: "RESONANCE_COIL", rank: 2, effects: Object.freeze({ signalCooldownMultiplier: 0.94, signalRelayRangeBonus: 8, signalPostShiftCommonBonus: 0 }) }),
-    Object.freeze({ family: "RESONANCE_COIL", rank: 3, effects: Object.freeze({ signalCooldownMultiplier: 0.90, signalRelayRangeBonus: 12, signalPostShiftCommonBonus: 16 }) }),
+    Object.freeze({ family: "RESONANCE_COIL", rank: 1, effects: Object.freeze({ signalCooldownMultiplier: 0.97, signalRelayRangeBonus: 4, signalPostShiftCommonBonus: 0, pickupRadiusBonus: 4, pickupAttractionSpeedMultiplier: 1.03 }) }),
+    Object.freeze({ family: "RESONANCE_COIL", rank: 2, effects: Object.freeze({ signalCooldownMultiplier: 0.94, signalRelayRangeBonus: 8, signalPostShiftCommonBonus: 0, pickupRadiusBonus: 8, pickupAttractionSpeedMultiplier: 1.06 }) }),
+    Object.freeze({ family: "RESONANCE_COIL", rank: 3, effects: Object.freeze({ signalCooldownMultiplier: 0.90, signalRelayRangeBonus: 12, signalPostShiftCommonBonus: 16, pickupRadiusBonus: 12, pickupAttractionSpeedMultiplier: 1.09 }) }),
   ]),
 });
 
