@@ -123,15 +123,13 @@ function naturalQualification(width) {
       const count = Number(await data("draft-count"));
       const echoIndex = ids.indexOf("ECHO_RANK");
       if (echoIndex >= 0) {
-        const triggersBefore = Number(await data("echo-triggers"));
-        const placementsBefore = Number(await data("echo-placements"));
         console.log(`V2_3B4_RANK2_DRAFT_${width}=L${await data("level")}:HP${await data("hp")}:${ids.join(",")}=>ECHO_RANK`);
         await clickDraft(canvas, echoIndex, count);
         await page.waitForTimeout(70);
         assert.equal(await data("echo-rank"), "2");
         assert.equal(await data("echo-max-active"), "4");
-        assert.equal(Number(await data("echo-triggers")), triggersBefore, "rank card must not detonate a mine");
-        assert.equal(Number(await data("echo-placements")), placementsBefore, "rank card must not manufacture a mine");
+        assert.equal(await data("echo-rank-choice-trigger-delta"), "0", "ECHO rank transaction must not detonate a mine");
+        assert.equal(await data("echo-rank-choice-placement-delta"), "0", "ECHO rank transaction must not manufacture a mine");
         rankSelected = true;
         break;
       }

@@ -104,6 +104,21 @@ import {
   type VectorTransferState,
 } from "./vector-core.ts";
 import { advanceSignalArcCooldown, buildSignalArcProfile, planSignalArc, SIGNAL_ARC_RANK_I, type SignalArcHop } from "./signal-arc-core.ts";
+import {
+  applyCR2CheckpointProgressionReward,
+  applyCR2ProtocolDraftChoiceToLive,
+  buildCR2ProtocolDraftFromLive,
+  collectCR2EvolutionCoreLive,
+  resolveCR2DeltaProtocolRuntime,
+  resolveCR2EchoProtocolRuntime,
+  resolveCR2OrbitProtocolRuntime,
+  resolveCR2PlayerProtocolRuntime,
+  resolveCR2SignalProtocolRuntime,
+  resolveCR2VectorProtocolRuntime,
+  useCR2ProtocolRefractFromLive,
+} from "./cr2-live-tranche-core.ts";
+import type { CR2LiveProjection, CR2LiveSnapshot } from "./cr2-live-state-core.ts";
+import type { V23DraftCandidate, V23ProtocolFamily, V23WeaponFamily } from "./progression-core.ts";
 
 export interface PhaserSurvivalController {
   destroy(): void;
@@ -193,6 +208,19 @@ interface PendingDeltaEchoRuntime {
   readonly profile: DeltaEchoProfile;
 }
 
+interface DraftViewChoice {
+  readonly id: string;
+  readonly name: string;
+  readonly category: "WEAPON" | "UTILITY" | "PROTOCOL";
+  readonly description: string;
+  readonly disabled: boolean;
+  readonly candidateId: string | null;
+  readonly candidateType: V23DraftCandidate["candidateType"] | null;
+  readonly familyId: V23DraftCandidate["familyId"] | null;
+  readonly fromRank: number | null;
+  readonly toRank: number | null;
+}
+
 type VectorQualificationWindow = Window & { __RARE_SHIFT_V23B2_VECTOR_RANK__?: unknown };
 type OrbitQualificationWindow = Window & { __RARE_SHIFT_V23B3_ORBIT_RANK__?: unknown };
 type EchoQualificationWindow = Window & { __RARE_SHIFT_V23B4_ECHO_RANK__?: unknown };
@@ -211,6 +239,47 @@ function draftCardXs(count: number): readonly number[] {
   return [220, 480, 740];
 }
 function emptyVectorTransfer(): VectorTransferState { return Object.freeze({ armed: false, expiresAtMs: null, phase: null }); }
+function migrateCooldownProgress(accumulator: number, oldCooldownMs: number, newCooldownMs: number): number {
+  if (!(oldCooldownMs > 0) || !(newCooldownMs > 0)) return Math.max(0, accumulator);
+  const progress = Math.max(0, Math.min(1, accumulator / oldCooldownMs));
+  return Math.min(newCooldownMs, progress * newCooldownMs);
+}
+function legacyDraftIdForCandidate(candidate: V23DraftCandidate): string {
+  if (candidate.candidateType === "WEAPON_ACQUIRE") {
+    return ({ VECTOR: "VECTOR_NEEDLE", ORBIT: "ORBIT_NODES", ECHO: "ECHO_MINE", SIGNAL: "SIGNAL_ARC" } as const)[candidate.familyId as "VECTOR" | "ORBIT" | "ECHO" | "SIGNAL"];
+  }
+  if (candidate.candidateType === "WEAPON_RANK") return `${candidate.familyId}_RANK`;
+  if (candidate.candidateType === "UTILITY") return String(candidate.familyId);
+  if (candidate.candidateType === "PROTOCOL_ACQUIRE" || candidate.candidateType === "PROTOCOL_RANK") return `PROTOCOL_${candidate.familyId}`;
+  return candidate.candidateId;
+}
+function normalizedDraftViewChoice(candidate: V23DraftCandidate): DraftViewChoice {
+  const category: DraftViewChoice["category"] = candidate.candidateType.startsWith("PROTOCOL")
+    ? "PROTOCOL"
+    : candidate.candidateType === "UTILITY" ? "UTILITY" : "WEAPON";
+  return Object.freeze({
+    id: legacyDraftIdForCandidate(candidate),
+    name: candidate.name,
+    category,
+    description: candidate.description,
+    disabled: false,
+    candidateId: candidate.candidateId,
+    candidateType: candidate.candidateType,
+    familyId: candidate.familyId,
+    fromRank: candidate.fromRank,
+    toRank: candidate.toRank,
+  });
+}
+function legacyDraftViewChoice(choice: V21DraftChoice): DraftViewChoice {
+  return Object.freeze({
+    ...choice,
+    candidateId: null,
+    candidateType: null,
+    familyId: null,
+    fromRank: null,
+    toRank: null,
+  });
+}
 
 class SurvivalScene extends Phaser.Scene {
   private readonly pair: SelectedFramePair;
@@ -323,15 +392,22 @@ class SurvivalScene extends Phaser.Scene {
   private readonly spawnedCheckpoints = new Set<CR1CheckpointId>();
   private rewardLedger: CR1RewardLedger = emptyCR1RewardLedger();
   private evolutionCores = 0;
+  private evolvedWeapons: Partial<Record<V23WeaponFamily, boolean>> = {};
+  private protocols: Partial<Record<V23ProtocolFamily, number>> = {};
+  private refracts = 1;
+  private rerollNonce = 0;
   private elitesDefeated = 0;
   private bossPending = false;
   private attackAccumulator = 0;
   private lastContactAt = -99_999;
   private dead = false;
   private draftOpen = false;
-  private draftChoices: readonly V21DraftChoice[] = [];
+  private cr2DraftActive = false;
+  private cr2DraftLegalCandidateCount = 0;
+  private draftChoices: readonly DraftViewChoice[] = [];
   private draftViews: Phaser.GameObjects.Container[] = [];
   private draftBackdrop: Phaser.GameObjects.Rectangle | null = null;
+  private refractView: Phaser.GameObjects.Text | null = null;
   private qualified = false;
 
   private moveUp = false;
@@ -388,6 +464,97 @@ class SurvivalScene extends Phaser.Scene {
 
   setReducedMotion(reduced: boolean): void { this.reduced = reduced; }
 
+  private buildCR2LiveSnapshot(): CR2LiveSnapshot {
+    return Object.freeze({
+      deltaRank: this.deltaRank,
+      vectorOwned: this.vectorOwned,
+      vectorRank: this.vectorRank,
+      orbitOwned: this.orbitOwned,
+      orbitRank: this.orbitRank,
+      echoOwned: this.echoOwned,
+      echoRank: this.echoRank,
+      signalOwned: this.signalOwned,
+      signalRank: this.signalRank,
+      evolvedWeapons: Object.freeze({ ...this.evolvedWeapons }),
+      protocols: Object.freeze({ ...this.protocols }),
+      evolutionCores: this.evolutionCores,
+      refracts: this.refracts,
+      rerollNonce: this.rerollNonce,
+      hp: this.hp,
+      maxHp: V21_PLAYER_MAX_HP,
+      pickupRadius: this.pickupRadius,
+      weaponSlotsUsed: this.weaponSlotsUsed,
+    });
+  }
+
+  private deltaCombatProfile(phase: Phase = this.phase, rank = this.deltaRank): ReturnType<typeof buildDeltaProfile> {
+    return resolveCR2DeltaProtocolRuntime(buildDeltaProfile(this.pair.a.rows, this.pair.b.rows, phase, rank), this.buildCR2LiveSnapshot()).profile;
+  }
+
+  private vectorCombatProfile(rank = this.vectorRank, transferShot = false): VectorRankProfile {
+    return resolveCR2VectorProtocolRuntime(buildVectorProfile(rank, transferShot), this.buildCR2LiveSnapshot()).profile;
+  }
+
+  private orbitCombatProfile(rank = this.orbitRank): OrbitRankProfile {
+    return resolveCR2OrbitProtocolRuntime(buildOrbitProfile(rank), this.buildCR2LiveSnapshot());
+  }
+
+  private echoCombatProfile(rank = this.echoRank, memoryDepth = 0): EchoRankProfile {
+    return resolveCR2EchoProtocolRuntime(buildEchoProfile(rank, memoryDepth), this.buildCR2LiveSnapshot());
+  }
+
+  private signalCombatProfile(rank = this.signalRank): ReturnType<typeof buildSignalArcProfile> {
+    return resolveCR2SignalProtocolRuntime(buildSignalArcProfile(rank), this.buildCR2LiveSnapshot()).profile;
+  }
+
+  private applyCR2Projection(next: CR2LiveProjection): void {
+    if (Object.values(next.evolvedWeapons).some(value => value === true)) {
+      throw new Error("Evolution projection reached Phaser before evolved combat runtime qualification.");
+    }
+    const oldDeltaCooldown = this.deltaCombatProfile().cooldownMs;
+    const oldVectorCooldown = this.vectorCombatProfile().cooldownMs;
+    const oldSignalCooldown = this.signalCombatProfile().cooldownMs;
+    const oldVectorRank = this.vectorRank;
+    const oldEchoRank = this.echoRank;
+    const wasEchoOwned = this.echoOwned;
+
+    this.deltaRank = next.deltaRank;
+    this.vectorOwned = next.vectorOwned;
+    this.vectorRank = next.vectorRank;
+    this.orbitOwned = next.orbitOwned;
+    this.orbitRank = next.orbitRank;
+    this.echoOwned = next.echoOwned;
+    this.echoRank = next.echoRank;
+    this.signalOwned = next.signalOwned;
+    this.signalRank = next.signalRank;
+    this.evolvedWeapons = { ...next.evolvedWeapons };
+    this.protocols = { ...next.protocols };
+    this.evolutionCores = next.evolutionCores;
+    this.refracts = next.refracts;
+    this.rerollNonce = next.rerollNonce;
+    this.hp = next.hp;
+    this.pickupRadius = next.pickupRadius;
+    this.weaponSlotsUsed = next.weaponSlotsUsed;
+
+    this.attackAccumulator = migrateCooldownProgress(this.attackAccumulator, oldDeltaCooldown, this.deltaCombatProfile().cooldownMs);
+    this.vectorAccumulator = migrateCooldownProgress(this.vectorAccumulator, oldVectorCooldown, this.vectorCombatProfile().cooldownMs);
+    this.signalAccumulator = migrateCooldownProgress(this.signalAccumulator, oldSignalCooldown, this.signalCombatProfile().cooldownMs);
+
+    if (this.vectorRank !== oldVectorRank) {
+      if (oldVectorRank < 4 && this.vectorRank >= 4) this.vectorTransferState = emptyVectorTransfer();
+      if (this.vectorRank >= 5) this.vectorLockState = initialVectorLockState();
+    }
+    if (this.echoRank !== oldEchoRank) {
+      this.ensureEchoMineCapacity();
+      if (oldEchoRank < 5 && this.echoRank >= 5) {
+        for (const runtime of this.echoMines) if (runtime.active && runtime.mine) runtime.mine = initializeEchoMineForRankV(runtime.mine);
+        this.echoBurstLedger = new Map();
+      }
+    }
+    if (!wasEchoOwned && this.echoOwned) this.echoPlacementAccumulator = 0;
+    if (this.orbitOwned) this.syncOrbitNodeView();
+  }
+
   private applyVectorQualificationFixture(): void {
     const raw = (window as VectorQualificationWindow).__RARE_SHIFT_V23B2_VECTOR_RANK__;
     if (!Number.isInteger(raw) || (raw as number) < 1 || (raw as number) > 5) return;
@@ -431,7 +598,7 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private ensureEchoMineCapacity(): void {
-    const required = buildEchoProfile(this.echoRank, 0).maxActive;
+    const required = this.echoCombatProfile(this.echoRank, 0).maxActive;
     while (this.echoMines.length < required) {
       const view = this.add.graphics().setDepth(23).setVisible(false);
       this.echoMines.push({ active: false, mine: null, view });
@@ -456,7 +623,7 @@ class SurvivalScene extends Phaser.Scene {
     }
 
     this.attackAccumulator += dt;
-    const profile = buildDeltaProfile(this.pair.a.rows, this.pair.b.rows, this.phase, this.deltaRank);
+    const profile = this.deltaCombatProfile();
     if (this.attackAccumulator >= profile.cooldownMs) {
       this.attackAccumulator %= profile.cooldownMs;
       this.fireDelta(profile);
@@ -464,7 +631,7 @@ class SurvivalScene extends Phaser.Scene {
     this.updatePendingDeltaEcho();
 
     if (this.vectorOwned) {
-      const vectorProfile = buildVectorProfile(this.vectorRank);
+      const vectorProfile = this.vectorCombatProfile();
       if (this.vectorTransferState.armed && !isVectorTransferArmed(this.vectorTransferState, this.elapsedActiveMs)) {
         this.vectorTransferState = emptyVectorTransfer();
         this.vectorTransferExpiries += 1;
@@ -648,7 +815,7 @@ class SurvivalScene extends Phaser.Scene {
     this.hudText.setText(`HP ${Math.max(0, this.hp)}/${V21_PLAYER_MAX_HP}   LV ${this.level}   XP ${this.xp}/${xpThreshold(this.level)}`);
     this.buildText.setText(`K ${this.kills} · Δ ${romanRank(this.deltaRank)} · V ${this.vectorOwned ? romanRank(this.vectorRank) : "--"} · O ${this.orbitOwned ? romanRank(this.orbitRank) : "--"} · E ${this.echoOwned ? romanRank(this.echoRank) : "--"} · S ${this.signalOwned ? romanRank(this.signalRank) : "--"}`);
     this.phaseText.setColor(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB).setText(`PHASE ${this.phase}\nFRAME ${this.phase === "A" ? this.pair.a.index : this.pair.b.index}`);
-    if (this.stageText) this.stageText.setText(`${stageForElapsedMs(this.elapsedActiveMs).label} · CORES ${this.evolutionCores}`);
+    if (this.stageText) this.stageText.setText(`${stageForElapsedMs(this.elapsedActiveMs).label} · CORES ${this.evolutionCores} · REFRACT ${this.refracts}`);
     if (this.shiftButton) this.shiftButton.setStrokeStyle(2, hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB));
   }
 
@@ -713,7 +880,9 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private applyPlayerDamage(amount: number): boolean {
-    if (this.elapsedActiveMs - this.lastContactAt < V21_CONTACT_INVULN_MS) return false;
+    const playerProtocol = resolveCR2PlayerProtocolRuntime(this.buildCR2LiveSnapshot());
+    const contactInvulnMs = V21_CONTACT_INVULN_MS + playerProtocol.contactInvulnBonusMs;
+    if (this.elapsedActiveMs - this.lastContactAt < contactInvulnMs) return false;
     this.lastContactAt = this.elapsedActiveMs;
     this.hp = Math.max(0, this.hp - amount);
     if (!this.reduced) this.cameras.main.flash(80, 246, 200, 95, false);
@@ -879,19 +1048,20 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private refreshVectorTarget(): void {
+    const profile = this.vectorCombatProfile();
     if (this.vectorRank >= 5 && this.vectorLockState.targetId !== null) {
       const locked = this.enemies.find(enemy => enemy.active && enemy.id === this.vectorLockState.targetId) ?? null;
       if (!locked || !isEnemyCorporeal(locked.kind, this.phase) || vectorPriorityTier(locked.kind) < 1) {
         this.resetVectorLockState();
       } else {
         const dx = locked.x - this.friend.x, dy = locked.y - this.friend.y;
-        if (dx * dx + dy * dy > VECTOR_RANK_I.range * VECTOR_RANK_I.range) this.resetVectorLockState();
+        if (dx * dx + dy * dy > profile.range * profile.range) this.resetVectorLockState();
       }
     }
 
     const result = this.vectorRank >= 3
-      ? acquirePriorityVectorTarget(this.enemies, this.phase, this.friend.x, this.friend.y, this.vectorRank >= 5 ? this.vectorLockState.targetId : null)
-      : acquireVectorTarget(this.enemies, this.phase, this.friend.x, this.friend.y);
+      ? acquirePriorityVectorTarget(this.enemies, this.phase, this.friend.x, this.friend.y, this.vectorRank >= 5 ? this.vectorLockState.targetId : null, profile.range)
+      : acquireVectorTarget(this.enemies, this.phase, this.friend.x, this.friend.y, profile.range);
     const nextId = result?.id ?? null;
     if (this.vectorRank >= 5 && this.vectorLockState.targetId !== null && nextId !== this.vectorLockState.targetId) this.resetVectorLockState();
     if (nextId !== this.vectorTargetId) {
@@ -918,7 +1088,7 @@ class SurvivalScene extends Phaser.Scene {
     if (this.vectorTargetId === null) return null;
     const enemy = this.enemies.find(item => item.active && item.id === this.vectorTargetId) ?? null;
     if (!enemy || !isEnemyCorporeal(enemy.kind, this.phase)) return null;
-    const profile = buildVectorProfile(this.vectorRank);
+    const profile = this.vectorCombatProfile();
     const dx = enemy.x - this.friend.x, dy = enemy.y - this.friend.y;
     return dx * dx + dy * dy <= profile.range * profile.range ? enemy : null;
   }
@@ -932,7 +1102,7 @@ class SurvivalScene extends Phaser.Scene {
     const transferReady = this.vectorRank >= 4
       && this.vectorTransferState.phase === this.phase
       && isVectorTransferArmed(this.vectorTransferState, this.elapsedActiveMs);
-    const profile = buildVectorProfile(this.vectorRank, transferReady);
+    const profile = this.vectorCombatProfile(this.vectorRank, transferReady);
     const dx = target.x - originX, dy = target.y - originY, distance = Math.hypot(dx, dy);
     if (!(distance > 0)) return;
 
@@ -1066,7 +1236,7 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private updateOrbit(dtMs: number): void {
-    const profile = buildOrbitProfile(this.orbitRank);
+    const profile = this.orbitCombatProfile();
     this.orbitAngle = advanceOrbitAngle(this.orbitAngle, this.phase, dtMs, profile.angularSpeed);
     const points = this.syncOrbitNodeView(profile);
     for (const enemy of this.enemies) {
@@ -1082,7 +1252,7 @@ class SurvivalScene extends Phaser.Scene {
     }
   }
 
-  private syncOrbitNodeView(profile: OrbitRankProfile = buildOrbitProfile(this.orbitRank)): readonly { x: number; y: number }[] {
+  private syncOrbitNodeView(profile: OrbitRankProfile = this.orbitCombatProfile()): readonly { x: number; y: number }[] {
     const points = orbitNodePositions(this.friend.x, this.friend.y, this.orbitAngle, profile);
     if (!this.orbitOwned) { this.orbitNode.clear().setVisible(false); return points; }
     const direction = orbitDirectionForPhase(this.phase);
@@ -1102,7 +1272,7 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private tryEmitOrbitShear(anchorAngle: number): void {
-    const profile = buildOrbitProfile(this.orbitRank);
+    const profile = this.orbitCombatProfile();
     if (profile.rank < 4) return;
     if (!canEmitOrbitShear(profile.rank, this.orbitShearLastEmittedAt, this.elapsedActiveMs)) {
       this.orbitShearRearmBlocks += 1;
@@ -1152,10 +1322,10 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private updateEcho(dtMs: number): void {
-    const placementProfile = buildEchoProfile(this.echoRank, 0);
+    const placementProfile = this.echoCombatProfile(this.echoRank, 0);
     for (const runtime of this.echoMines) {
       if (!runtime.active || !runtime.mine) continue;
-      const mineProfile = buildEchoProfile(this.echoRank, runtime.mine.memoryDepth);
+      const mineProfile = this.echoCombatProfile(this.echoRank, runtime.mine.memoryDepth);
       if (!isEchoMineExpired(runtime.mine, this.elapsedActiveMs, mineProfile)) continue;
       this.deactivateEchoMine(runtime);
       this.echoExpiries += 1;
@@ -1175,7 +1345,7 @@ class SurvivalScene extends Phaser.Scene {
       if (!runtime.active || !runtime.mine) continue;
       this.paintEchoMine(runtime);
       const mine = runtime.mine;
-      const profile = buildEchoProfile(this.echoRank, mine.memoryDepth);
+      const profile = this.echoCombatProfile(this.echoRank, mine.memoryDepth);
       if (echoTriggerCandidateIds(mine, this.phase, this.elapsedActiveMs, this.enemies, profile).length === 0) continue;
       const targetIds = echoBlastTargetIds(mine, this.phase, this.enemies, profile);
       this.deactivateEchoMine(runtime);
@@ -1197,7 +1367,7 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private tryPlaceEchoMine(): void {
-    const profile = buildEchoProfile(this.echoRank, 0);
+    const profile = this.echoCombatProfile(this.echoRank, 0);
     this.ensureEchoMineCapacity();
     const active = this.echoMines
       .filter((runtime): runtime is EchoMineRuntime & { mine: EchoMineCore } => runtime.active && runtime.mine !== null)
@@ -1274,14 +1444,14 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private updateSignalArc(dtMs: number): void {
-    const profile = buildSignalArcProfile(this.signalRank);
+    const profile = this.signalCombatProfile();
     this.signalAccumulator = advanceSignalArcCooldown(this.signalAccumulator, dtMs, profile);
     if (this.signalAccumulator < profile.cooldownMs) return;
     const path = planSignalArc(this.enemies, this.phase, this.friend.x, this.friend.y, profile);
     if (path.length === 0) return;
     let controlledRouting = false;
     if (this.signalRank >= 5) {
-      const nearestPath = planSignalArc(this.enemies, this.phase, this.friend.x, this.friend.y, buildSignalArcProfile(4));
+      const nearestPath = planSignalArc(this.enemies, this.phase, this.friend.x, this.friend.y, this.signalCombatProfile(4));
       controlledRouting = path.map(hop => hop.id).join(",") !== nearestPath.map(hop => hop.id).join(",");
     }
     this.fireSignalArc(path, controlledRouting);
@@ -1384,6 +1554,7 @@ class SurvivalScene extends Phaser.Scene {
       const claim = claimCheckpointRewards(this.rewardLedger, checkpointId, this.evolutionCores);
       this.rewardLedger = claim.ledger;
       if (claim.newlyClaimed) {
+        this.applyCR2Projection(applyCR2CheckpointProgressionReward(this.buildCR2LiveSnapshot(), checkpointId, true));
         this.elitesDefeated += 1;
         claim.rewards.forEach((reward, index) => this.spawnPickup(reward, deathX, deathY, index + 1));
         this.statusText.setText(`${checkpointId.replaceAll("_", " ")} DEFEATED // reward signal released.`);
@@ -1400,11 +1571,14 @@ class SurvivalScene extends Phaser.Scene {
   }
 
   private updatePickups(dt: number): void {
+    const playerProtocol = resolveCR2PlayerProtocolRuntime(this.buildCR2LiveSnapshot());
+    const effectivePickupRadius = this.pickupRadius + playerProtocol.pickupRadiusBonus;
     for (const pickup of this.pickups) {
       if (!pickup.active) continue;
       const dx = this.friend.x - pickup.x, dy = this.friend.y - pickup.y, distance = Math.max(0.001, Math.hypot(dx, dy));
-      if (pickup.magnetized || distance <= this.pickupRadius) {
-        const speed = pickup.magnetized ? 720 : Math.max(180, 460 - distance);
+      if (pickup.magnetized || distance <= effectivePickupRadius) {
+        const baseSpeed = pickup.magnetized ? 720 : Math.max(180, 460 - distance);
+        const speed = baseSpeed * playerProtocol.pickupAttractionSpeedMultiplier;
         pickup.x += dx / distance * speed * dt; pickup.y += dy / distance * speed * dt; pickup.view.setPosition(pickup.x, pickup.y);
       }
       if (distance < 24 && this.collectPickup(pickup)) break;
@@ -1413,14 +1587,23 @@ class SurvivalScene extends Phaser.Scene {
 
   private collectPickup(pickup: PickupRuntime): boolean {
     const kind = pickup.kind; pickup.active = false; pickup.magnetized = false; pickup.view.setVisible(false);
-    if (kind === "REPAIR") { this.hp = Math.min(V21_PLAYER_MAX_HP, this.hp + 28); this.statusText.setText("REPAIR // integrity restored."); return false; }
+    if (kind === "REPAIR") {
+      const repairBonusHp = resolveCR2PlayerProtocolRuntime(this.buildCR2LiveSnapshot()).repairBonusHp;
+      this.hp = Math.min(V21_PLAYER_MAX_HP, this.hp + 28 + repairBonusHp);
+      this.statusText.setText("REPAIR // integrity restored.");
+      return false;
+    }
     if (kind === "VACUUM") { for (const item of this.pickups) if (item.active && item.kind === "SIGNAL_XP") item.magnetized = true; this.statusText.setText("VACUUM // Signal XP recalled."); return false; }
     if (kind === "DISCHARGE") {
       const targets = this.enemies.filter(enemy => enemy.active && !enemy.elite);
       for (const enemy of targets) this.killEnemy(enemy);
       this.statusText.setText("DISCHARGE // ordinary threat field cleared."); return false;
     }
-    if (kind === "EVOLUTION_CORE") { this.evolutionCores += 1; this.statusText.setText(`EVOLUTION CORE ACQUIRED // ${this.evolutionCores}`); return false; }
+    if (kind === "EVOLUTION_CORE") {
+      this.applyCR2Projection(collectCR2EvolutionCoreLive(this.buildCR2LiveSnapshot()));
+      this.statusText.setText(`EVOLUTION CORE ACQUIRED // ${this.evolutionCores}`);
+      return false;
+    }
     const progress = addSignalXp(this.level, this.xp, 1); this.level = progress.level; this.xp = progress.xp;
     if (progress.levelsGained <= 0) return false;
     this.openDraft();
@@ -1454,22 +1637,59 @@ class SurvivalScene extends Phaser.Scene {
     };
   }
 
-  private openDraft(): void {
-    this.draftChoices = buildV21Draft(this.seed, this.level, this.buildState());
-    if (this.draftChoices.length === 0) {
-      this.draftOpen = false; this.setCombatControlsEnabled(true);
-      this.statusText.setDepth(110).setText("LEVEL UP // upgrade pool exhausted · combat resumed."); this.syncTestState(); return;
-    }
-    this.draftOpen = true; this.setCombatControlsEnabled(false);
+  private renderDraftChoices(): void {
+    for (const view of this.draftViews) view.destroy(true);
+    this.draftViews = [];
+    this.refractView?.destroy();
+    this.refractView = null;
     this.draftBackdrop?.destroy();
     this.draftBackdrop = this.add.rectangle(480, 320, 960, 640, 0x05070a, 0.58).setScrollFactor(0).setDepth(180);
     const xs = draftCardXs(this.draftChoices.length);
     this.draftViews = this.draftChoices.map((choice, index) => this.makeDraftCard(xs[index], choice, index));
-    const keyLabel = this.draftChoices.length === 1 ? "key 1" : `keys 1–${this.draftChoices.length}`;
-    this.statusText.setText(`LEVEL UP // choose 1 of ${this.draftChoices.length} · ${keyLabel} or tap`).setDepth(210); this.syncTestState();
+    if (this.cr2DraftActive && this.refracts > 0 && this.cr2DraftLegalCandidateCount > 3) {
+      this.refractView = this.add.text(480, 466, `REFRACT [R] · ${this.refracts}`, {
+        fontFamily: "monospace", fontSize: "12px", color: "#f6c85f", backgroundColor: "#11151b", padding: { x: 12, y: 7 }, fontStyle: "bold",
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(211).setInteractive({ useHandCursor: true });
+      this.refractView.on("pointerdown", () => this.refractDraft());
+    }
   }
 
-  private makeDraftCard(x: number, choice: V21DraftChoice, index: number): Phaser.GameObjects.Container {
+  private openDraft(): void {
+    if (this.level >= 5) {
+      const draft = buildCR2ProtocolDraftFromLive(this.seed, this.level, this.buildCR2LiveSnapshot());
+      this.cr2DraftActive = true;
+      this.cr2DraftLegalCandidateCount = draft.legalCandidateCount;
+      this.draftChoices = draft.choices.map(normalizedDraftViewChoice);
+    } else {
+      this.cr2DraftActive = false;
+      this.cr2DraftLegalCandidateCount = 0;
+      this.draftChoices = buildV21Draft(this.seed, this.level, this.buildState()).map(legacyDraftViewChoice);
+    }
+    if (this.draftChoices.length === 0) {
+      this.draftOpen = false; this.setCombatControlsEnabled(true);
+      this.statusText.setDepth(110).setText("LEVEL UP // upgrade pool exhausted · combat resumed."); this.syncTestState(); return;
+    }
+    this.draftOpen = true;
+    this.setCombatControlsEnabled(false);
+    this.renderDraftChoices();
+    const keyLabel = this.draftChoices.length === 1 ? "key 1" : `keys 1–${this.draftChoices.length}`;
+    const refractLabel = this.cr2DraftActive && this.refracts > 0 && this.cr2DraftLegalCandidateCount > 3 ? " · R to REFRACT" : "";
+    this.statusText.setText(`LEVEL UP // choose 1 of ${this.draftChoices.length} · ${keyLabel} or tap${refractLabel}`).setDepth(210);
+    this.syncTestState();
+  }
+
+  private refractDraft(): void {
+    if (!this.draftOpen || !this.cr2DraftActive || this.refracts <= 0 || this.cr2DraftLegalCandidateCount <= 3) return;
+    const result = useCR2ProtocolRefractFromLive(this.seed, this.level, this.buildCR2LiveSnapshot());
+    this.applyCR2Projection(result.projection);
+    this.cr2DraftLegalCandidateCount = result.draft.legalCandidateCount;
+    this.draftChoices = result.draft.choices.map(normalizedDraftViewChoice);
+    this.renderDraftChoices();
+    this.statusText.setText(`REFRACT // replacement triple locked · ${this.refracts} remaining`).setDepth(210);
+    this.syncTestState();
+  }
+
+  private makeDraftCard(x: number, choice: DraftViewChoice, index: number): Phaser.GameObjects.Container {
     const container = this.add.container(x, 320).setScrollFactor(0).setDepth(200);
     const isDelta = choice.id === "DELTA_RANK";
     const isVectorAcquire = choice.id === "VECTOR_NEEDLE";
@@ -1484,9 +1704,10 @@ class SurvivalScene extends Phaser.Scene {
     const isSignalAcquire = choice.id === "SIGNAL_ARC";
     const isSignalRank = choice.id === "SIGNAL_RANK";
     const isSignal = isSignalAcquire || isSignalRank;
+    const isProtocol = choice.category === "PROTOCOL";
     const isPhaseWeapon = isDelta || isVector || isOrbit || isEcho || isSignal;
-    const border = isPhaseWeapon ? hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB) : 0x657383;
-    const bg = this.add.rectangle(0, 0, 220, 230, 0x11151b, 0.99).setStrokeStyle(isPhaseWeapon ? 3 : 2, border).setInteractive({ useHandCursor: true });
+    const border = isPhaseWeapon ? hex(this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB) : isProtocol ? 0xf6c85f : 0x657383;
+    const bg = this.add.rectangle(0, 0, 220, 230, 0x11151b, 0.99).setStrokeStyle(isPhaseWeapon || isProtocol ? 3 : 2, border).setInteractive({ useHandCursor: true });
     const tag = this.add.text(0, -91, `${index + 1} // ${choice.category}`, { fontFamily: "monospace", fontSize: "11px", color: "#8b98a7" }).setOrigin(0.5);
     const nextDeltaRank = Math.min(5, this.deltaRank + 1);
     const nextVectorRank = Math.min(5, this.vectorRank + 1);
@@ -1505,7 +1726,9 @@ class SurvivalScene extends Phaser.Scene {
             ? `RANK ${romanRank(this.echoRank)} → ${romanRank(nextEchoRank)}`
             : isSignalRank
               ? `RANK ${romanRank(this.signalRank)} → ${romanRank(nextSignalRank)}`
-              : (isVectorAcquire || isOrbitAcquire || isEchoAcquire || isSignalAcquire) ? "ACQUIRE · RANK I" : "RUN UTILITY";
+              : isProtocol
+                ? choice.fromRank === 0 ? "ACQUIRE · RANK I" : `RANK ${romanRank(choice.fromRank ?? 1)} → ${romanRank(choice.toRank ?? 1)}`
+                : (isVectorAcquire || isOrbitAcquire || isEchoAcquire || isSignalAcquire) ? "ACQUIRE · RANK I" : "RUN UTILITY";
     const detail = this.add.text(0, -27, detailText, { fontFamily: "monospace", fontSize: "9px", color: isPhaseWeapon ? (this.phase === "A" ? V2_PALETTE.phaseA : V2_PALETTE.phaseB) : "#748392", letterSpacing: 1 }).setOrigin(0.5);
     const deltaDescription = nextDeltaRank === 2 ? "DENSE SAMPLE · cadence tightens to 720ms." : nextDeltaRank === 3 ? "FIELD SCALE · canonical mask expands in world-space." : nextDeltaRank === 4 ? "PHASE ECHO · SHIFT leaves one bounded previous-phase echo." : "LOCKED IDENTITY · matching-phase pulse gains bounded stagger.";
     const vectorDescription = nextVectorRank === 2 ? "CLEAN LINE · fixed ray penetrates one aligned target." : nextVectorRank === 3 ? "PRIORITY TRACE · focus high-value corporeal threats in-band." : nextVectorRank === 4 ? "PHASE TRANSFER · first valid post-SHIFT launch gains a third line hit." : "VECTOR LOCK · repeated priority hits build bounded primary damage.";
@@ -1559,6 +1782,22 @@ class SurvivalScene extends Phaser.Scene {
   private chooseDraft(index: number): void {
     if (!this.draftOpen) return;
     const choice = this.draftChoices[index]; if (!choice || choice.disabled) return;
+    if (this.cr2DraftActive) {
+      if (!choice.candidateId) throw new Error("Normalized CR-2 draft choice is missing candidate identity.");
+      const echoPlacementsBeforeChoice = this.echoPlacements;
+      const echoTriggersBeforeChoice = this.echoTriggers;
+      const result = applyCR2ProtocolDraftChoiceToLive(this.seed, this.level, this.buildCR2LiveSnapshot(), choice.candidateId);
+      this.applyCR2Projection(result.projection);
+      if (choice.id === "ECHO_RANK") {
+        this.game.canvas.dataset.echoRankChoicePlacementDelta = String(this.echoPlacements - echoPlacementsBeforeChoice);
+        this.game.canvas.dataset.echoRankChoiceTriggerDelta = String(this.echoTriggers - echoTriggersBeforeChoice);
+      }
+      for (const view of this.draftViews) view.destroy(true);
+      this.draftViews = []; this.draftChoices = []; this.draftBackdrop?.destroy(); this.draftBackdrop = null; this.refractView?.destroy(); this.refractView = null; this.draftOpen = false;
+      this.cr2DraftActive = false; this.cr2DraftLegalCandidateCount = 0;
+      this.setCombatControlsEnabled(true); this.statusText.setDepth(110).setText(`${result.selected.name} selected // combat resumed.`); this.updateHud(); this.syncTestState();
+      return;
+    }
     const wasEchoOwned = this.echoOwned;
     const oldDeltaRank = this.deltaRank;
     const oldVectorRank = this.vectorRank;
@@ -1601,7 +1840,8 @@ class SurvivalScene extends Phaser.Scene {
     if (this.orbitOwned) this.syncOrbitNodeView();
     if (!wasEchoOwned && this.echoOwned) this.echoPlacementAccumulator = 0;
     for (const view of this.draftViews) view.destroy(true);
-    this.draftViews = []; this.draftChoices = []; this.draftBackdrop?.destroy(); this.draftBackdrop = null; this.draftOpen = false;
+    this.draftViews = []; this.draftChoices = []; this.draftBackdrop?.destroy(); this.draftBackdrop = null; this.refractView?.destroy(); this.refractView = null; this.draftOpen = false;
+    this.cr2DraftActive = false; this.cr2DraftLegalCandidateCount = 0;
     this.setCombatControlsEnabled(true); this.statusText.setDepth(110).setText(`${choice.name} selected // combat resumed.`); this.updateHud(); this.syncTestState();
   }
 
@@ -1609,7 +1849,8 @@ class SurvivalScene extends Phaser.Scene {
     let x = (this.moveRight ? 1 : 0) - (this.moveLeft ? 1 : 0) + this.joystickVector.x;
     let y = (this.moveDown ? 1 : 0) - (this.moveUp ? 1 : 0) + this.joystickVector.y;
     const magnitude = Math.hypot(x, y); if (magnitude > 1) { x /= magnitude; y /= magnitude; }
-    const next = clampPlayerPosition({ x: this.friend.x + x * PLAYER_SPEED * dt, y: this.friend.y + y * PLAYER_SPEED * dt }); this.friend.setPosition(next.x, next.y);
+    const moveSpeed = PLAYER_SPEED * resolveCR2PlayerProtocolRuntime(this.buildCR2LiveSnapshot()).moveSpeedMultiplier;
+    const next = clampPlayerPosition({ x: this.friend.x + x * moveSpeed * dt, y: this.friend.y + y * moveSpeed * dt }); this.friend.setPosition(next.x, next.y);
   }
 
   private shift(): void {
@@ -1655,11 +1896,11 @@ class SurvivalScene extends Phaser.Scene {
   private installKeyboard(): void {
     this.input.keyboard?.on("keydown", (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
-      if (["arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d", " ", "1", "2", "3"].includes(key)) event.preventDefault();
-      if (event.repeat && key === " ") return;
+      if (["arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d", " ", "1", "2", "3", "r"].includes(key)) event.preventDefault();
+      if (event.repeat && (key === " " || key === "r")) return;
       if (key === "w" || key === "arrowup") this.moveUp = true; else if (key === "s" || key === "arrowdown") this.moveDown = true;
       else if (key === "a" || key === "arrowleft") this.moveLeft = true; else if (key === "d" || key === "arrowright") this.moveRight = true;
-      else if (key === " ") this.shift(); else if (this.draftOpen && /^[1-3]$/u.test(key)) this.chooseDraft(Number(key) - 1);
+      else if (key === " ") this.shift(); else if (key === "r" && this.draftOpen) this.refractDraft(); else if (this.draftOpen && /^[1-3]$/u.test(key)) this.chooseDraft(Number(key) - 1);
     });
     this.input.keyboard?.on("keyup", (event: KeyboardEvent) => {
       const key = event.key.toLowerCase(); if (key === "w" || key === "arrowup") this.moveUp = false; else if (key === "s" || key === "arrowdown") this.moveDown = false; else if (key === "a" || key === "arrowleft") this.moveLeft = false; else if (key === "d" || key === "arrowright") this.moveRight = false;
@@ -1696,13 +1937,24 @@ class SurvivalScene extends Phaser.Scene {
     canvas.dataset.level = String(this.level); canvas.dataset.xp = String(this.xp); canvas.dataset.kills = String(this.kills); canvas.dataset.shifts = String(this.shifts);
     canvas.dataset.deltaRank = String(this.deltaRank); canvas.dataset.pickupRadius = String(this.pickupRadius); canvas.dataset.draftOpen = this.draftOpen ? "true" : "false";
     canvas.dataset.draftCount = String(this.draftChoices.length); canvas.dataset.draftIds = this.draftChoices.map(choice => choice.id).join(",");
+    canvas.dataset.draftCandidateIds = this.draftChoices.map(choice => choice.candidateId ?? "").join(",");
+    canvas.dataset.cr2DraftActive = this.cr2DraftActive ? "true" : "false";
+    canvas.dataset.refracts = String(this.refracts); canvas.dataset.rerollNonce = String(this.rerollNonce);
+    canvas.dataset.protocols = Object.entries(this.protocols).sort(([a], [b]) => a.localeCompare(b)).map(([family, rank]) => `${family}:${rank}`).join(",");
+    canvas.dataset.protocolSlotsUsed = String(Object.keys(this.protocols).length);
+    const playerProtocol = resolveCR2PlayerProtocolRuntime(this.buildCR2LiveSnapshot());
+    canvas.dataset.protocolMoveSpeedMultiplier = String(playerProtocol.moveSpeedMultiplier);
+    canvas.dataset.protocolContactInvulnMs = String(V21_CONTACT_INVULN_MS + playerProtocol.contactInvulnBonusMs);
+    canvas.dataset.protocolRepairBonusHp = String(playerProtocol.repairBonusHp);
+    canvas.dataset.protocolPickupRadiusBonus = String(playerProtocol.pickupRadiusBonus);
+    canvas.dataset.protocolPickupAttractionMultiplier = String(playerProtocol.pickupAttractionSpeedMultiplier);
     canvas.dataset.activeEnemies = String(this.enemies.filter(enemy => enemy.active).length); canvas.dataset.qualified = this.qualified ? "true" : "false"; canvas.dataset.dead = this.dead ? "true" : "false";
     canvas.dataset.directorStage = this.directorStage; canvas.dataset.directorElapsedMs = String(Math.round(this.elapsedActiveMs)); canvas.dataset.bossPending = this.bossPending ? "true" : "false";
     canvas.dataset.spawnedCheckpoints = [...this.spawnedCheckpoints].join(","); canvas.dataset.elitesDefeated = String(this.elitesDefeated); canvas.dataset.evolutionCores = String(this.evolutionCores);
     canvas.dataset.activeElites = String(this.enemies.filter(enemy => enemy.active && enemy.elite).length); canvas.dataset.beaconProjectiles = String(this.beaconProjectiles.length);
     canvas.dataset.enemyKinds = this.enemies.filter(enemy => enemy.active).map(enemy => enemy.kind).sort().join(",");
     canvas.dataset.seed = String(this.seed); canvas.dataset.controlsDimmed = this.draftOpen ? "true" : "false"; canvas.dataset.deltaFx = "canonical-exclusive";
-    const deltaProfile = buildDeltaProfile(this.pair.a.rows, this.pair.b.rows, this.phase, this.deltaRank);
+    const deltaProfile = this.deltaCombatProfile();
     canvas.dataset.deltaDamage = String(deltaProfile.damage);
     canvas.dataset.deltaCooldownMs = String(deltaProfile.cooldownMs);
     canvas.dataset.deltaWorldScale = String(deltaProfile.worldScale);
@@ -1714,6 +1966,9 @@ class SurvivalScene extends Phaser.Scene {
     canvas.dataset.deltaStaggers = String(this.deltaStaggers);
     canvas.dataset.deltaStaggeredEnemies = String(this.enemies.filter(enemy => enemy.active && enemy.staggerUntilMs > this.elapsedActiveMs).length);
     canvas.dataset.weaponSlotsUsed = String(this.weaponSlotsUsed);
+    const vectorProfile = this.vectorCombatProfile();
+    canvas.dataset.vectorProtocolRange = String(vectorProfile.range);
+    canvas.dataset.vectorProtocolSpeed = String(vectorProfile.speed);
     canvas.dataset.vectorOwned = this.vectorOwned ? "true" : "false";
     canvas.dataset.vectorRank = String(this.vectorRank);
     canvas.dataset.vectorTargetId = this.vectorTargetId === null ? "" : String(this.vectorTargetId);
@@ -1737,7 +1992,7 @@ class SurvivalScene extends Phaser.Scene {
     canvas.dataset.vectorQualificationFixture = this.vectorQualificationFixture;
     canvas.dataset.vectorInFlightRanks = this.vectorProjectiles.filter(projectile => projectile.active && projectile.profile).map(projectile => String(projectile.profile?.rank ?? 0)).join(",");
     canvas.dataset.vectorInFlightTransfer = this.vectorProjectiles.some(projectile => projectile.active && projectile.transferShot) ? "true" : "false";
-    const orbitProfile = buildOrbitProfile(this.orbitRank);
+    const orbitProfile = this.orbitCombatProfile();
     canvas.dataset.orbitOwned = this.orbitOwned ? "true" : "false";
     canvas.dataset.orbitRank = String(this.orbitRank);
     canvas.dataset.orbitProfile = `rank${this.orbitRank}-phase-reversal`;
@@ -1747,6 +2002,8 @@ class SurvivalScene extends Phaser.Scene {
     canvas.dataset.orbitReversals = String(this.orbitReversals);
     canvas.dataset.orbitLastShiftAnchor = this.orbitLastShiftAnchor === null ? "" : this.orbitLastShiftAnchor.toFixed(6);
     canvas.dataset.orbitCooldownEntries = String(this.orbitLastHitAt.size);
+    canvas.dataset.orbitProtocolRadius = String(orbitProfile.radius);
+    canvas.dataset.orbitProtocolContactIntervalMs = String(orbitProfile.contactIntervalMs);
     canvas.dataset.orbitNodeCount = String(orbitProfile.nodeCount);
     canvas.dataset.orbitNodeAngles = orbitNodeAngles(this.orbitAngle, orbitProfile.nodeCount).map(angle => angle.toFixed(6)).join(",");
     canvas.dataset.orbitShearReady = canEmitOrbitShear(this.orbitRank, this.orbitShearLastEmittedAt, this.elapsedActiveMs) ? "true" : "false";
@@ -1758,12 +2015,14 @@ class SurvivalScene extends Phaser.Scene {
     const activeMines = this.echoMines
       .filter((runtime): runtime is EchoMineRuntime & { mine: EchoMineCore } => runtime.active && runtime.mine !== null)
       .sort((a, b) => a.mine.id - b.mine.id);
-    const echoProfile = buildEchoProfile(this.echoRank, 0);
+    const echoProfile = this.echoCombatProfile(this.echoRank, 0);
     canvas.dataset.echoOwned = this.echoOwned ? "true" : "false";
     canvas.dataset.echoRank = String(this.echoRank);
     canvas.dataset.echoProfile = `rank${this.echoRank}-phase-memory`;
     canvas.dataset.echoMaxActive = String(echoProfile.maxActive);
     canvas.dataset.echoReturnDelayMs = String(echoProfile.returnDelayMs);
+    canvas.dataset.echoProtocolLifetimeMs = String(echoProfile.lifetimeMs);
+    canvas.dataset.echoProtocolTriggerRadius = String(echoProfile.triggerRadius);
     canvas.dataset.echoActiveMines = String(activeMines.length);
     canvas.dataset.echoPlacements = String(this.echoPlacements);
     canvas.dataset.echoArmedTransitions = String(this.echoArmedTransitions);
@@ -1780,7 +2039,7 @@ class SurvivalScene extends Phaser.Scene {
     canvas.dataset.echoQualificationFixture = this.echoQualificationFixture;
     canvas.dataset.echoMemoryDepths = activeMines.map(runtime => `${runtime.mine.id}:${runtime.mine.memoryDepth}`).join(",");
     canvas.dataset.echoMineStates = activeMines.map(runtime => `${runtime.mine.id}:${runtime.mine.recordedPhase}:${runtime.mine.state}:D${runtime.mine.memoryDepth}`).join("|");
-    const signalProfile = buildSignalArcProfile(this.signalRank);
+    const signalProfile = this.signalCombatProfile();
     canvas.dataset.signalOwned = this.signalOwned ? "true" : "false";
     canvas.dataset.signalRank = String(this.signalRank);
     canvas.dataset.signalProfile = `rank${this.signalRank}-phase-chain`;
@@ -1804,7 +2063,8 @@ class SurvivalScene extends Phaser.Scene {
     canvas.dataset.signalLastChainCommonBonus = this.signalLastChainCommonBonus.map(value => value ? "1" : "0").join(",");
     canvas.dataset.signalLastChainForwardDegrees = this.signalLastChainForwardDegrees.map(value => value === null ? "" : String(value)).join(",");
     canvas.dataset.signalShiftGraphInvalidations = String(this.signalShiftGraphInvalidations);
-    canvas.dataset.signalCooldownReady = this.signalAccumulator >= buildSignalArcProfile(this.signalRank).cooldownMs ? "true" : "false";
+    canvas.dataset.signalProtocolCooldownMs = String(signalProfile.cooldownMs);
+    canvas.dataset.signalCooldownReady = this.signalAccumulator >= signalProfile.cooldownMs ? "true" : "false";
   }
 }
 
