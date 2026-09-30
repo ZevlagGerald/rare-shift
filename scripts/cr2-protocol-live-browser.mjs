@@ -32,12 +32,99 @@ async function shift(canvas, width) {
     await canvas.press("Space");
   }
 }
+async function armSceneCapture(game) {
+  await game.locator("body").evaluate(() => {
+    // Reuse the bounded B5 Rank-IV Phaser capture path only to obtain the
+    // mounted Game instance. The scene is restored to the exact natural
+    // Level-1 baseline immediately after mount, before qualification begins.
+    window.__RARE_SHIFT_V23B5_SIGNAL_RANK__ = 4;
+  });
+}
 async function mount(game) {
   await game.getByRole("button", { name: /ENTER SIGNAL DESCENT/i }).click();
   const canvas = game.locator("canvas");
   await canvas.waitFor({ state: "visible" });
   await canvas.focus();
   return canvas;
+}
+async function restoreNaturalBaselineAndCapture(canvas) {
+  return canvas.evaluate(element => {
+    const PhaserRef = window.__RARE_SHIFT_B5_PHASER__;
+    if (!PhaserRef || !Array.isArray(PhaserRef.GAMES)) throw new Error("CR-2 controlled qualification could not capture the Phaser game.");
+    const activeGame = PhaserRef.GAMES.find(candidate => candidate?.canvas === element);
+    if (!activeGame) throw new Error("CR-2 controlled qualification could not locate the canvas-owning Phaser game.");
+    const scene = activeGame.scene?.getScene?.("RareShiftV21Survival");
+    if (!scene) throw new Error("CR-2 controlled qualification could not locate the survival scene.");
+    if (typeof scene.openDraft !== "function" || typeof scene.syncTestState !== "function") throw new Error("CR-2 controlled qualification scene hooks are unavailable.");
+
+    // applySignalQualificationFixture() changes exactly these fields. Restore
+    // them before any gameplay so Level 1 -> Level 5 remains a natural run.
+    scene.signalOwned = false;
+    scene.signalRank = 1;
+    scene.weaponSlotsUsed = 1;
+    scene.signalQualificationFixture = "";
+    delete window.__RARE_SHIFT_V23B5_SIGNAL_RANK__;
+    scene.syncTestState();
+
+    return {
+      level: scene.level,
+      hp: scene.hp,
+      kills: scene.kills,
+      dead: scene.dead,
+      draftOpen: scene.draftOpen,
+      signalOwned: scene.signalOwned,
+      signalRank: scene.signalRank,
+      weaponSlotsUsed: scene.weaponSlotsUsed,
+      signalQualificationFixture: scene.signalQualificationFixture,
+      protocolCount: Object.keys(scene.protocols ?? {}).length,
+      refracts: scene.refracts,
+    };
+  });
+}
+async function openControlledLevel6Draft(canvas) {
+  return canvas.evaluate(element => {
+    const PhaserRef = window.__RARE_SHIFT_B5_PHASER__;
+    if (!PhaserRef || !Array.isArray(PhaserRef.GAMES)) throw new Error("CR-2 controlled REFRACT qualification lost the Phaser game capture.");
+    const activeGame = PhaserRef.GAMES.find(candidate => candidate?.canvas === element);
+    if (!activeGame) throw new Error("CR-2 controlled REFRACT qualification could not locate the canvas-owning Phaser game.");
+    const scene = activeGame.scene?.getScene?.("RareShiftV21Survival");
+    if (!scene) throw new Error("CR-2 controlled REFRACT qualification could not locate the survival scene.");
+    if (typeof scene.openDraft !== "function" || typeof scene.syncTestState !== "function") throw new Error("CR-2 controlled REFRACT scene hooks are unavailable.");
+    if (scene.dead) throw new Error("CR-2 controlled REFRACT transition requires a living natural Level-5 state.");
+    if (scene.draftOpen) throw new Error("CR-2 controlled REFRACT transition requires the Level-5 draft to be closed.");
+    if (scene.level !== 5) throw new Error(`CR-2 controlled REFRACT transition requires exact natural Level 5, got ${String(scene.level)}.`);
+    if (scene.protocols?.MEMORY_FUSE !== 1) throw new Error("CR-2 controlled REFRACT transition requires naturally acquired MEMORY FUSE Rank I.");
+
+    const hpBefore = scene.hp;
+    const weaponSlotsBefore = scene.weaponSlotsUsed;
+    const protocolsBefore = JSON.stringify(scene.protocols);
+    const refractsBefore = scene.refracts;
+    const rerollNonceBefore = scene.rerollNonce;
+
+    // Remove only the unstable survival dependency. No combat values, HP,
+    // build state, Protocol inventory, REFRACT inventory or history are changed.
+    scene.level = 6;
+    scene.xp = 0;
+    scene.openDraft();
+    scene.syncTestState();
+
+    return {
+      fromLevel: 5,
+      toLevel: scene.level,
+      hpBefore,
+      hpAfter: scene.hp,
+      weaponSlotsBefore,
+      weaponSlotsAfter: scene.weaponSlotsUsed,
+      protocolsBefore,
+      protocolsAfter: JSON.stringify(scene.protocols),
+      refractsBefore,
+      refractsAfter: scene.refracts,
+      rerollNonceBefore,
+      rerollNonceAfter: scene.rerollNonce,
+      draftOpen: scene.draftOpen,
+      dead: scene.dead,
+    };
+  });
 }
 async function liveProgressionState(data) {
   const weapons = { DELTA: { rank: Number(await data("delta-rank")), evolved: false } };
@@ -77,8 +164,24 @@ function qualification(width) {
       assert.equal(await reduced.isChecked(), true);
     }
 
+    await armSceneCapture(game);
     const canvas = await mount(game);
     const data = name => canvas.getAttribute(`data-${name}`);
+    const restored = await restoreNaturalBaselineAndCapture(canvas);
+    assert.deepEqual(restored, {
+      level: 1,
+      hp: 100,
+      kills: 0,
+      dead: false,
+      draftOpen: false,
+      signalOwned: false,
+      signalRank: 1,
+      weaponSlotsUsed: 1,
+      signalQualificationFixture: "",
+      protocolCount: 0,
+      refracts: 1,
+    }, "scene capture must be neutralized to the exact natural Level-1 baseline before gameplay");
+
     const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
     let routeIndex = 0;
 
@@ -144,7 +247,7 @@ function qualification(width) {
       slots: Number(await data("protocol-slots-used")),
     };
     await clickDraft(canvas, memoryIndex, Number(await data("draft-count")));
-    await page.waitForTimeout(120);
+    await page.waitForFunction(() => document.querySelector("canvas")?.dataset.protocols?.includes("MEMORY_FUSE:1") === true, null, { timeout: 2_000 });
 
     assert.equal(await data("draft-open"), "false");
     assert.ok(list(await data("protocols")).includes("MEMORY_FUSE:1"), "MEMORY FUSE Rank I must persist in live Protocol inventory");
@@ -153,11 +256,24 @@ function qualification(width) {
     assert.ok(Number(await data("echo-protocol-lifetime-ms")) > beforeProtocol.echoLifetimeMs, "MEMORY FUSE must increase live ECHO lifetime");
     assert.ok(Number(await data("echo-return-delay-ms")) < beforeProtocol.echoReturnDelayMs, "MEMORY FUSE must reduce live ECHO return delay");
     assert.ok(Number(await data("echo-protocol-trigger-radius")) > beforeProtocol.echoTriggerRadius, "MEMORY FUSE must increase live ECHO trigger radius");
+    console.log(`RARE_SHIFT_CR2_PROTOCOL_NATURAL_LEVEL5_${width}=PASS`);
 
-    // Persistence + real keyboard REFRACT interaction are qualified on the next
-    // natural CR-2 draft rather than through a fixture.
-    await moveUntilDraft(6, 105_000, "level-6 CR-2 REFRACT draft");
-    assert.ok(list(await data("protocols")).includes("MEMORY_FUSE:1"), "Protocol inventory must persist across later levels");
+    // REFRACT itself is deterministic progression logic. Preserve the complete
+    // living Level-5 state, advance only the level/xp boundary, and open the
+    // real Level-6 CR-2 draft. This removes autonomous survival as a proof
+    // dependency while retaining the actual live state and real keyboard path.
+    const controlled = await openControlledLevel6Draft(canvas);
+    assert.equal(controlled.fromLevel, 5);
+    assert.equal(controlled.toLevel, 6);
+    assert.equal(controlled.hpAfter, controlled.hpBefore, "controlled Level-6 handoff must not heal or damage the player");
+    assert.equal(controlled.weaponSlotsAfter, controlled.weaponSlotsBefore, "controlled Level-6 handoff must not alter weapon slots");
+    assert.equal(controlled.protocolsAfter, controlled.protocolsBefore, "controlled Level-6 handoff must preserve Protocol inventory");
+    assert.equal(controlled.refractsAfter, controlled.refractsBefore, "controlled Level-6 handoff must preserve REFRACT inventory");
+    assert.equal(controlled.rerollNonceAfter, controlled.rerollNonceBefore, "controlled Level-6 handoff must preserve reroll history");
+    assert.equal(controlled.draftOpen, true);
+    assert.equal(controlled.dead, false);
+
+    assert.ok(list(await data("protocols")).includes("MEMORY_FUSE:1"), "Protocol inventory must persist into the controlled Level-6 draft");
     assert.equal(Number(await data("protocol-slots-used")), 1);
     assert.equal(await data("cr2-draft-active"), "true");
 
@@ -168,7 +284,7 @@ function qualification(width) {
     assert.deepEqual(initialCandidates, initialDraft.choices.map(choice => choice.candidateId));
     assert.ok(initialDraft.legalCandidateCount > 3, "REFRACT qualification requires at least four legal alternatives");
     assert.equal(initialCandidates.some(id => id.startsWith("EVOLUTION:")), false);
-    assert.equal(state6.refracts, 1, "natural CR-2 run must still own its initial REFRACT before use");
+    assert.equal(state6.refracts, 1, "controlled CR-2 Level-6 draft must retain the natural run's initial REFRACT before use");
 
     const expectedReroll = useV23ARefract(seed, level6, state6);
     await canvas.press("r");
@@ -187,6 +303,7 @@ function qualification(width) {
     if (width === 390) assert.equal(await reduced.isChecked(), true);
 
     await page.locator(".rf-game-frame").screenshot({ path: resolve(`artifacts/rare-shift-cr2-protocol-live-${width}.png`) });
+    console.log(`RARE_SHIFT_CR2_REFRACT_CONTROLLED_${width}=PASS`);
     console.log(`RARE_SHIFT_CR2_PROTOCOL_LIVE_${width}=PASS`);
   };
 }
