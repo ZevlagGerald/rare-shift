@@ -253,7 +253,7 @@ export function planMemoryCollapseChain(
 
 export const CHAIN_RESONANCE_MAX_TARGETS = 5 as const;
 export const CHAIN_RESONANCE_RELAY_RANGE = 200 as const;
-export const CHAIN_RESONANCE_DAMAGES = Object.freeze([10, 9, 8, 7, 6] as const);
+export const CHAIN_RESONANCE_DAMAGES = Object.freeze([10, 9, 8, 8, 7] as const);
 export const CHAIN_RESONANCE_POST_SHIFT_WINDOW_MS = 900 as const;
 
 export interface ChainResonanceShiftState {
