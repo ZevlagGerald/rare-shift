@@ -59,6 +59,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("scripts/apply-cr2-phaser-live-wire.py")
+          text = path.read_text(encoding="utf-8")
+          old = "profile.range, profile.priorityBand)"
+          if text.count(old) != 1:
+              raise SystemExit(f"VECTOR priority-band correction anchor count={text.count(old)}")
+          path.write_text(text.replace(old, "profile.range)", 1), encoding="utf-8")
+          print("LIVE_WIRE_VECTOR_PRIORITY_BAND=QUALIFIED_DEFAULT_120")
+          PY
           python3 scripts/apply-cr2-phaser-live-wire.py
           git diff --check
           test -n "$(git status --short games/rare-shift/src/phaser-survival.ts)"
