@@ -1,0 +1,112 @@
+name: RARE SHIFT CR-2 Live Wire Apply
+
+on:
+  push:
+    branches:
+      - feature/cr-2-protocols-evolutions
+    paths:
+      - ".github/workflows/cr2-live-wire-apply.yml"
+      - "scripts/apply-cr2-phaser-live-wire.py"
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-qualify:
+    name: Guarded Phaser Protocol live wiring
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --init
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      FRIENDSDK_ARCHIVE: vendor/rarefriends-friendsdk-0.1.3.tgz
+      FRIENDSDK_SHA256: 8f156c469a15786e3c649b35d092e86ec6242ff30415b7ee7c451763a816e789
+      FRIENDSDK_URL: https://github.com/spokesz/friendsdk/releases/download/v0.1.3/rarefriends-friendsdk-0.1.3.tgz
+
+    steps:
+      - name: Checkout exact live-wire source head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Fetch and verify FriendSDK v0.1.3
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p vendor
+          curl --fail --location --retry 5 --retry-all-errors --connect-timeout 20 --max-time 180 --output "$FRIENDSDK_ARCHIVE" "$FRIENDSDK_URL"
+          printf '%s  %s\n' "$FRIENDSDK_SHA256" "$FRIENDSDK_ARCHIVE" | sha256sum --check --strict
+
+      - name: Install project dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Apply exact guarded Phaser patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/apply-cr2-phaser-live-wire.py
+          git diff --check
+          test -n "$(git status --short games/rare-shift/src/phaser-survival.ts)"
+
+      - name: CR-2 deterministic contracts
+        run: npm run test:cr-2a
+
+      - name: Inherited deterministic regression through CR-1 and B5
+        shell: bash
+        run: |
+          npm run test:cr-1
+          npm run test:core
+          npm run test:v2-combat
+          npm run test:v2-2e-cross
+          npm run test:v2-2-pointer
+          npm run test:v2-3a
+          npm run test:v2-3b1-delta
+          npm run test:v2-3b2-vector
+          npm run test:v2-3b3-orbit
+          npm run test:v2-3b4-echo
+          npm run test:v2-3b5-signal
+
+      - name: TypeScript and FriendSDK build qualification
+        shell: bash
+        run: |
+          npm run typecheck:core
+          npm run typecheck
+          npm run check
+          npm run build
+          npm run test:sdk
+
+      - name: Inherited browser regression through B5
+        shell: bash
+        run: |
+          npm run test:v2-3b5-signal-browser
+          npm run test:v2-1-browser
+          npm run test:v2-2a-browser
+          npm run test:v2-2b-browser
+          npm run test:v2-2c-browser
+          npm run test:v2-2d-browser
+          npm run test:v2-2e-browser
+          npm run test:v2-3b1-delta-browser
+          npm run test:v2-3b2-vector-browser
+          npm run test:v2-3b3-orbit-browser
+          npm run test:v2-3b4-echo-browser
+
+      - name: Natural CR-1 Stage-IV regression
+        run: npm run test:cr-1-browser
+
+      - name: Commit qualified Phaser live wire
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Zev"
+          git config user.email "214125688+ZevlagGerald@users.noreply.github.com"
+          git add games/rare-shift/src/phaser-survival.ts
+          git diff --cached --quiet && { echo "No Phaser mutation to commit"; exit 1; }
+          git commit -m "feat(cr-2): wire live Protocol progression"
+          git push origin HEAD:feature/cr-2-protocols-evolutions
