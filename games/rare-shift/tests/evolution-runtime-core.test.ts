@@ -174,7 +174,7 @@ test("MEMORY COLLAPSE link radius boundary is exact and cannot fabricate an inva
   assert.deepEqual(planMemoryCollapseChain(true, [exact[0], { ...exact[1], x: MEMORY_COLLAPSE_LINK_RADIUS + 0.01 }], 1), [1]);
 });
 
-test("CHAIN RESONANCE preserves inherited SIGNAL cooldown/routing while adding one bounded jump", () => {
+test("CHAIN RESONANCE preserves inherited SIGNAL cooldown/routing while adding one bounded jump with reduced decay", () => {
   const base = buildSignalArcProfile(5);
   assert.equal(buildChainResonanceProfile(base, false), base, "non-evolved SIGNAL must retain the exact inherited profile object");
   const evolved = buildChainResonanceProfile(base, true);
@@ -184,7 +184,9 @@ test("CHAIN RESONANCE preserves inherited SIGNAL cooldown/routing while adding o
   assert.equal(evolved.routing, base.routing);
   assert.equal(evolved.relayRange, CHAIN_RESONANCE_RELAY_RANGE);
   assert.equal(evolved.maxTargets, CHAIN_RESONANCE_MAX_TARGETS);
+  assert.deepEqual(CHAIN_RESONANCE_DAMAGES, [10, 9, 8, 8, 7]);
   assert.deepEqual(evolved.damages, CHAIN_RESONANCE_DAMAGES);
+  assert.ok(evolved.damages[3] > base.damages[3], "Evolution must materially reduce late-chain decay versus Rank V");
   assert.equal(evolved.commonBonusUses, 1);
 });
 
