@@ -247,7 +247,7 @@ function qualification(width) {
       slots: Number(await data("protocol-slots-used")),
     };
     await clickDraft(canvas, memoryIndex, Number(await data("draft-count")));
-    await page.waitForFunction(() => document.querySelector("canvas")?.dataset.protocols?.includes("MEMORY_FUSE:1") === true, null, { timeout: 2_000 });
+    await page.waitForTimeout(120);
 
     assert.equal(await data("draft-open"), "false");
     assert.ok(list(await data("protocols")).includes("MEMORY_FUSE:1"), "MEMORY FUSE Rank I must persist in live Protocol inventory");
