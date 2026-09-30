@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { GameComponentProps } from "@rarefriends/friendsdk/runtime";
 import { createFriendReader, decodeSpriteBitmap } from "@rarefriends/friendsdk/sprites";
+import Phaser from "phaser";
 import { derivePhaseField, selectFramePair } from "./src/phase-core.ts";
 import { draftIndexForPoint } from "./src/draft-pointer-core.ts";
 import { mountPhaserSurvival, type PhaserSurvivalController } from "./src/phaser-survival.ts";
@@ -12,6 +13,11 @@ import "./style.css";
 import "./v2-1a.css";
 
 type Stage = "loading" | "scan" | "survival" | "error";
+
+type Rank4QualificationWindow = Window & {
+  __RARE_SHIFT_V23B5_SIGNAL_RANK__?: unknown;
+  __RARE_SHIFT_B5_PHASER__?: typeof Phaser;
+};
 
 interface PreparedV2 {
   friendLabel: string;
@@ -199,10 +205,13 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
       friendLabel: prepared.friendLabel,
       familyName: prepared.familyName,
     });
+    const qualificationWindow = window as Rank4QualificationWindow;
+    if (qualificationWindow.__RARE_SHIFT_V23B5_SIGNAL_RANK__ === 4) qualificationWindow.__RARE_SHIFT_B5_PHASER__ = Phaser;
     controller.current = mounted;
     mounted.setPaused(paused);
     return () => {
       mounted.destroy();
+      if (qualificationWindow.__RARE_SHIFT_B5_PHASER__ === Phaser) delete qualificationWindow.__RARE_SHIFT_B5_PHASER__;
       if (controller.current === mounted) controller.current = null;
     };
   }, [stage, prepared]);
