@@ -6,6 +6,7 @@ import {
   applyOrbitStabilizerToOrbit,
   applyResonanceCoilToSignal,
   applyVectorLensToVector,
+  buildCR2PlayerProtocolRuntime,
 } from "../src/cr2-protocol-runtime.ts";
 import { buildEchoProfile, ECHO_RETURN_DELAY_FLOOR_MS } from "../src/echo-core.ts";
 import { buildOrbitProfile } from "../src/orbit-core.ts";
@@ -23,6 +24,79 @@ function rows(active: readonly [number, number][]): FrameRows {
 function assertNear(actual: number, expected: number, tolerance = 1e-9): void {
   assert.ok(Math.abs(actual - expected) <= tolerance, `expected ${actual} to be within ${tolerance} of ${expected}`);
 }
+
+test("Protocol player runtime is exactly neutral with no Protocols", () => {
+  assert.deepEqual(buildCR2PlayerProtocolRuntime({}), {
+    moveSpeedMultiplier: 1,
+    contactInvulnBonusMs: 0,
+    repairBonusHp: 0,
+    pickupRadiusBonus: 0,
+    pickupAttractionSpeedMultiplier: 1,
+  });
+});
+
+test("every non-COMMON Protocol has a bounded useful passive without requiring its matching weapon", () => {
+  const vector = buildCR2PlayerProtocolRuntime({ VECTOR_LENS: 1 });
+  assert.equal(vector.moveSpeedMultiplier, 1.01);
+  assert.equal(vector.contactInvulnBonusMs, 0);
+  assert.equal(vector.repairBonusHp, 0);
+  assert.equal(vector.pickupRadiusBonus, 0);
+
+  const orbit = buildCR2PlayerProtocolRuntime({ ORBIT_STABILIZER: 1 });
+  assert.equal(orbit.moveSpeedMultiplier, 1);
+  assert.equal(orbit.contactInvulnBonusMs, 30);
+  assert.equal(orbit.repairBonusHp, 0);
+  assert.equal(orbit.pickupRadiusBonus, 0);
+
+  const memory = buildCR2PlayerProtocolRuntime({ MEMORY_FUSE: 1 });
+  assert.equal(memory.moveSpeedMultiplier, 1);
+  assert.equal(memory.contactInvulnBonusMs, 0);
+  assert.equal(memory.repairBonusHp, 2);
+  assert.equal(memory.pickupRadiusBonus, 0);
+
+  const resonance = buildCR2PlayerProtocolRuntime({ RESONANCE_COIL: 1 });
+  assert.equal(resonance.moveSpeedMultiplier, 1);
+  assert.equal(resonance.contactInvulnBonusMs, 0);
+  assert.equal(resonance.repairBonusHp, 0);
+  assert.equal(resonance.pickupRadiusBonus, 4);
+  assert.equal(resonance.pickupAttractionSpeedMultiplier, 1.03);
+});
+
+test("matching-independent Protocol passives scale monotonically and remain conservative", () => {
+  assert.deepEqual([1, 2, 3].map(rank => buildCR2PlayerProtocolRuntime({ VECTOR_LENS: rank }).moveSpeedMultiplier), [1.01, 1.02, 1.03]);
+  assert.deepEqual([1, 2, 3].map(rank => buildCR2PlayerProtocolRuntime({ ORBIT_STABILIZER: rank }).contactInvulnBonusMs), [30, 60, 90]);
+  assert.deepEqual([1, 2, 3].map(rank => buildCR2PlayerProtocolRuntime({ MEMORY_FUSE: rank }).repairBonusHp), [2, 4, 6]);
+  assert.deepEqual([1, 2, 3].map(rank => buildCR2PlayerProtocolRuntime({ RESONANCE_COIL: rank }).pickupRadiusBonus), [4, 8, 12]);
+  assert.deepEqual([1, 2, 3].map(rank => buildCR2PlayerProtocolRuntime({ RESONANCE_COIL: rank }).pickupAttractionSpeedMultiplier), [1.03, 1.06, 1.09]);
+});
+
+test("universal Protocol composition is additive by identity and cannot create weapon/combat history", () => {
+  const runtime = buildCR2PlayerProtocolRuntime({ VECTOR_LENS: 3, ORBIT_STABILIZER: 3, MEMORY_FUSE: 3, RESONANCE_COIL: 3 });
+  assert.deepEqual(runtime, {
+    moveSpeedMultiplier: 1.03,
+    contactInvulnBonusMs: 90,
+    repairBonusHp: 6,
+    pickupRadiusBonus: 12,
+    pickupAttractionSpeedMultiplier: 1.09,
+  });
+  assert.deepEqual(Object.keys(runtime).sort(), [
+    "contactInvulnBonusMs",
+    "moveSpeedMultiplier",
+    "pickupAttractionSpeedMultiplier",
+    "pickupRadiusBonus",
+    "repairBonusHp",
+  ]);
+});
+
+test("COMMON CORE is always useful because every legal build has mandatory DELTA", () => {
+  const a = rows([[2, 2], [7, 7]]);
+  const b = rows([[13, 13], [7, 7]]);
+  const base = buildDeltaProfile(a, b, "A", 1);
+  const tuned = applyCommonCoreToDelta(base, 1);
+  assert.ok(tuned.profile.cooldownMs < base.cooldownMs);
+  assert.ok(tuned.profile.worldScale > base.worldScale);
+  assert.deepEqual(buildCR2PlayerProtocolRuntime({ COMMON_CORE: 1 }), buildCR2PlayerProtocolRuntime({}));
+});
 
 test("COMMON CORE composes only bounded DELTA cadence/field support and preserves canonical authority", () => {
   const a = rows([[2, 2], [7, 7]]);
