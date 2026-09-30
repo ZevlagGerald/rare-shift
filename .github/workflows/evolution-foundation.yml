@@ -48,6 +48,10 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Trust mounted Git workspace inside container
+        shell: bash
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Verify clean committed candidate
         shell: bash
         run: |
