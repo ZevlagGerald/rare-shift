@@ -64,11 +64,12 @@ test("CR-2 Protocol tuning is monotonic and conservative without zero cooldown m
   const common = [1, 2, 3].map(rank => cr2ProtocolProfile("COMMON_CORE", rank).effects);
   assert.deepEqual(common.map(p => p.deltaCooldownMultiplier), [0.97, 0.94, 0.90]);
   assert.deepEqual(common.map(p => p.deltaFieldScaleMultiplier), [1.02, 1.05, 1.08]);
-  assert.deepEqual(common.map(p => p.deltaPostShiftStabilityMs), [0, 0, 120]);
+  assert.deepEqual(common.map(p => p.deltaPostShiftStabilityMs), [0, 0, 0], "COMMON CORE post-SHIFT semantics remain deferred in CR-2");
 
   const vector = [1, 2, 3].map(rank => cr2ProtocolProfile("VECTOR_LENS", rank).effects);
   assert.deepEqual(vector.map(p => p.vectorProjectileSpeedMultiplier), [1.06, 1.12, 1.18]);
   assert.deepEqual(vector.map(p => p.vectorAcquisitionRangeMultiplier), [1.02, 1.05, 1.08]);
+  assert.deepEqual(vector.map(p => p.vectorPostShiftRangeBonus), [0, 0, 0], "VECTOR LENS post-SHIFT semantics remain deferred in CR-2");
 
   const orbit = [1, 2, 3].map(rank => cr2ProtocolProfile("ORBIT_STABILIZER", rank).effects);
   assert.deepEqual(orbit.map(p => p.orbitContactIntervalMultiplier), [0.97, 0.94, 0.90]);
@@ -81,6 +82,7 @@ test("CR-2 Protocol tuning is monotonic and conservative without zero cooldown m
   const resonance = [1, 2, 3].map(rank => cr2ProtocolProfile("RESONANCE_COIL", rank).effects);
   assert.deepEqual(resonance.map(p => p.signalCooldownMultiplier), [0.97, 0.94, 0.90]);
   assert.deepEqual(resonance.map(p => p.signalRelayRangeBonus), [4, 8, 12]);
+  assert.deepEqual(resonance.map(p => p.signalPostShiftCommonBonus), [0, 0, 0], "RESONANCE COIL post-SHIFT semantics remain deferred in CR-2");
 });
 
 test("CR-2 Evolution contracts map all five weapons to their locked Protocol and evolved identity", () => {
