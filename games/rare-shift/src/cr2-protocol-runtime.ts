@@ -2,6 +2,7 @@ import { cr2ProtocolProfile, type CR2ProtocolRank } from "./cr2-progression-core
 import { ECHO_RETURN_DELAY_FLOOR_MS, type EchoRankProfile } from "./echo-core.ts";
 import type { OrbitRankProfile } from "./orbit-core.ts";
 import type { DeltaProfile } from "./phase-combat-core.ts";
+import type { V23ProtocolFamily } from "./progression-core.ts";
 import type { SignalArcRankProfile } from "./signal-arc-core.ts";
 import type { VectorRankProfile } from "./vector-core.ts";
 
@@ -20,8 +21,54 @@ export interface CR2SignalProtocolRuntime {
   readonly postShiftCommonBonus: number;
 }
 
+export interface CR2PlayerProtocolRuntime {
+  /** VECTOR LENS trajectory discipline: small always-useful movement quality. */
+  readonly moveSpeedMultiplier: number;
+  /** ORBIT STABILIZER local stability: bounded extension of the normal damage grace window. */
+  readonly contactInvulnBonusMs: number;
+  /** MEMORY FUSE retention: bounded additional value from legitimate repair effects. */
+  readonly repairBonusHp: number;
+  /** RESONANCE COIL collection quality: bounded Signal pickup reach and attraction speed. */
+  readonly pickupRadiusBonus: number;
+  readonly pickupAttractionSpeedMultiplier: number;
+}
+
 function positiveIntegerMs(value: number): number {
   return Math.max(1, Math.round(value));
+}
+
+function legalProtocolRank(family: V23ProtocolFamily, rank: number | undefined): CR2ProtocolRank | null {
+  if (rank === undefined) return null;
+  if (!Number.isInteger(rank) || rank < 1 || rank > 3) throw new Error(`${family} Protocol rank must be between I and III.`);
+  return rank as CR2ProtocolRank;
+}
+
+/**
+ * Compose the matching-independent part of the locked CR-2 Protocol contract.
+ * These passives are intentionally orthogonal and conservative; they never
+ * create attacks, cooldown readiness, weapon ownership, fake pickups, combat
+ * history or absolute invulnerability.
+ */
+export function buildCR2PlayerProtocolRuntime(
+  protocols: Readonly<Partial<Record<V23ProtocolFamily, number>>>,
+): CR2PlayerProtocolRuntime {
+  const vectorRank = legalProtocolRank("VECTOR_LENS", protocols.VECTOR_LENS);
+  const orbitRank = legalProtocolRank("ORBIT_STABILIZER", protocols.ORBIT_STABILIZER);
+  const memoryRank = legalProtocolRank("MEMORY_FUSE", protocols.MEMORY_FUSE);
+  const resonanceRank = legalProtocolRank("RESONANCE_COIL", protocols.RESONANCE_COIL);
+
+  const vector = vectorRank === null ? null : cr2ProtocolProfile("VECTOR_LENS", vectorRank).effects;
+  const orbit = orbitRank === null ? null : cr2ProtocolProfile("ORBIT_STABILIZER", orbitRank).effects;
+  const memory = memoryRank === null ? null : cr2ProtocolProfile("MEMORY_FUSE", memoryRank).effects;
+  const resonance = resonanceRank === null ? null : cr2ProtocolProfile("RESONANCE_COIL", resonanceRank).effects;
+
+  return Object.freeze({
+    moveSpeedMultiplier: vector?.playerMoveSpeedMultiplier ?? 1,
+    contactInvulnBonusMs: orbit?.contactInvulnBonusMs ?? 0,
+    repairBonusHp: memory?.repairBonusHp ?? 0,
+    pickupRadiusBonus: resonance?.pickupRadiusBonus ?? 0,
+    pickupAttractionSpeedMultiplier: resonance?.pickupAttractionSpeedMultiplier ?? 1,
+  });
 }
 
 export function applyCommonCoreToDelta(base: DeltaProfile, rank: CR2ProtocolRank): CR2DeltaProtocolRuntime {
