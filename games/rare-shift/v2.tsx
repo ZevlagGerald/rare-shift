@@ -8,6 +8,7 @@ import Phaser from "phaser";
 import { derivePhaseField, selectFramePair } from "./src/phase-core.ts";
 import { draftIndexForPoint } from "./src/draft-pointer-core.ts";
 import { installChainResonanceQualification } from "./src/evolution-chain-resonance-qualification.ts";
+import { installEvolutionNaturalHandoff } from "./src/evolution-natural-handoff.ts";
 import { installEvolutionPhaserRuntime } from "./src/evolution-phaser-runtime.ts";
 import { installPrismLanceQualification, installReconstructionFieldQualification } from "./src/evolution-phaser-qualification.ts";
 import { installMemoryCollapseQualification } from "./src/evolution-memory-collapse-qualification.ts";
@@ -29,6 +30,8 @@ type QualificationWindow = Window & {
   __RARE_SHIFT_EV3E_CHAIN_RESONANCE__?: unknown;
   __RARE_SHIFT_EV3F_PRODUCTION_RUNTIME__?: unknown;
   __RARE_SHIFT_EV3F_PHASER__?: { readonly GAMES: Phaser.Game[] };
+  __RARE_SHIFT_EV4_NATURAL_EVOLUTION__?: unknown;
+  __RARE_SHIFT_EV4_PHASER__?: { readonly GAMES: Phaser.Game[] };
 };
 
 interface PreparedV2 {
@@ -218,6 +221,7 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
     const memoryQualification = qualificationWindow.__RARE_SHIFT_EV3D_MEMORY_COLLAPSE__ === true;
     const chainQualification = qualificationWindow.__RARE_SHIFT_EV3E_CHAIN_RESONANCE__ === true;
     const productionRuntimeQualification = qualificationWindow.__RARE_SHIFT_EV3F_PRODUCTION_RUNTIME__ === true;
+    const naturalEvolutionQualification = qualificationWindow.__RARE_SHIFT_EV4_NATURAL_EVOLUTION__ === true;
     const controlledEvolutionQualification = reconstructionQualification || prismQualification || syncQualification || memoryQualification || chainQualification;
     const capturedGames: Phaser.Game[] = [];
     type QualificationGamePrototype = { boot: (...args: unknown[]) => unknown };
@@ -226,6 +230,7 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
 
     if (rank4Qualification) qualificationWindow.__RARE_SHIFT_B5_PHASER__ = { GAMES: capturedGames };
     if (productionRuntimeQualification) qualificationWindow.__RARE_SHIFT_EV3F_PHASER__ = { GAMES: capturedGames };
+    if (naturalEvolutionQualification) qualificationWindow.__RARE_SHIFT_EV4_PHASER__ = { GAMES: capturedGames };
     gamePrototype.boot = function (this: Phaser.Game, ...args: unknown[]) {
       capturedGames.push(this);
       return originalBoot.apply(this, args);
@@ -233,6 +238,7 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
 
     let mounted: PhaserSurvivalController | null = null;
     let cleanupEvolutionRuntime = () => {};
+    let cleanupNaturalHandoff = () => {};
     let cleanupReconstruction = () => {};
     let cleanupPrism = () => {};
     let cleanupSync = () => {};
@@ -249,12 +255,14 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
       const capturedGame = capturedGames[0];
       if (!capturedGame) throw new Error("Evolution runtime could not capture the mounted Phaser game.");
       if (!controlledEvolutionQualification) cleanupEvolutionRuntime = installEvolutionPhaserRuntime(capturedGame);
+      if (!controlledEvolutionQualification && !productionRuntimeQualification && !rank4Qualification) cleanupNaturalHandoff = installEvolutionNaturalHandoff(capturedGame);
       if (reconstructionQualification) cleanupReconstruction = installReconstructionFieldQualification(capturedGame);
       if (prismQualification) cleanupPrism = installPrismLanceQualification(capturedGame);
       if (syncQualification) cleanupSync = installSyncHaloQualification(capturedGame);
       if (memoryQualification) cleanupMemory = installMemoryCollapseQualification(capturedGame);
       if (chainQualification) cleanupChain = installChainResonanceQualification(capturedGame);
     } catch (cause) {
+      cleanupNaturalHandoff();
       cleanupEvolutionRuntime();
       mounted?.destroy();
       throw cause;
@@ -270,10 +278,12 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
       cleanupSync();
       cleanupPrism();
       cleanupReconstruction();
+      cleanupNaturalHandoff();
       cleanupEvolutionRuntime();
       mounted.destroy();
       if (rank4Qualification) delete qualificationWindow.__RARE_SHIFT_B5_PHASER__;
       if (productionRuntimeQualification) delete qualificationWindow.__RARE_SHIFT_EV3F_PHASER__;
+      if (naturalEvolutionQualification) delete qualificationWindow.__RARE_SHIFT_EV4_PHASER__;
       if (controller.current === mounted) controller.current = null;
     };
   }, [stage, prepared]);
