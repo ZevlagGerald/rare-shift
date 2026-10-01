@@ -70,6 +70,20 @@ async function moveTowardElite(canvas, data) {
   await canvas.press(key, { delay: 240 });
 }
 
+async function waitForCheckpointRuntime(page, canvas, width) {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const state = await canvas.getAttribute("data-cr3e1-checkpoint-runtime");
+    const error = await canvas.getAttribute("data-cr3e1-checkpoint-runtime-error");
+    if (state === "ACTIVE") return;
+    if (error) throw new Error(`CR-3E.1 runtime configuration failed at width ${width}: ${error}`);
+    await page.waitForTimeout(100);
+  }
+  const state = await canvas.getAttribute("data-cr3e1-checkpoint-runtime");
+  const error = await canvas.getAttribute("data-cr3e1-checkpoint-runtime-error");
+  throw new Error(`CR-3E.1 runtime did not activate at width ${width}; state=${String(state)}; error=${String(error)}`);
+}
+
 function qualification(width) {
   return async ({ page, game }) => {
     await game.locator('[data-stage="scan"]').waitFor({ state: "visible" });
@@ -84,7 +98,7 @@ function qualification(width) {
     await canvas.waitFor({ state: "visible" });
     await canvas.focus();
     const data = name => canvas.getAttribute(`data-${name}`);
-    await page.waitForFunction(() => document.querySelector("canvas")?.dataset.cr3e1CheckpointRuntime === "ACTIVE", null, { timeout: 10_000 });
+    await waitForCheckpointRuntime(page, canvas, width);
 
     let tick = 0;
     const gateDeadline = Date.now() + 110_000;
