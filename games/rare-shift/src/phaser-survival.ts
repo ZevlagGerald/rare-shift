@@ -20,6 +20,11 @@ type CaptureGamePrototype = {
   boot: (...args: unknown[]) => unknown;
 };
 
+type CR3ControlledQualificationWindow = Window & {
+  __RARE_SHIFT_CR3B_RUNTIME__?: unknown;
+  __RARE_SHIFT_CR3D_RUNTIME__?: unknown;
+};
+
 export function mountPhaserSurvival(options: SurvivalOptions): PhaserSurvivalController {
   const capturedGames: Phaser.Game[] = [];
   const gamePrototype = Phaser.Game.prototype as unknown as CaptureGamePrototype;
@@ -43,7 +48,16 @@ export function mountPhaserSurvival(options: SurvivalOptions): PhaserSurvivalCon
     throw new Error("CR-3E.1 could not capture the qualified Phaser survival game.");
   }
 
-  const cleanupCheckpointRuntime = installCR3ECheckpointPhaserRuntime(game);
+  const qualificationWindow = window as CR3ControlledQualificationWindow;
+  const controlledCR3Qualification = qualificationWindow.__RARE_SHIFT_CR3B_RUNTIME__ === true
+    || qualificationWindow.__RARE_SHIFT_CR3D_RUNTIME__ === true;
+  const cleanupCheckpointRuntime = controlledCR3Qualification
+    ? (() => {
+        game.canvas.dataset.cr3e1CheckpointRuntime = "SUPPRESSED_FOR_CONTROLLED_CR3_QUALIFICATION";
+        return () => { delete game.canvas.dataset.cr3e1CheckpointRuntime; };
+      })()
+    : installCR3ECheckpointPhaserRuntime(game);
+
   let destroyed = false;
   return {
     destroy: () => {
