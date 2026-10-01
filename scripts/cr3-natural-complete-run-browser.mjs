@@ -67,7 +67,7 @@ async function chooseNaturalDraft(canvas, data, page, healingBias = true) {
   const hp = Number(await data("hp"));
 
   const prefer = healingBias && hp <= 70
-    ? ["FIELD_REPAIR", "EVOLUTION", "ORBIT_RANK", "ECHO_RANK", "SIGNAL_RANK", "DELTA_RANK", "VECTOR_RANK", "ORBIT_NODES", "ECHO_MINE", "SIGNAL_ARC", "VECTOR_NEEDLE", "SIGNAL_MAGNET"]
+    ? ["FIELD_REPAIR", "EVOLUTION", "ORBIT_NODES", "ECHO_MINE", "SIGNAL_ARC", "ORBIT_RANK", "ECHO_RANK", "SIGNAL_RANK", "DELTA_RANK", "VECTOR_NEEDLE", "VECTOR_RANK", "SIGNAL_MAGNET"]
     : ["EVOLUTION", "ORBIT_NODES", "ECHO_MINE", "SIGNAL_ARC", "ORBIT_RANK", "ECHO_RANK", "SIGNAL_RANK", "DELTA_RANK", "VECTOR_NEEDLE", "VECTOR_RANK", "FIELD_REPAIR", "SIGNAL_MAGNET"];
 
   let index = -1;
@@ -147,13 +147,25 @@ async function naturalVictoryQualification() {
       let ordinaryShifts = 0;
       let bossSearchOrdinal = 0;
       let lastBossCycle = "";
+      let lastSnapshot = null;
       const deadline = Date.now() + 560_000;
 
       const record = async () => {
-        observedStages.add(String(await data("director-stage")));
+        const stage = String(await data("director-stage"));
+        const bossPhase = String(await data("cr3-boss-phase") ?? "");
+        lastSnapshot = {
+          stage,
+          elapsed: Number(await data("director-elapsed-ms")),
+          hp: Number(await data("hp")),
+          level: Number(await data("level")),
+          kills: Number(await data("kills")),
+          shifts: Number(await data("shifts")),
+          bossPhase,
+          bossHp: Number(await data("cr3-boss-hp") || 0),
+        };
+        observedStages.add(stage);
         for (const checkpoint of list(await data("spawned-checkpoints"))) observedCheckpoints.add(checkpoint);
         for (const kind of list(await data("enemy-kinds"))) observedKinds.add(kind);
-        const bossPhase = String(await data("cr3-boss-phase") ?? "");
         if (bossPhase) observedBossPhases.add(bossPhase);
         maxElitesDefeated = Math.max(maxElitesDefeated, Number(await data("elites-defeated")) || 0);
         maxCores = Math.max(maxCores, Number(await data("evolution-cores")) || 0);
@@ -161,22 +173,16 @@ async function naturalVictoryQualification() {
       };
 
       const patrolStages = async () => {
-        const x = Number(await data("x"));
-        const y = Number(await data("y"));
-        let key;
-        if (y < 250 && x < 1500) key = "ArrowRight";
-        else if (x >= 1500 && y < 950) key = "ArrowDown";
-        else if (y >= 950 && x > 300) key = "ArrowLeft";
-        else if (x <= 300 && y > 250) key = "ArrowUp";
-        else {
-          const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
-          key = route[Math.floor(movementTicks / 10) % route.length];
-        }
-        await canvas.press(key, { delay: 500 });
+        // Reuse the compact movement cadence already proven by the V2-1 browser:
+        // a small repeating square keeps threats in weapon/pickup range instead of
+        // starving the build by running the world perimeter.
+        const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
+        await canvas.press(route[movementTicks % route.length], { delay: 460 });
         movementTicks += 1;
-        if (movementTicks % 7 === 0 && !bool(await data("draft-open"))) {
+        await page.waitForTimeout(350);
+        if (movementTicks % 2 === 0 && !bool(await data("draft-open"))) {
           if (await acceptedShift(canvas)) ordinaryShifts += 1;
-          await page.waitForTimeout(70);
+          await page.waitForTimeout(80);
         }
       };
 
@@ -250,11 +256,16 @@ async function naturalVictoryQualification() {
       };
 
       while (Date.now() < deadline) {
-        const victory = game.locator('[data-stage="results"][data-outcome="VICTORY"]');
-        if (await victory.count()) break;
+        const terminal = game.locator('[data-stage="results"]');
+        if (await terminal.count()) {
+          const outcome = await terminal.getAttribute("data-outcome");
+          if (outcome === "VICTORY") break;
+          throw new Error(`natural CR-3E win route terminated as ${outcome}; last=${JSON.stringify(lastSnapshot)}; damageTaken=${await terminal.getAttribute("data-damage-taken")}; bossResult=${await terminal.getAttribute("data-boss-result")}`);
+        }
+
         await record();
         if (bool(await data("dead"))) {
-          throw new Error(`natural CR-3E win route died; stage=${await data("director-stage")}; elapsed=${await data("director-elapsed-ms")}; hp=${await data("hp")}; level=${await data("level")}; boss=${await data("cr3-boss-phase")}`);
+          throw new Error(`natural CR-3E win route died before result transition; last=${JSON.stringify(lastSnapshot)}`);
         }
         if (bool(await data("draft-open"))) {
           await chooseNaturalDraft(canvas, data, page, true);
