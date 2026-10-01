@@ -62,28 +62,20 @@ export function mountPhaserSurvival(options: SurvivalOptions): PhaserSurvivalCon
   let updateRewired = false;
   let rewireFrame: number | null = null;
 
-  if (!controlledCR3Qualification) {
-    const candidate = game.scene.getScene("RareShiftV21Survival") as RuntimeScene | undefined;
-    if (!candidate || typeof candidate.update !== "function") {
-      controller.destroy();
-      throw new Error("CR-3E.1 could not resolve the qualified survival scene before runtime installation.");
+  const captureAndRewireCheckpointUpdate = (): void => {
+    if (controlledCR3Qualification || updateRewired) return;
+
+    if (!survivalScene) {
+      const candidate = game.scene.getScene("RareShiftV21Survival") as RuntimeScene | undefined;
+      if (candidate && typeof candidate.update === "function") {
+        survivalScene = candidate;
+        qualifiedUpdate = candidate.update;
+      }
     }
-    survivalScene = candidate;
-    qualifiedUpdate = candidate.update;
-  }
 
-  const cleanupCheckpointRuntime = controlledCR3Qualification
-    ? (() => {
-        game.canvas.dataset.cr3e1CheckpointRuntime = "SUPPRESSED_FOR_CONTROLLED_CR3_QUALIFICATION";
-        return () => { delete game.canvas.dataset.cr3e1CheckpointRuntime; };
-      })()
-    : installCR3ECheckpointPhaserRuntime(game);
-
-  const rewireCheckpointUpdate = (): void => {
-    if (!survivalScene || !qualifiedUpdate || updateRewired) return;
     if (game.canvas.dataset.cr3e1CheckpointRuntimeError) return;
-    if (game.canvas.dataset.cr3e1CheckpointRuntime !== "ACTIVE") {
-      rewireFrame = window.requestAnimationFrame(rewireCheckpointUpdate);
+    if (!survivalScene || !qualifiedUpdate || game.canvas.dataset.cr3e1CheckpointRuntime !== "ACTIVE") {
+      rewireFrame = window.requestAnimationFrame(captureAndRewireCheckpointUpdate);
       return;
     }
 
@@ -107,7 +99,19 @@ export function mountPhaserSurvival(options: SurvivalOptions): PhaserSurvivalCon
     game.canvas.dataset.cr3e1CheckpointUpdateRewired = "true";
   };
 
-  if (!controlledCR3Qualification) rewireFrame = window.requestAnimationFrame(rewireCheckpointUpdate);
+  // Schedule this before the checkpoint adapter schedules its own RAF. That
+  // guarantees the first frame that exposes the survival scene captures the
+  // qualified callback before the adapter replaces scene.update.
+  if (!controlledCR3Qualification) {
+    rewireFrame = window.requestAnimationFrame(captureAndRewireCheckpointUpdate);
+  }
+
+  const cleanupCheckpointRuntime = controlledCR3Qualification
+    ? (() => {
+        game.canvas.dataset.cr3e1CheckpointRuntime = "SUPPRESSED_FOR_CONTROLLED_CR3_QUALIFICATION";
+        return () => { delete game.canvas.dataset.cr3e1CheckpointRuntime; };
+      })()
+    : installCR3ECheckpointPhaserRuntime(game);
 
   let destroyed = false;
   return {
