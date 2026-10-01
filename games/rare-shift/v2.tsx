@@ -6,7 +6,6 @@ import type { GameComponentProps } from "@rarefriends/friendsdk/runtime";
 import { createFriendReader, decodeSpriteBitmap } from "@rarefriends/friendsdk/sprites";
 import Phaser from "phaser";
 import { derivePhaseField, selectFramePair } from "./src/phase-core.ts";
-import { draftIndexFromPointer as _unusedDraftIndexFromPointer } from "./src/draft-pointer-core.ts";
 import { draftIndexForPoint } from "./src/draft-pointer-core.ts";
 import { installChainResonanceQualification } from "./src/evolution-chain-resonance-qualification.ts";
 import { installEvolutionPhaserRuntime } from "./src/evolution-phaser-runtime.ts";
