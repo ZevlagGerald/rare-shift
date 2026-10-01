@@ -114,4 +114,7 @@ jobs:
         run: node --experimental-strip-types scripts/evolution-memory-collapse-browser.mjs
 
       - name: EV-3E CHAIN RESONANCE controlled Phaser qualification
-        run: node --experimental-strip-types scripts/evolution-chain-resonance-browser.mjs
+        shell: bash
+        run: |
+          node --experimental-strip-types --test games/rare-shift/tests/evolution-chain-resonance-core.test.ts
+          node --experimental-strip-types scripts/evolution-chain-resonance-browser.mjs
