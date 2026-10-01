@@ -264,6 +264,25 @@ export function applyCR3ShiftResponse(
   atMs: number,
   profile: CR3DesyncProfile = CR3_DESYNC_PROVISIONAL_PROFILE,
 ): CR3ShiftResponseResult {
+  assertFiniteNonNegative(atMs, "CR-3 SHIFT response time");
+  assertProfile(profile);
+  if (atMs < state.lastAdvancedAtMs) throw new Error("CR-3 time cannot move backwards.");
+
+  // An input arriving exactly on/after the boundary belongs to the expired
+  // window. Advance scheduling, but never recycle that same input into a tell
+  // that only becomes visible because the boundary was processed.
+  if (state.phase === "BREAK_WINDOW") {
+    const expiredTell = state.breakOpenUntilMs === null
+      && state.responseDeadlineMs !== null
+      && atMs >= state.responseDeadlineMs;
+    const expiredBreak = state.breakOpenUntilMs !== null
+      && atMs >= state.breakOpenUntilMs;
+    if (expiredTell || expiredBreak) {
+      const advanced = advanceCR3Desync(state, atMs, profile);
+      return Object.freeze({ state: advanced, accepted: false, openedBreak: false });
+    }
+  }
+
   const advanced = advanceCR3Desync(state, atMs, profile);
   if (advanced.phase !== "BREAK_WINDOW" || advanced.breakOpenUntilMs !== null || advanced.responseDeadlineMs === null || advanced.expectedResponse === null) {
     return Object.freeze({ state: advanced, accepted: false, openedBreak: false });
