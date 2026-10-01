@@ -87,9 +87,9 @@ THE DESYNC therefore cannot start while any mandatory checkpoint encounter or re
 
 ## Compatibility contract
 
-The qualified CR-3B/C/D controlled browser fixtures use the explicit `__RARE_SHIFT_CR3B_RUNTIME__` qualification flag and intentionally inject boss-boundary state. CR-3E.1 is suppressed only under that explicit controlled fixture so those inherited tests can continue proving their already-qualified boss contracts independently.
+The qualified CR-3B/C pressure fixtures use the explicit `__RARE_SHIFT_CR3B_RUNTIME__` controlled qualification flag. The qualified CR-3D terminal-results fixture uses `__RARE_SHIFT_CR3D_RUNTIME__`. These fixtures intentionally inject boss-boundary state to prove their already-qualified isolated contracts. CR-3E.1 is suppressed only when either explicit controlled qualification flag is set.
 
-Ordinary production runtime and CR-3E.1 qualification do not set that suppression flag.
+Ordinary production runtime and the dedicated CR-3E.1 qualification do not set either suppression flag, so checkpoint progression remains authoritative there.
 
 The previous natural CR-1 Stage-IV browser proof remains useful historical evidence for natural stage pressure but its checkpoint-spawn-only runtime expectation is superseded by CR-3E.1. The CR-1 deterministic schedule tests remain authoritative and must continue passing unchanged.
 
