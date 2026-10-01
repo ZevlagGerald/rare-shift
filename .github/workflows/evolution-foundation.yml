@@ -29,7 +29,7 @@ permissions:
 
 jobs:
   qualify-evolution-foundation:
-    name: EV-1/EV-2/EV-3A/EV-3B/EV-3C/EV-3D/EV-3E/EV-3F Evolution qualification
+    name: EV-1/EV-2/EV-3A/EV-3B/EV-3C/EV-3D/EV-3E/EV-3F/EV-4 Evolution qualification
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
@@ -94,11 +94,14 @@ jobs:
           npm run typecheck:core
           npm run typecheck
 
-      - name: Verify natural Evolution path remains blocked
+      - name: Verify natural Evolution handoff authority
         shell: bash
         run: |
           set -euo pipefail
-          grep -F 'buildCR2ProtocolDraftFromLive' games/rare-shift/src/phaser-survival.ts >/dev/null
+          grep -F 'installEvolutionNaturalHandoff' games/rare-shift/v2.tsx >/dev/null
+          grep -F 'buildCR2DraftFromLive' games/rare-shift/src/evolution-natural-handoff.ts >/dev/null
+          grep -F 'applyCR2DraftChoiceToLive' games/rare-shift/src/evolution-natural-handoff.ts >/dev/null
+          grep -F 'useCR2RefractFromLive' games/rare-shift/src/evolution-natural-handoff.ts >/dev/null
           grep -F 'Evolution projection reached Phaser before evolved combat runtime qualification.' games/rare-shift/src/phaser-survival.ts >/dev/null
 
       - name: EV-3A RECONSTRUCTION FIELD controlled Phaser qualification
@@ -124,3 +127,9 @@ jobs:
         run: |
           node --experimental-strip-types --test games/rare-shift/tests/evolution-phaser-runtime-core.test.ts
           node --experimental-strip-types scripts/evolution-production-runtime-browser.mjs
+
+      - name: EV-4 Natural Evolution handoff qualification
+        shell: bash
+        run: |
+          node --experimental-strip-types --test games/rare-shift/tests/evolution-natural-handoff-core.test.ts
+          node --experimental-strip-types scripts/evolution-natural-handoff-browser.mjs
