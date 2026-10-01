@@ -3,6 +3,7 @@ import test from "node:test";
 import { buildCR3RunResult, detectCR3TerminalOutcome } from "../src/cr3-results-core.ts";
 
 const base = Object.freeze({
+  cr3dResultsRuntime: "ACTIVE",
   friend: "1234",
   family: "Signals",
   frameA: "7",
@@ -31,6 +32,11 @@ const base = Object.freeze({
   cr3BossPhase: "DEFEATED",
   cr3BossDefeatEvents: "1",
   cr3dTerminalPauseEvents: "1",
+});
+
+test("CR-3D terminal detection requires active CR-3D authority", () => {
+  assert.equal(detectCR3TerminalOutcome({ ...base, cr3dResultsRuntime: "SUPPRESSED_FOR_CR3B_QUALIFICATION" }), null);
+  assert.equal(detectCR3TerminalOutcome({ ...base, cr3dResultsRuntime: undefined }), null);
 });
 
 test("CR-3D terminal detection prefers verified boss victory and otherwise reports death", () => {
