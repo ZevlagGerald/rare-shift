@@ -161,6 +161,24 @@ function qualify(width) {
     });
     await waitFor(data, "cr3-boss-phase", value => value === "CROSS_SPLIT");
 
+    // The boss transition may inherit ordinary enemies already alive before the
+    // controlled CROSS-SPLIT proof. Clear those fixture leftovers so the count
+    // below measures only boss-owned ALIGNED_ADDS; production add ownership is
+    // still independently asserted through cr3-pressure-boss-owned-adds.
+    await canvas.evaluate(element => {
+      const games = window.__RARE_SHIFT_CR3B_PHASER__?.GAMES;
+      const activeGame = games?.find(candidate => candidate?.canvas === element);
+      const scene = activeGame?.scene?.getScene?.("RareShiftV21Survival");
+      for (const enemy of scene.enemies) {
+        if (!enemy.active) continue;
+        enemy.active = false;
+        enemy.view?.setVisible(false);
+        enemy.telegraphView?.clear().setVisible(false);
+        enemy.healthView?.clear().setVisible(false);
+      }
+    });
+    assert.equal((await readLiveScene(canvas)).activeEnemyKinds.length, 0, "controlled add proof must begin without inherited active enemies");
+
     async function advanceToFreshAlignedAdds() {
       for (let attempt = 0; attempt < 24; attempt += 1) {
         if (await data("cr3-pressure-attack") === "ALIGNED_ADDS" && await data("cr3-pressure-active") === "true") return;
