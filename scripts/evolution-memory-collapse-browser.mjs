@@ -33,7 +33,7 @@ async function shift(canvas, width) {
 }
 
 function qualify(width) {
-  return async ({ game }) => {
+  return async ({ page, game }) => {
     await game.locator('[data-stage="scan"]').waitFor({ state: "visible" });
     await game.locator("body").evaluate(() => {
       window.__RARE_SHIFT_EV3D_MEMORY_COLLAPSE__ = true;
@@ -123,7 +123,7 @@ function qualify(width) {
     assert.ok(Number(await data("memory-exclusion-invalid-distance")) > 180, "retained invalid mine must also be outside the 180px link radius");
     assert.equal(await data("dead"), "false");
 
-    await game.locator(".rf-game-frame").screenshot({ path: resolve(`artifacts/rare-shift-ev3d-memory-collapse-${width}.png`) });
+    await page.locator(".rf-game-frame").screenshot({ path: resolve(`artifacts/rare-shift-ev3d-memory-collapse-${width}.png`) });
     console.log(`RARE_SHIFT_EV3D_MEMORY_COLLAPSE_${width}=PASS`);
     if (width === 390) console.log("RARE_SHIFT_EV3D_MEMORY_COLLAPSE_REDUCED_MOTION=PASS");
   };
