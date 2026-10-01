@@ -45,6 +45,7 @@
     "test:cr-3b-browser": "node --experimental-strip-types scripts/cr3-desync-phaser-browser.mjs",
     "test:cr-3c-browser": "node --experimental-strip-types scripts/cr3-desync-pressure-browser-v2.mjs",
     "test:cr-3d-browser": "node --experimental-strip-types scripts/cr3-results-browser.mjs",
+    "test:cr-3e-browser": "node --experimental-strip-types scripts/cr3e-natural-complete-run-browser.mjs",
     "typecheck:core": "tsc -p tsconfig.core.json",
     "typecheck": "tsc -p games/rare-shift/tsconfig.json --noEmit",
     "dev": "friendsdk dev ./games/rare-shift",
