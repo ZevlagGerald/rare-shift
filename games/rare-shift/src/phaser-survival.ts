@@ -59,47 +59,70 @@ export function mountPhaserSurvival(options: SurvivalOptions): PhaserSurvivalCon
     throw new Error("CR-3E.1 could not capture the qualified Phaser survival game.");
   }
 
+  let destroyed = false;
+  let attachFrame: number | null = null;
   let cleanupCheckpointRuntime = () => {};
   let cachedSceneUpdate: SceneUpdateCallback | undefined;
   let patchedSceneUpdate: SceneUpdateCallback | undefined;
   let runtimeScene: RuntimeScene | null = null;
+
+  const restoreCheckpointRuntime = (): void => {
+    if (!runtimeScene) return;
+    const systems = runtimeScene.sys as RuntimeSystems;
+    if (patchedSceneUpdate && systems.sceneUpdate === patchedSceneUpdate) systems.sceneUpdate = cachedSceneUpdate;
+    cleanupCheckpointRuntime();
+    cleanupCheckpointRuntime = () => {};
+    patchedSceneUpdate = undefined;
+    cachedSceneUpdate = undefined;
+    runtimeScene = null;
+    delete game.canvas.dataset.cr3e1CheckpointBound;
+  };
 
   if (controlledQualification) {
     game.canvas.dataset.cr3e1CheckpointRuntime = controlledB5SignalQualification
       ? "SUPPRESSED_FOR_CONTROLLED_B5_SIGNAL_QUALIFICATION"
       : "SUPPRESSED_FOR_CONTROLLED_CR3_QUALIFICATION";
   } else {
-    runtimeScene = game.scene.getScene("RareShiftV21Survival") as RuntimeScene | null;
-    if (!runtimeScene) {
-      controller.destroy();
-      throw new Error("CR-3E.1 could not locate the qualified SurvivalScene after mount.");
-    }
+    game.canvas.dataset.cr3e1CheckpointRuntime = "WAITING";
 
-    const systems = runtimeScene.sys as RuntimeSystems;
-    cachedSceneUpdate = systems.sceneUpdate;
-    cleanupCheckpointRuntime = prepareCR3ECheckpointScene(runtimeScene);
-    patchedSceneUpdate = runtimeScene.update.bind(runtimeScene) as SceneUpdateCallback;
+    const attach = (): void => {
+      if (destroyed || runtimeScene) return;
+      const candidate = game.scene.getScene("RareShiftV21Survival") as RuntimeScene | null;
+      if (!candidate) {
+        attachFrame = window.requestAnimationFrame(attach);
+        return;
+      }
 
-    // Phaser Systems caches Scene.update separately from scene.update. The
-    // qualified scene is already mounted at this point, so bind the bounded
-    // checkpoint-aware callback into that exact cache instead of rewiring
-    // lifecycle events or replacing the surrounding game loop.
-    systems.sceneUpdate = patchedSceneUpdate;
-    game.canvas.dataset.cr3e1CheckpointBound = "scene.sys.sceneUpdate";
+      const systems = candidate.sys as RuntimeSystems;
+      runtimeScene = candidate;
+      cachedSceneUpdate = systems.sceneUpdate;
+      cleanupCheckpointRuntime = prepareCR3ECheckpointScene(candidate);
+      patchedSceneUpdate = candidate.update.bind(candidate) as SceneUpdateCallback;
+
+      // Phaser Systems caches Scene.update separately from scene.update. Attach
+      // only after the qualified scene is actually registered, then replace the
+      // exact cached callback while preserving every frame already executed by
+      // the qualified base loop. The gate initializes from observed elapsed
+      // active time, so this short mount delay cannot fabricate progress.
+      systems.sceneUpdate = patchedSceneUpdate;
+      game.canvas.dataset.cr3e1CheckpointBound = "scene.sys.sceneUpdate";
+      game.canvas.dataset.cr3e1CheckpointRuntime = "ACTIVE";
+      attachFrame = null;
+    };
+
+    attachFrame = window.requestAnimationFrame(attach);
   }
 
-  let destroyed = false;
   return {
     destroy: () => {
       if (destroyed) return;
       destroyed = true;
+      if (attachFrame !== null) window.cancelAnimationFrame(attachFrame);
       if (controlledQualification) {
         delete game.canvas.dataset.cr3e1CheckpointRuntime;
-      } else if (runtimeScene) {
-        const systems = runtimeScene.sys as RuntimeSystems;
-        if (patchedSceneUpdate && systems.sceneUpdate === patchedSceneUpdate) systems.sceneUpdate = cachedSceneUpdate;
-        delete game.canvas.dataset.cr3e1CheckpointBound;
-        cleanupCheckpointRuntime();
+      } else {
+        restoreCheckpointRuntime();
+        delete game.canvas.dataset.cr3e1CheckpointRuntime;
       }
       controller.destroy();
     },
