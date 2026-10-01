@@ -1,0 +1,109 @@
+name: RARE SHIFT CR-3B Desync Phaser
+
+on:
+  push:
+    branches:
+      - feature/cr3b-desync-phaser
+    paths:
+      - ".github/workflows/cr3b-desync-phaser.yml"
+      - "docs/design/RARE_SHIFT_CR3B_DESYNC_PHASER_GATE_v1.md"
+      - "games/rare-shift/src/cr3-desync-core.ts"
+      - "games/rare-shift/src/cr3-desync-phaser-runtime.ts"
+      - "games/rare-shift/v2.tsx"
+      - "scripts/cr3-desync-phaser-browser.mjs"
+      - "package.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify-cr3b-desync-phaser:
+    name: CR-3B THE DESYNC Phaser integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --init
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      FRIENDSDK_ARCHIVE: vendor/rarefriends-friendsdk-0.1.3.tgz
+      FRIENDSDK_SHA256: 8f156c469a15786e3c649b35d092e86ec6242ff30415b7ee7c451763a816e789
+      FRIENDSDK_URL: https://github.com/spokesz/friendsdk/releases/download/v0.1.3/rarefriends-friendsdk-0.1.3.tgz
+
+    steps:
+      - name: Checkout exact CR-3B head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Trust workspace and verify clean committed candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          echo "CR3B_HEAD=$(git rev-parse HEAD)"
+          git diff --check
+          git diff --exit-code
+          git diff --cached --exit-code
+          test -z "$(git status --short)"
+
+      - name: Fetch and verify FriendSDK v0.1.3
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p vendor
+          curl --fail --location --retry 5 --retry-all-errors --connect-timeout 20 --max-time 180 --output "$FRIENDSDK_ARCHIVE" "$FRIENDSDK_URL"
+          printf '%s  %s\n' "$FRIENDSDK_SHA256" "$FRIENDSDK_ARCHIVE" | sha256sum --check --strict
+
+      - name: Install project dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: CR-3A deterministic boss authority
+        run: npm run test:cr-3a
+
+      - name: Inherited deterministic regression through B5 and Evolution
+        shell: bash
+        run: |
+          npm run test:cr-1
+          npm run test:cr-2a
+          npm run test:evolution
+          npm run test:core
+          npm run test:v2-combat
+          npm run test:v2-2e-cross
+          npm run test:v2-2-pointer
+          npm run test:v2-3a
+          npm run test:v2-3b1-delta
+          npm run test:v2-3b2-vector
+          npm run test:v2-3b3-orbit
+          npm run test:v2-3b4-echo
+          npm run test:v2-3b5-signal
+
+      - name: TypeScript qualification
+        shell: bash
+        run: |
+          npm run typecheck:core
+          npm run typecheck
+
+      - name: FriendSDK check and build
+        shell: bash
+        run: |
+          npm run check
+          npm run build
+
+      - name: Inherited baseline browser regression
+        run: npm run test:v2-1-browser
+
+      - name: Inherited B5 SHIFT and SIGNAL browser regression
+        run: npm run test:v2-3b5-signal-browser
+
+      - name: Inherited natural Evolution wrapper regression
+        run: node --experimental-strip-types scripts/evolution-natural-selection-browser.mjs
+
+      - name: CR-3B controlled THE DESYNC browser qualification
+        run: npm run test:cr-3b-browser
