@@ -29,7 +29,7 @@ export interface CR3ECheckpointRewardResult {
 
 export interface CR3EPickupSlotCandidate {
   readonly active: boolean;
-  readonly reservedForCheckpoint: boolean;
+  readonly reservedForCheckpoint?: boolean;
 }
 
 export const CR3E_CHECKPOINT_REWARD_RESERVE_SIZE = 2 as const;
@@ -174,5 +174,5 @@ export function selectCR3EOrdinaryPickupSlotIndex(slots: readonly CR3EPickupSlot
 }
 
 export function selectCR3ECheckpointRewardSlotIndex(slots: readonly CR3EPickupSlotCandidate[]): number {
-  return slots.findIndex(slot => !slot.active && slot.reservedForCheckpoint);
+  return slots.findIndex(slot => !slot.active && slot.reservedForCheckpoint === true);
 }
