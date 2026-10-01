@@ -2,6 +2,8 @@ import { deterministicUnit } from "./survival-core.ts";
 import type { Phase } from "./types.ts";
 
 export type CR3BossPhase = "ALIGNMENT" | "CROSS_SPLIT" | "BREAK_WINDOW" | "DEFEATED";
+export type CR3ActiveBossPhase = Exclude<CR3BossPhase, "DEFEATED">;
+export type CR3CyclingBossPhase = Extract<CR3BossPhase, "ALIGNMENT" | "CROSS_SPLIT">;
 export type CR3BossAttackKind = "COMMON_RADIAL" | "COMMON_LANE" | "ALIGNED_ADDS" | "BREAK_PRESSURE";
 export type CR3DamageSource = "WEAPON" | "DISCHARGE";
 export type CR3DamageRejection =
@@ -105,7 +107,7 @@ function seededPhase(seed: number, ordinal: number, channel: number): Phase {
   return deterministicUnit(seed, ordinal, channel) < 0.5 ? "A" : "B";
 }
 
-export function planCR3BossDecision(seed: number, phase: Exclude<CR3BossPhase, "DEFEATED">, ordinal: number): CR3BossDecision {
+export function planCR3BossDecision(seed: number, phase: CR3ActiveBossPhase, ordinal: number): CR3BossDecision {
   if (!Number.isInteger(ordinal) || ordinal < 0) throw new Error("CR-3 decision ordinal must be a non-negative integer.");
   const vulnerability = seededPhase(seed, ordinal, phase === "ALIGNMENT" ? 301 : phase === "CROSS_SPLIT" ? 302 : 303);
   if (phase === "ALIGNMENT") {
@@ -120,28 +122,26 @@ export function planCR3BossDecision(seed: number, phase: Exclude<CR3BossPhase, "
   return Object.freeze({ ordinal, vulnerability, attack: "BREAK_PRESSURE", addPhase: null });
 }
 
-function cycleCadence(profile: CR3DesyncProfile, phase: CR3BossPhase): number | null {
-  if (phase === "ALIGNMENT") return profile.alignmentCadenceMs;
-  if (phase === "CROSS_SPLIT") return profile.crossSplitCadenceMs;
-  return null;
+function cycleCadence(profile: CR3DesyncProfile, phase: CR3CyclingBossPhase): number {
+  return phase === "ALIGNMENT" ? profile.alignmentCadenceMs : profile.crossSplitCadenceMs;
 }
 
-function stateForDecision(
+function stateForCyclingDecision(
   state: CR3DesyncState,
+  phase: CR3CyclingBossPhase,
   decision: CR3BossDecision,
   atMs: number,
   profile: CR3DesyncProfile,
 ): CR3DesyncState {
-  const cadence = cycleCadence(profile, state.phase);
   return Object.freeze({
     ...state,
     cycleOrdinal: decision.ordinal,
     vulnerability: decision.vulnerability,
     attack: decision.attack,
     addPhase: decision.addPhase,
-    nextCycleAtMs: cadence === null ? null : atMs + cadence,
-    expectedResponse: state.phase === "BREAK_WINDOW" ? decision.vulnerability : null,
-    responseDeadlineMs: state.phase === "BREAK_WINDOW" ? atMs + profile.breakTellMs : null,
+    nextCycleAtMs: atMs + cycleCadence(profile, phase),
+    expectedResponse: null,
+    responseDeadlineMs: null,
     breakOpenUntilMs: null,
     lastAdvancedAtMs: atMs,
   });
@@ -155,7 +155,7 @@ export function createCR3DesyncState(
   assertFiniteNonNegative(startedAtMs, "CR-3 start time");
   assertProfile(profile);
   const decision = planCR3BossDecision(seed, "ALIGNMENT", 0);
-  const base: CR3DesyncState = Object.freeze({
+  return Object.freeze({
     seed: seed >>> 0,
     hp: profile.maxHp,
     maxHp: profile.maxHp,
@@ -172,18 +172,17 @@ export function createCR3DesyncState(
     breakOpenUntilMs: null,
     defeatedAtMs: null,
   });
-  return base;
 }
 
 function enterPhase(
   state: CR3DesyncState,
-  phase: Exclude<CR3BossPhase, "DEFEATED">,
+  phase: CR3ActiveBossPhase,
   atMs: number,
   profile: CR3DesyncProfile,
 ): CR3DesyncState {
   const nextOrdinal = state.cycleOrdinal + 1;
   const decision = planCR3BossDecision(state.seed, phase, nextOrdinal);
-  const transitioned: CR3DesyncState = Object.freeze({
+  return Object.freeze({
     ...state,
     phase,
     phaseStartedAtMs: atMs,
@@ -201,7 +200,6 @@ function enterPhase(
     breakOpenUntilMs: null,
     lastAdvancedAtMs: atMs,
   });
-  return transitioned;
 }
 
 function nextBreakTell(state: CR3DesyncState, atMs: number, profile: CR3DesyncProfile): CR3DesyncState {
@@ -231,12 +229,13 @@ export function advanceCR3Desync(
   if (state.phase === "DEFEATED") return state;
 
   let next = state;
-  if (next.phase === "ALIGNMENT" || next.phase === "CROSS_SPLIT") {
-    const cadence = cycleCadence(profile, next.phase)!;
+  if (state.phase === "ALIGNMENT" || state.phase === "CROSS_SPLIT") {
+    const cyclingPhase: CR3CyclingBossPhase = state.phase;
+    const cadence = cycleCadence(profile, cyclingPhase);
     while (next.nextCycleAtMs !== null && nowMs >= next.nextCycleAtMs) {
       const cycleAt = next.nextCycleAtMs;
-      const decision = planCR3BossDecision(next.seed, next.phase, next.cycleOrdinal + 1);
-      next = stateForDecision(next, decision, cycleAt, profile);
+      const decision = planCR3BossDecision(next.seed, cyclingPhase, next.cycleOrdinal + 1);
+      next = stateForCyclingDecision(next, cyclingPhase, decision, cycleAt, profile);
       if (next.nextCycleAtMs === cycleAt) throw new Error("CR-3 cycle cadence did not advance.");
       if (next.nextCycleAtMs !== null && next.nextCycleAtMs - cycleAt !== cadence) throw new Error("CR-3 cycle cadence drifted.");
     }
