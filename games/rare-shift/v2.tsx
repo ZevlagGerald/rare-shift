@@ -7,6 +7,7 @@ import { createFriendReader, decodeSpriteBitmap } from "@rarefriends/friendsdk/s
 import Phaser from "phaser";
 import { derivePhaseField, selectFramePair } from "./src/phase-core.ts";
 import { draftIndexForPoint } from "./src/draft-pointer-core.ts";
+import { installReconstructionFieldQualification } from "./src/evolution-phaser-qualification.ts";
 import { mountPhaserSurvival, type PhaserSurvivalController } from "./src/phaser-survival.ts";
 import type { FrameCandidate, FrameRows, PixelClass, SelectedFramePair } from "./src/types.ts";
 import "./style.css";
@@ -14,9 +15,10 @@ import "./v2-1a.css";
 
 type Stage = "loading" | "scan" | "survival" | "error";
 
-type Rank4QualificationWindow = Window & {
+type QualificationWindow = Window & {
   __RARE_SHIFT_V23B5_SIGNAL_RANK__?: unknown;
   __RARE_SHIFT_B5_PHASER__?: { readonly GAMES: Phaser.Game[] };
+  __RARE_SHIFT_EV3A_RECONSTRUCTION__?: unknown;
 };
 
 interface PreparedV2 {
@@ -198,22 +200,25 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
 
   useEffect(() => {
     if (stage !== "survival" || !prepared || !host.current) return;
-    const qualificationWindow = window as Rank4QualificationWindow;
+    const qualificationWindow = window as QualificationWindow;
     const rank4Qualification = qualificationWindow.__RARE_SHIFT_V23B5_SIGNAL_RANK__ === 4;
+    const reconstructionQualification = qualificationWindow.__RARE_SHIFT_EV3A_RECONSTRUCTION__ === true;
+    const captureQualification = rank4Qualification || reconstructionQualification;
     const capturedGames: Phaser.Game[] = [];
     type QualificationGamePrototype = { boot: (...args: unknown[]) => unknown };
     const gamePrototype = Phaser.Game.prototype as unknown as QualificationGamePrototype;
     const originalBoot = gamePrototype.boot;
 
-    if (rank4Qualification) {
-      qualificationWindow.__RARE_SHIFT_B5_PHASER__ = { GAMES: capturedGames };
+    if (captureQualification) {
+      if (rank4Qualification) qualificationWindow.__RARE_SHIFT_B5_PHASER__ = { GAMES: capturedGames };
       gamePrototype.boot = function (this: Phaser.Game, ...args: unknown[]) {
         capturedGames.push(this);
         return originalBoot.apply(this, args);
       };
     }
 
-    let mounted: PhaserSurvivalController;
+    let mounted: PhaserSurvivalController | null = null;
+    let cleanupReconstruction = () => {};
     try {
       mounted = mountPhaserSurvival({
         parent: host.current,
@@ -222,13 +227,22 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
         friendLabel: prepared.friendLabel,
         familyName: prepared.familyName,
       });
+      if (reconstructionQualification) {
+        const capturedGame = capturedGames[0];
+        if (!capturedGame) throw new Error("EV-3A RECONSTRUCTION qualification could not capture the mounted Phaser game.");
+        cleanupReconstruction = installReconstructionFieldQualification(capturedGame);
+      }
+    } catch (cause) {
+      mounted?.destroy();
+      throw cause;
     } finally {
-      if (rank4Qualification) gamePrototype.boot = originalBoot;
+      if (captureQualification) gamePrototype.boot = originalBoot;
     }
 
     controller.current = mounted;
     mounted.setPaused(paused);
     return () => {
+      cleanupReconstruction();
       mounted.destroy();
       if (rank4Qualification) delete qualificationWindow.__RARE_SHIFT_B5_PHASER__;
       if (controller.current === mounted) controller.current = null;
