@@ -24,6 +24,7 @@
     "games/rare-shift/src/reconstruction-core.ts",
     "games/rare-shift/src/progression-core.ts",
     "games/rare-shift/src/cr3-desync-core.ts",
-    "games/rare-shift/src/cr3-pressure-core.ts"
+    "games/rare-shift/src/cr3-pressure-core.ts",
+    "games/rare-shift/src/cr3-results-core.ts"
   ]
 }
