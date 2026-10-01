@@ -29,7 +29,7 @@ permissions:
 
 jobs:
   qualify-evolution-foundation:
-    name: EV-1/EV-2/EV-3A/EV-3B Evolution qualification
+    name: EV-1/EV-2/EV-3A/EV-3B/EV-3C Evolution qualification
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
@@ -106,3 +106,6 @@ jobs:
 
       - name: EV-3B PRISM LANCE controlled Phaser qualification
         run: npm run test:evolution-prism-browser
+
+      - name: EV-3C SYNC HALO controlled Phaser qualification
+        run: npm run test:evolution-sync-halo-browser
