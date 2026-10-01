@@ -35,6 +35,7 @@ import { enemyThreatPhase, isEnemyCorporeal, type V2EnemyKind } from "./phase-co
 import type { SignalArcHop, SignalArcRankProfile } from "./signal-arc-core.ts";
 import type { Phase, SelectedFramePair } from "./types.ts";
 import type { V23WeaponFamily } from "./progression-core.ts";
+import type { CR2LiveProjection } from "./cr2-live-state-core.ts";
 
 interface EnemyRuntimeLike {
   id: number;
@@ -73,6 +74,7 @@ interface EvolutionRuntimeScene extends Phaser.Scene {
   dead: boolean;
   draftOpen: boolean;
   evolvedWeapons: Partial<Record<V23WeaponFamily, boolean>>;
+  applyCR2Projection(next: CR2LiveProjection): void;
 
   deltaRank: number;
   fireDelta(profile: unknown): void;
@@ -125,6 +127,7 @@ function sceneReady(scene: EvolutionRuntimeScene | undefined): scene is Evolutio
     && scene.friend
     && Array.isArray(scene.enemies)
     && Array.isArray(scene.echoMines)
+    && typeof scene.applyCR2Projection === "function"
     && typeof scene.fireDelta === "function"
     && typeof scene.applyVectorProjectileHit === "function"
     && typeof scene.tryEmitOrbitShear === "function"
@@ -182,6 +185,8 @@ export function installEvolutionPhaserRuntime(game: Phaser.Game): () => void {
   let configured = false;
   let animationFrameId: number | null = null;
 
+  let originalApplyCR2Projection: EvolutionRuntimeScene["applyCR2Projection"] | null = null;
+  let patchedApplyCR2Projection: EvolutionRuntimeScene["applyCR2Projection"] | null = null;
   let originalFireDelta: EvolutionRuntimeScene["fireDelta"] | null = null;
   let patchedFireDelta: EvolutionRuntimeScene["fireDelta"] | null = null;
   let originalApplyVectorHit: EvolutionRuntimeScene["applyVectorProjectileHit"] | null = null;
@@ -408,6 +413,7 @@ export function installEvolutionPhaserRuntime(game: Phaser.Game): () => void {
 
   const configure = (candidate: EvolutionRuntimeScene): void => {
     scene = candidate;
+    originalApplyCR2Projection = scene.applyCR2Projection;
     originalFireDelta = scene.fireDelta;
     originalApplyVectorHit = scene.applyVectorProjectileHit;
     originalTryEmitOrbitShear = scene.tryEmitOrbitShear;
@@ -415,6 +421,30 @@ export function installEvolutionPhaserRuntime(game: Phaser.Game): () => void {
     originalSignalCombatProfile = scene.signalCombatProfile;
     originalFireSignalArc = scene.fireSignalArc;
     originalShift = scene.shift;
+
+    patchedApplyCR2Projection = function (this: EvolutionRuntimeScene, next: CR2LiveProjection): void {
+      if (!originalApplyCR2Projection) throw new Error("Evolution runtime lost inherited CR-2 projection authority.");
+      const containsEvolution = Object.values(next.evolvedWeapons).some(value => value === true);
+      if (!containsEvolution) {
+        originalApplyCR2Projection.call(this, next);
+        return;
+      }
+
+      // The base Phaser scene remains fail-closed. EV-3G authorizes evolved
+      // projections only while this separately-qualified production runtime is
+      // installed. CR-2 Evolution changes evolved flags/Core inventory only;
+      // weapon rank/ownership continuity remains delegated to the inherited
+      // projection path, then the exact target evolved set is restored.
+      const guardedProjection: CR2LiveProjection = Object.freeze({
+        ...next,
+        evolvedWeapons: Object.freeze({}),
+      });
+      originalApplyCR2Projection.call(this, guardedProjection);
+      this.evolvedWeapons = { ...next.evolvedWeapons };
+      this.syncTestState();
+      syncDiagnostics();
+    };
+    scene.applyCR2Projection = patchedApplyCR2Projection;
 
     patchedFireDelta = function (this: EvolutionRuntimeScene, profile: unknown): void {
       originalFireDelta?.call(this, profile);
@@ -552,6 +582,7 @@ export function installEvolutionPhaserRuntime(game: Phaser.Game): () => void {
     disposed = true;
     if (animationFrameId !== null) window.cancelAnimationFrame(animationFrameId);
     if (!scene) return;
+    if (originalApplyCR2Projection && patchedApplyCR2Projection && scene.applyCR2Projection === patchedApplyCR2Projection) scene.applyCR2Projection = originalApplyCR2Projection;
     if (originalFireDelta && patchedFireDelta && scene.fireDelta === patchedFireDelta) scene.fireDelta = originalFireDelta;
     if (originalApplyVectorHit && patchedApplyVectorHit && scene.applyVectorProjectileHit === patchedApplyVectorHit) scene.applyVectorProjectileHit = originalApplyVectorHit;
     if (originalTryEmitOrbitShear && patchedTryEmitOrbitShear && scene.tryEmitOrbitShear === patchedTryEmitOrbitShear) scene.tryEmitOrbitShear = originalTryEmitOrbitShear;
