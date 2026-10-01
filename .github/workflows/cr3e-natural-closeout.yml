@@ -3,12 +3,11 @@ name: RARE SHIFT CR-3E Natural Closeout
 on:
   push:
     branches:
-      - feature/cr3e-natural-closeout
+      - feature/cr3e-natural-closeout-v2
     paths:
       - ".github/workflows/cr3e-natural-closeout.yml"
       - "docs/design/RARE_SHIFT_CR3E_NATURAL_CLOSEOUT_GATE_v1.md"
-      - "scripts/cr3-natural-complete-run-browser.mjs"
-      - "package.json"
+      - "scripts/cr3-natural-complete-run-browser-v2.mjs"
   workflow_dispatch:
 
 permissions:
@@ -100,4 +99,4 @@ jobs:
         run: npm run test:cr-3d-browser
 
       - name: CR-3E seeded natural death and complete victory
-        run: npm run test:cr-3e-browser
+        run: node --experimental-strip-types scripts/cr3-natural-complete-run-browser-v2.mjs
