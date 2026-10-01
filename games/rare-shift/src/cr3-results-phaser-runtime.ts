@@ -10,6 +10,11 @@ interface CR3DResultsScene extends Phaser.Scene {
   applyPlayerDamage(amount: number): boolean;
 }
 
+type CR3QualificationWindow = Window & {
+  __RARE_SHIFT_CR3B_RUNTIME__?: unknown;
+  __RARE_SHIFT_CR3D_RUNTIME__?: unknown;
+};
+
 function sceneReady(scene: CR3DResultsScene | undefined): scene is CR3DResultsScene {
   return Boolean(
     scene
@@ -26,6 +31,14 @@ function setDataset(canvas: HTMLCanvasElement, key: string, value: string | numb
 }
 
 export function installCR3ResultsPhaserRuntime(game: Phaser.Game): () => void {
+  const qualificationWindow = window as CR3QualificationWindow;
+  const legacyBossQualification = qualificationWindow.__RARE_SHIFT_CR3B_RUNTIME__ === true
+    && qualificationWindow.__RARE_SHIFT_CR3D_RUNTIME__ !== true;
+  if (legacyBossQualification) {
+    game.canvas.dataset.cr3dResultsRuntime = "SUPPRESSED_FOR_CR3B_QUALIFICATION";
+    return () => { delete game.canvas.dataset.cr3dResultsRuntime; };
+  }
+
   let disposed = false;
   let configured = false;
   let animationFrameId: number | null = null;
