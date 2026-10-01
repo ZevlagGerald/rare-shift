@@ -167,10 +167,11 @@ export function signalArcForwardDegree(
   phase: Phase,
   visited: ReadonlySet<number>,
   profile: SignalArcProfile,
-  commonBonusUsesRemaining: number,
+  commonBonusAuthority: number | boolean,
 ): number {
   const commonBonus = profile.commonRelayBonus ?? 0;
-  const nextRange = profile.relayRange + (commonBonusUsesRemaining > 0 && candidate.kind === "TRACE" ? commonBonus : 0);
+  const hasCommonBonusAuthority = typeof commonBonusAuthority === "boolean" ? commonBonusAuthority : commonBonusAuthority > 0;
+  const nextRange = profile.relayRange + (hasCommonBonusAuthority && candidate.kind === "TRACE" ? commonBonus : 0);
   const blocked = new Set(visited);
   blocked.add(candidate.id);
   return legalCandidates(candidates, phase, candidate.x, candidate.y, nextRange, blocked).length;
