@@ -51,6 +51,11 @@ function qualify(width) {
         throw new Error("CR-3B live runtime hooks are unavailable.");
       }
 
+      // Freeze only Phaser's automatic scene scheduling for this controlled fixture.
+      // Direct calls below still execute the real qualified scene.update() method, so
+      // the exact 360000ms CR-1 transition can be observed without wall-clock drift.
+      scene.scene.pause();
+
       for (const enemy of scene.enemies) {
         enemy.active = false;
         enemy.view?.setVisible(false);
