@@ -62,6 +62,7 @@ export function installCR3DesyncPhaserRuntime(game: Phaser.Game): () => void {
   let bossView: Phaser.GameObjects.Container | null = null;
   let bossHealth: Phaser.GameObjects.Graphics | null = null;
   let bossHud: Phaser.GameObjects.Text | null = null;
+  let lastPaintSignature = "";
 
   let originalFireDelta: CR3RuntimeScene["fireDelta"] | null = null;
   let patchedFireDelta: CR3RuntimeScene["fireDelta"] | null = null;
@@ -109,8 +110,21 @@ export function installCR3DesyncPhaserRuntime(game: Phaser.Game): () => void {
     setDataset(canvas, "cr3BossAttack", bossState.attack);
   };
 
-  const paintBoss = (): void => {
+  const paintBoss = (force = false): void => {
     if (!scene || !bossState) return;
+    const defeated = bossState.phase === "DEFEATED";
+    const breakOpen = !defeated && isCR3BreakOpen(bossState, scene.elapsedActiveMs);
+    const signature = [
+      bossState.phase,
+      bossState.hp,
+      bossState.vulnerability,
+      bossState.expectedResponse ?? "",
+      bossState.cycleOrdinal,
+      breakOpen ? 1 : 0,
+    ].join(":");
+    if (!force && signature === lastPaintSignature) return;
+    lastPaintSignature = signature;
+
     if (!bossView) bossView = scene.add.container(BOSS_X, BOSS_Y).setDepth(34);
     if (!bossHealth) bossHealth = scene.add.graphics().setDepth(35);
     if (!bossHud) {
@@ -126,8 +140,6 @@ export function installCR3DesyncPhaserRuntime(game: Phaser.Game): () => void {
     }
 
     bossView.removeAll(true);
-    const defeated = bossState.phase === "DEFEATED";
-    const breakOpen = !defeated && isCR3BreakOpen(bossState, scene.elapsedActiveMs);
     const tone = bossTone(bossState.vulnerability);
     bossView.setPosition(BOSS_X, BOSS_Y).setVisible(!defeated).setAlpha(defeated ? 0 : 1);
     if (!defeated) {
@@ -157,12 +169,14 @@ export function installCR3DesyncPhaserRuntime(game: Phaser.Game): () => void {
     if (!scene || bossState) return;
     bossState = createCR3DesyncState((scene.seed ^ 0x43523342) >>> 0, scene.elapsedActiveMs);
     scene.statusText?.setText("THE DESYNC // phase authority detected.");
-    paintBoss();
+    paintBoss(true);
     syncDiagnostics();
   };
 
   const applyDeltaToBoss = (profile: DeltaProfile): void => {
-    if (!scene || !bossState || bossState.phase === "DEFEATED" || scene.dead || scene.draftOpen) return;
+    if (!scene) return;
+    if (scene.bossPending && !bossState) initializeBoss();
+    if (!bossState || bossState.phase === "DEFEATED" || scene.dead || scene.draftOpen) return;
     if (!deltaHitsTarget(profile, BOSS_X - scene.friend.x, BOSS_Y - scene.friend.y)) {
       lastDamageRejection = "OUT_OF_GEOMETRY";
       rejectedDamageEvents += 1;
@@ -189,7 +203,9 @@ export function installCR3DesyncPhaserRuntime(game: Phaser.Game): () => void {
   };
 
   const applyShiftToBoss = (shiftsBefore: number): void => {
-    if (!scene || !bossState || scene.shifts === shiftsBefore || bossState.phase !== "BREAK_WINDOW" || bossState.phase === "DEFEATED") return;
+    if (!scene) return;
+    if (scene.bossPending && !bossState) initializeBoss();
+    if (!bossState || scene.shifts === shiftsBefore || bossState.phase !== "BREAK_WINDOW") return;
     if (isCR3BreakOpen(bossState, scene.elapsedActiveMs)) return;
     const result = applyCR3ShiftResponse(bossState, scene.phase, scene.elapsedActiveMs);
     bossState = result.state;
@@ -241,8 +257,7 @@ export function installCR3DesyncPhaserRuntime(game: Phaser.Game): () => void {
     } else if (scene) {
       if (scene.bossPending && !bossState) initializeBoss();
       if (bossState && bossState.phase !== "DEFEATED") {
-        const advanced = advanceCR3Desync(bossState, scene.elapsedActiveMs);
-        if (advanced !== bossState) bossState = advanced;
+        bossState = advanceCR3Desync(bossState, scene.elapsedActiveMs);
       }
       if (bossState) paintBoss();
       syncDiagnostics();
