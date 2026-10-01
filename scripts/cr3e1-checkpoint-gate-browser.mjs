@@ -70,6 +70,13 @@ async function moveTowardElite(canvas, data) {
   await canvas.press(key, { delay: 240 });
 }
 
+async function assertCombatCanvas(game, canvas, width, context) {
+  if (await canvas.count()) return;
+  const results = game.locator('[data-stage="results"]');
+  const resultVisible = await results.count() > 0;
+  throw new Error(`CR-3E.1 ${context} lost the combat canvas at width ${width}; terminalResults=${resultVisible}`);
+}
+
 async function waitForCheckpointRuntime(page, canvas, width) {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
@@ -111,10 +118,12 @@ function qualification(width) {
       }
       await moveSafeLane(canvas, data, tick);
       tick += 1;
+      await assertCombatCanvas(game, canvas, width, "pre-checkpoint route");
       if (tick % 7 === 0 && await data("draft-open") !== "true") await shift(canvas);
       await page.waitForTimeout(45);
     }
 
+    await assertCombatCanvas(game, canvas, width, "ELITE_I activation");
     assert.equal(await data("checkpoint-gate-active"), "ELITE_I", "ELITE_I checkpoint gate must activate naturally");
     assert.equal(await data("checkpoint-gate-phase"), "ELITE_ACTIVE");
     assert.equal(Number(await data("director-progress-ms")), 80_000, "director progression must stop exactly at the ELITE_I boundary");
@@ -125,6 +134,7 @@ function qualification(width) {
     const spawnIndexBeforeFreeze = Number(await data("checkpoint-ordinary-spawn-index"));
     await canvas.press("ArrowLeft", { delay: 1_250 });
     await page.waitForTimeout(120);
+    await assertCombatCanvas(game, canvas, width, "checkpoint freeze proof");
     const elapsedAfterFreeze = Number(await data("director-elapsed-ms"));
     assert.ok(elapsedAfterFreeze > elapsedBeforeFreeze + 900, "combat/run clock must continue during checkpoint combat");
     assert.equal(Number(await data("director-progress-ms")), 80_000, "director progression must remain frozen while elite is unresolved");
@@ -134,6 +144,7 @@ function qualification(width) {
     const resolveDeadline = Date.now() + 50_000;
     let huntTicks = 0;
     while (Date.now() < resolveDeadline && !list(await data("checkpoint-gate-resolved")).includes("ELITE_I")) {
+      await assertCombatCanvas(game, canvas, width, "ELITE_I resolution");
       assert.equal(await data("dead"), "false", `run died while resolving ELITE_I at width ${width}`);
       if (await data("draft-open") === "true") {
         await chooseDraft(canvas, data);
@@ -144,6 +155,7 @@ function qualification(width) {
       if (gatePhase === "ELITE_ACTIVE") {
         await moveTowardElite(canvas, data);
         huntTicks += 1;
+        await assertCombatCanvas(game, canvas, width, "post-movement ELITE_I resolution");
         if (huntTicks % 6 === 0) await shift(canvas);
       } else {
         await page.waitForTimeout(90);
@@ -151,6 +163,7 @@ function qualification(width) {
       await page.waitForTimeout(35);
     }
 
+    await assertCombatCanvas(game, canvas, width, "ELITE_I completion");
     assert.ok(list(await data("checkpoint-gate-resolved")).includes("ELITE_I"), "ELITE_I gate must resolve after elite defeat and full reward collection");
     assert.equal(await data("checkpoint-gate-phase"), "RUNNING");
     assert.equal(await data("checkpoint-gate-active"), "");
@@ -183,4 +196,5 @@ for (const width of [960, 390]) {
   });
 }
 
-console.log("RARE_SHIFT_CR3E1_CHECKPOINT_BROWSER=PASS");
+console.log("RARE_SHIFT_CR3E1_REDUCED_MOTION=PASS");
+console.log("RARE_SHIFT_CR3E1_BROWSER=PASS");
