@@ -65,26 +65,32 @@ function entryScore(entry, hp, allowRepair = true) {
   const candidate = entry.candidateId;
   const legacy = entry.id;
   const isRepair = candidate === "UTILITY:FIELD_REPAIR" || legacy === "FIELD_REPAIR";
+  const isOrbitAcquire = candidate === "WEAPON_ACQUIRE:ORBIT" || legacy === "ORBIT_NODES";
+  const isOrbitRank = candidate.startsWith("WEAPON_RANK:ORBIT:") || legacy === "ORBIT_RANK";
   if (allowRepair && hp <= 78 && isRepair) return 0;
-  if (candidate.startsWith("EVOLUTION:DELTA:") || legacy.startsWith("EVOLUTION:DELTA:")) return 1;
-  if (candidate.startsWith("WEAPON_RANK:DELTA:") || legacy === "DELTA_RANK") return 2;
-  if (candidate === "PROTOCOL_ACQUIRE:COMMON_CORE" || legacy === "PROTOCOL_COMMON_CORE") return 3;
-  if (candidate.startsWith("PROTOCOL_RANK:COMMON_CORE:") || legacy === "PROTOCOL_COMMON_CORE") return 4;
-  if (candidate.startsWith("EVOLUTION:")) return 5;
-  if (candidate === "WEAPON_ACQUIRE:ORBIT" || legacy === "ORBIT_NODES") return 6;
-  if (candidate === "WEAPON_ACQUIRE:ECHO" || legacy === "ECHO_MINE") return 7;
-  if (candidate === "WEAPON_ACQUIRE:SIGNAL" || legacy === "SIGNAL_ARC") return 8;
-  if (candidate.startsWith("WEAPON_RANK:ORBIT:") || legacy === "ORBIT_RANK") return 9;
-  if (candidate.startsWith("WEAPON_RANK:ECHO:") || legacy === "ECHO_RANK") return 10;
-  if (candidate.startsWith("WEAPON_RANK:SIGNAL:") || legacy === "SIGNAL_RANK") return 11;
-  if (candidate === "PROTOCOL_ACQUIRE:ORBIT_STABILIZER") return 12;
-  if (candidate === "PROTOCOL_ACQUIRE:MEMORY_FUSE") return 13;
-  if (candidate === "PROTOCOL_ACQUIRE:RESONANCE_COIL") return 14;
-  if (candidate.startsWith("PROTOCOL_RANK:")) return 15;
-  if (candidate === "WEAPON_ACQUIRE:VECTOR" || legacy === "VECTOR_NEEDLE") return 16;
-  if (candidate.startsWith("WEAPON_RANK:VECTOR:") || legacy === "VECTOR_RANK") return 17;
-  if (isRepair) return allowRepair ? 18 : 80;
-  if (candidate === "UTILITY:SIGNAL_MAGNET" || legacy === "SIGNAL_MAGNET") return 19;
+  // A critically damaged natural player takes the available close-defense tool
+  // before more DELTA damage. This changes only the legal draft click, never the
+  // generated draft or gameplay state.
+  if (hp <= 40 && (isOrbitAcquire || isOrbitRank)) return 1;
+  if (candidate.startsWith("EVOLUTION:DELTA:") || legacy.startsWith("EVOLUTION:DELTA:")) return 2;
+  if (candidate.startsWith("WEAPON_RANK:DELTA:") || legacy === "DELTA_RANK") return 3;
+  if (candidate === "PROTOCOL_ACQUIRE:COMMON_CORE" || legacy === "PROTOCOL_COMMON_CORE") return 4;
+  if (candidate.startsWith("PROTOCOL_RANK:COMMON_CORE:") || legacy === "PROTOCOL_COMMON_CORE") return 5;
+  if (candidate.startsWith("EVOLUTION:")) return 6;
+  if (isOrbitAcquire) return 7;
+  if (candidate === "WEAPON_ACQUIRE:ECHO" || legacy === "ECHO_MINE") return 8;
+  if (candidate === "WEAPON_ACQUIRE:SIGNAL" || legacy === "SIGNAL_ARC") return 9;
+  if (isOrbitRank) return 10;
+  if (candidate.startsWith("WEAPON_RANK:ECHO:") || legacy === "ECHO_RANK") return 11;
+  if (candidate.startsWith("WEAPON_RANK:SIGNAL:") || legacy === "SIGNAL_RANK") return 12;
+  if (candidate === "PROTOCOL_ACQUIRE:ORBIT_STABILIZER") return 13;
+  if (candidate === "PROTOCOL_ACQUIRE:MEMORY_FUSE") return 14;
+  if (candidate === "PROTOCOL_ACQUIRE:RESONANCE_COIL") return 15;
+  if (candidate.startsWith("PROTOCOL_RANK:")) return 16;
+  if (candidate === "WEAPON_ACQUIRE:VECTOR" || legacy === "VECTOR_NEEDLE") return 17;
+  if (candidate.startsWith("WEAPON_RANK:VECTOR:") || legacy === "VECTOR_RANK") return 18;
+  if (isRepair) return allowRepair ? 19 : 80;
+  if (candidate === "UTILITY:SIGNAL_MAGNET" || legacy === "SIGNAL_MAGNET") return 20;
   return 40;
 }
 
@@ -142,7 +148,10 @@ async function patrol(canvas, data, page, tick) {
   else if (y >= 950 && x > 300) key = "ArrowLeft";
   else if (x <= 300 && y > 250) key = "ArrowUp";
   else key = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"][Math.floor(tick / 10) % 4];
-  await pressFor(canvas, key, 430, page);
+  // Preserve the already-established CR-1 natural-player patrol exactly.
+  await canvas.focus();
+  await canvas.press(key, { delay: 520 });
+  await page.waitForTimeout(80);
 }
 
 function currentPressurePlan(snapshot) {
@@ -178,7 +187,7 @@ async function naturalVictory() {
   await testGame(gameDirectory, {
     width: 960,
     height: 800,
-    timeout: 600_000,
+    timeout: 720_000,
     screenshot: resolve("artifacts/rare-shift-cr3e-natural-win-host-960.png"),
     check: async ({ page, game }) => {
       await game.locator('[data-stage="scan"]').waitFor({ state: "visible" });
@@ -199,7 +208,7 @@ async function naturalVictory() {
       const canvas = game.locator("canvas");
       await canvas.waitFor({ state: "visible" });
       await canvas.focus();
-      const data = name => canvas.getAttribute(`data-${name}`);
+      const data = name => canvas.getAttribute(`data-${name}`, { timeout: 2_000 });
 
       const observedStages = new Set();
       const observedCheckpoints = new Set();
@@ -228,8 +237,17 @@ async function naturalVictory() {
         maxPressureResolves = Math.max(maxPressureResolves, Number(await data("cr3-pressure-resolve-events")) || 0);
       };
 
+      const failIfTerminatedBeforeBoss = async () => {
+        const results = game.locator('[data-stage="results"]');
+        if (await results.count()) {
+          throw new Error(`CR-3E natural win terminated before boss: outcome=${await results.getAttribute("data-outcome")} finalHp=${await results.getAttribute("data-final-hp")} damage=${await results.getAttribute("data-damage-taken")}`);
+        }
+        if (!await canvas.isVisible()) throw new Error("CR-3E natural win lost the survival canvas before the boss handoff.");
+      };
+
       const preBossDeadline = Date.now() + 430_000;
       while (Date.now() < preBossDeadline) {
+        await failIfTerminatedBeforeBoss();
         await record();
         if (bool(await data("dead"))) {
           throw new Error(`CR-3E natural win died before boss: stage=${await data("director-stage")} elapsed=${await data("director-elapsed-ms")} hp=${await data("hp")} level=${await data("level")} kills=${await data("kills")}`);
@@ -247,6 +265,7 @@ async function naturalVictory() {
         }
       }
 
+      await failIfTerminatedBeforeBoss();
       await record();
       assert.equal(await data("boss-pending"), "true", "natural run must reach the real BOSS_PENDING handoff");
       assert.equal(await data("cr3-boss-active"), "true", "THE DESYNC must initialize from the natural 360s handoff");
@@ -263,6 +282,10 @@ async function naturalVictory() {
       while (Date.now() < bossDeadline) {
         const victory = game.locator('[data-stage="results"][data-outcome="VICTORY"]');
         if (await victory.count()) break;
+        const defeat = game.locator('[data-stage="results"][data-outcome="DEFEAT"]');
+        if (await defeat.count()) {
+          throw new Error(`CR-3E natural win died during THE DESYNC: finalHp=${await defeat.getAttribute("data-final-hp")} damage=${await defeat.getAttribute("data-damage-taken")}`);
+        }
         if (!await canvas.isVisible()) {
           await page.waitForTimeout(50);
           continue;
@@ -369,7 +392,7 @@ async function naturalDeathRetry() {
       let canvas = game.locator("canvas");
       await canvas.waitFor({ state: "visible" });
       await canvas.focus();
-      const data = name => canvas.getAttribute(`data-${name}`);
+      const data = name => canvas.getAttribute(`data-${name}`, { timeout: 2_000 });
       const seed = Number(await data("seed"));
       const deadline = Date.now() + 145_000;
 
