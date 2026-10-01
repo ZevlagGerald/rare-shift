@@ -81,6 +81,7 @@ interface EvolutionRuntimeScene extends Phaser.Scene {
   applyVectorProjectileHit(projectile: VectorProjectileLike, hitIndex: number): void;
 
   orbitRank: number;
+  orbitShearLastEmittedAt: number | null;
   tryEmitOrbitShear(anchorAngle: number): void;
 
   echoRank: number;
@@ -151,6 +152,13 @@ export function syncHaloRuntimeRole(enemy: {
   if (enemy.elite && enemy.checkpointId === null) return "BOSS";
   if (enemy.elite) return "ELITE";
   return enemyThreatPhase(enemy.kind) === "COMMON" ? "COMMON" : "NORMAL";
+}
+
+export function syncHaloRuntimeRearmAnchor(
+  lastControlAtMs: number | null,
+  inheritedShearLastEmittedAtMs: number | null,
+): number | null {
+  return lastControlAtMs ?? inheritedShearLastEmittedAtMs;
 }
 
 function activeMineSnapshots(scene: EvolutionRuntimeScene): MineSnapshot[] {
@@ -292,9 +300,10 @@ export function installEvolutionPhaserRuntime(game: Phaser.Game): () => void {
     syncDiagnostics();
   };
 
-  const applySyncControl = (anchorAngle: number): void => {
+  const applySyncControl = (anchorAngle: number, inheritedShearLastBeforeMs: number | null): void => {
     if (!scene || scene.dead || scene.draftOpen || scene.orbitRank !== 5 || scene.evolvedWeapons.ORBIT !== true) return;
-    if (!canEmitSyncHaloControl(true, syncLastControlAtMs, scene.elapsedActiveMs)) {
+    const rearmAnchor = syncHaloRuntimeRearmAnchor(syncLastControlAtMs, inheritedShearLastBeforeMs);
+    if (!canEmitSyncHaloControl(true, rearmAnchor, scene.elapsedActiveMs)) {
       syncRearmBlocks += 1;
       syncDiagnostics();
       return;
@@ -452,8 +461,9 @@ export function installEvolutionPhaserRuntime(game: Phaser.Game): () => void {
     scene.applyVectorProjectileHit = patchedApplyVectorHit;
 
     patchedTryEmitOrbitShear = function (this: EvolutionRuntimeScene, anchorAngle: number): void {
+      const inheritedShearLastBeforeMs = this.orbitShearLastEmittedAt;
       originalTryEmitOrbitShear?.call(this, anchorAngle);
-      applySyncControl(anchorAngle);
+      applySyncControl(anchorAngle, inheritedShearLastBeforeMs);
     };
     scene.tryEmitOrbitShear = patchedTryEmitOrbitShear;
 
