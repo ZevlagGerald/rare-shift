@@ -6,8 +6,8 @@ on:
       - feature/evolution-runtime
     paths:
       - ".github/workflows/evolution-foundation.yml"
-      - "games/rare-shift/src/evolution-runtime-core.ts"
-      - "games/rare-shift/tests/evolution-runtime-core.test.ts"
+      - "games/rare-shift/src/evolution-*.ts"
+      - "games/rare-shift/tests/evolution-*.test.ts"
       - "games/rare-shift/src/phase-combat-core.ts"
       - "games/rare-shift/src/vector-core.ts"
       - "games/rare-shift/src/orbit-core.ts"
@@ -27,7 +27,7 @@ permissions:
 
 jobs:
   qualify-evolution-foundation:
-    name: EV-1 deterministic Evolution runtime foundation
+    name: EV-1/EV-2 deterministic Evolution foundation
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
@@ -72,7 +72,7 @@ jobs:
       - name: Install project dependencies
         run: npm install --no-audit --no-fund
 
-      - name: EV-1 deterministic Evolution contracts
+      - name: EV-1/EV-2 deterministic Evolution contracts
         run: npm run test:evolution
 
       - name: Inherited CR-2 and Rank-V deterministic regression
