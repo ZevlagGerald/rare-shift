@@ -23,6 +23,7 @@
     "test:cr-3a": "node --experimental-strip-types --test games/rare-shift/tests/cr-3-desync-core.test.ts",
     "test:cr-3c": "node --experimental-strip-types --test games/rare-shift/tests/cr-3-pressure-core.test.ts",
     "test:cr-3d": "node --experimental-strip-types --test games/rare-shift/tests/cr-3-results-core.test.ts",
+    "test:cr-3e1": "node --experimental-strip-types --test games/rare-shift/tests/cr-3e-checkpoint-gate-core.test.ts",
     "test:evolution": "node --experimental-strip-types --test games/rare-shift/tests/evolution-runtime-core.test.ts games/rare-shift/tests/evolution-live-state-core.test.ts",
     "test:evolution-reconstruction-browser": "node --experimental-strip-types scripts/evolution-reconstruction-browser.mjs",
     "test:evolution-prism-browser": "node --experimental-strip-types scripts/evolution-prism-browser.mjs",
