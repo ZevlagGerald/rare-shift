@@ -62,6 +62,10 @@ function fnv1a32(value: string): string {
 }
 
 export function detectCR3TerminalOutcome(source: CR3ResultSource): CR3RunOutcome | null {
+  // Terminal capture is owned by the CR-3D runtime adapter. Earlier CR-3B/C
+  // controlled qualifiers deliberately suppress that adapter so they can
+  // continue inspecting the already-qualified post-defeat boss/pressure state.
+  if (source.cr3dResultsRuntime !== "ACTIVE") return null;
   if (source.cr3BossPhase === "DEFEATED" && finiteInteger(source, "cr3BossDefeatEvents") >= 1) return "VICTORY";
   if (source.dead === "true") return "DEFEAT";
   return null;
