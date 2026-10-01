@@ -12,7 +12,7 @@ on:
       - "games/rare-shift/src/cr3-desync-phaser-runtime.ts"
       - "games/rare-shift/tests/cr-3-pressure-core.test.ts"
       - "scripts/cr3-desync-phaser-browser.mjs"
-      - "scripts/cr3-desync-pressure-browser.mjs"
+      - "scripts/cr3-desync-pressure-browser-v2.mjs"
       - "package.json"
       - "tsconfig.core.json"
   workflow_dispatch:
