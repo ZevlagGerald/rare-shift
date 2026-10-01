@@ -91,6 +91,7 @@ export function installReconstructionFieldQualification(game: Phaser.Game): () =
   let lastFireAtMs: number | null = null;
   let configured = false;
   let disposed = false;
+  let animationFrameId: number | null = null;
 
   const syncDiagnostics = (): void => {
     if (!configured || !scene || !target) return;
@@ -112,7 +113,7 @@ export function installReconstructionFieldQualification(game: Phaser.Game): () =
     fires += 1;
     lastFireAtMs = scene.elapsedActiveMs;
     const fx = scene.add.graphics().setPosition(event.originX, event.originY).setDepth(26);
-    fx.fillStyle(0xe8edf2, scene.game.canvas.dataset.reducedMotion === "true" ? 0.18 : 0.32);
+    fx.fillStyle(0xe8edf2, 0.32);
     for (const point of event.profile.points) {
       fx.fillRect(point.x * event.profile.worldScale - 3, point.y * event.profile.worldScale - 3, 6, 6);
     }
@@ -190,32 +191,33 @@ export function installReconstructionFieldQualification(game: Phaser.Game): () =
     syncDiagnostics();
   };
 
-  const onPostStep = (): void => {
+  const tick = (): void => {
     if (disposed) return;
     if (!configured) {
       const candidate = game.scene.getScene("RareShiftV21Survival") as ReconstructionQualificationScene | undefined;
-      if (sceneReady(candidate)) configure(candidate);
-      return;
+      if (sceneReady(candidate)) {
+        try {
+          configure(candidate);
+        } catch (cause) {
+          game.canvas.dataset.reconstructionQualificationError = cause instanceof Error ? cause.message : String(cause);
+          disposed = true;
+          return;
+        }
+      }
+    } else if (scene && pending && !scene.dead && !scene.draftOpen && scene.elapsedActiveMs >= pending.scheduledAtMs) {
+      const event = pending;
+      pending = null;
+      fireReconstruction(event);
     }
-    if (!scene || !pending || scene.dead || scene.draftOpen) {
-      syncDiagnostics();
-      return;
-    }
-    if (scene.elapsedActiveMs < pending.scheduledAtMs) {
-      syncDiagnostics();
-      return;
-    }
-    const event = pending;
-    pending = null;
-    fireReconstruction(event);
+    syncDiagnostics();
+    animationFrameId = window.requestAnimationFrame(tick);
   };
 
-  game.events.on("poststep", onPostStep);
-  onPostStep();
+  animationFrameId = window.requestAnimationFrame(tick);
 
   return () => {
     disposed = true;
-    game.events.off("poststep", onPostStep);
+    if (animationFrameId !== null) window.cancelAnimationFrame(animationFrameId);
     if (scene && originalFireDelta && patchedFireDelta && scene.fireDelta === patchedFireDelta) {
       scene.fireDelta = originalFireDelta;
     }
