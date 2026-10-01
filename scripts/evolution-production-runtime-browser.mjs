@@ -68,6 +68,7 @@ function qualify(width) {
       scene.orbitOwned = false;
       scene.echoOwned = false;
       scene.signalOwned = false;
+      scene.weaponSlotsUsed = 1;
       scene.evolvedWeapons = { DELTA: true };
       scene.protocols = { COMMON_CORE: 1 };
       scene.deltaRank = 5;
@@ -121,6 +122,7 @@ function qualify(width) {
       scene.echoOwned = false;
       scene.signalOwned = false;
       scene.orbitOwned = false;
+      scene.weaponSlotsUsed = 2;
       const legalKind = scene.phase === "A" ? "SPLIT_A" : "SPLIT_B";
       const primary = scene.enemies[0];
       const target = scene.enemies[1];
@@ -167,6 +169,7 @@ function qualify(width) {
       scene.vectorOwned = false;
       scene.echoOwned = false;
       scene.signalOwned = false;
+      scene.weaponSlotsUsed = 2;
       const legalKind = scene.phase === "A" ? "SPLIT_A" : "SPLIT_B";
       const normal = scene.enemies[0];
       const common = scene.enemies[1];
@@ -212,6 +215,7 @@ function qualify(width) {
       scene.vectorOwned = false;
       scene.orbitOwned = false;
       scene.signalOwned = false;
+      scene.weaponSlotsUsed = 2;
       const now = scene.elapsedActiveMs;
       if (now < 300) throw new Error(`EV-3F ECHO fixture needs active time >=300ms, got ${now}`);
       const baseX = scene.friend.x;
@@ -270,6 +274,7 @@ function qualify(width) {
       scene.vectorOwned = false;
       scene.orbitOwned = false;
       scene.echoOwned = false;
+      scene.weaponSlotsUsed = 2;
       scene.spawnAccumulator = -1_000_000;
       const offsets = [80, 320, 560, 750, 940];
       offsets.forEach((offset, index) => {
