@@ -27,7 +27,8 @@ type CR3ControlledQualificationWindow = Window & {
 };
 
 type RuntimeScene = Phaser.Scene & Record<string, any>;
-type RuntimeSystems = Phaser.Scenes.Systems & { sceneUpdate?: (...args: unknown[]) => unknown };
+type SceneUpdateCallback = (time: number, delta: number) => void;
+type RuntimeSystems = Phaser.Scenes.Systems & { sceneUpdate?: SceneUpdateCallback };
 
 export function mountPhaserSurvival(options: SurvivalOptions): PhaserSurvivalController {
   const qualificationWindow = window as CR3ControlledQualificationWindow;
@@ -59,8 +60,8 @@ export function mountPhaserSurvival(options: SurvivalOptions): PhaserSurvivalCon
   }
 
   let cleanupCheckpointRuntime = () => {};
-  let cachedSceneUpdate: RuntimeSystems["sceneUpdate"] = undefined;
-  let patchedSceneUpdate: RuntimeSystems["sceneUpdate"] = undefined;
+  let cachedSceneUpdate: SceneUpdateCallback | undefined;
+  let patchedSceneUpdate: SceneUpdateCallback | undefined;
   let runtimeScene: RuntimeScene | null = null;
 
   if (controlledQualification) {
@@ -77,7 +78,7 @@ export function mountPhaserSurvival(options: SurvivalOptions): PhaserSurvivalCon
     const systems = runtimeScene.sys as RuntimeSystems;
     cachedSceneUpdate = systems.sceneUpdate;
     cleanupCheckpointRuntime = prepareCR3ECheckpointScene(runtimeScene);
-    patchedSceneUpdate = runtimeScene.update.bind(runtimeScene);
+    patchedSceneUpdate = runtimeScene.update.bind(runtimeScene) as SceneUpdateCallback;
 
     // Phaser Systems caches Scene.update separately from scene.update. The
     // qualified scene is already mounted at this point, so bind the bounded
