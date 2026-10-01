@@ -33,94 +33,88 @@ type RuntimePickup = Record<string, any> & {
   checkpointId?: CR1CheckpointId | null;
 };
 
-type QualificationWindow = Window & {
-  __RARE_SHIFT_CR3B_RUNTIME__?: unknown;
-};
-
-function sceneReady(scene: Phaser.Scene | undefined): scene is RuntimeScene {
-  const candidate = scene as RuntimeScene | undefined;
-  return Boolean(
-    candidate
-    && Array.isArray(candidate.enemies)
-    && Array.isArray(candidate.pickups)
-    && candidate.friend
-    && typeof candidate.update === "function"
-    && typeof candidate.updateMovement === "function"
-    && typeof candidate.spawnCheckpoint === "function"
-    && typeof candidate.activateEnemy === "function"
-    && typeof candidate.deltaCombatProfile === "function"
-    && typeof candidate.fireDelta === "function"
-    && typeof candidate.updatePendingDeltaEcho === "function"
-    && typeof candidate.updateEnemies === "function"
-    && typeof candidate.updatePickups === "function"
-    && typeof candidate.updateHud === "function"
-    && typeof candidate.syncTestState === "function"
-    && typeof candidate.spawnPickup === "function"
-    && typeof candidate.killEnemy === "function"
-    && typeof candidate.collectPickup === "function"
-    && Number.isFinite(candidate.elapsedActiveMs),
-  );
-}
-
 function checkpointLabel(checkpointId: CR1CheckpointId): string {
   return checkpointId.replaceAll("_", " ");
 }
 
-export function installCR3ECheckpointPhaserRuntime(game: Phaser.Game): () => void {
-  const qualificationWindow = window as QualificationWindow;
-  if (qualificationWindow.__RARE_SHIFT_CR3B_RUNTIME__ === true) {
-    game.canvas.dataset.cr3e1CheckpointRuntime = "SUPPRESSED_FOR_CONTROLLED_CR3_QUALIFICATION";
-    return () => { delete game.canvas.dataset.cr3e1CheckpointRuntime; };
-  }
+function sceneReady(scene: RuntimeScene): boolean {
+  return Boolean(
+    Array.isArray(scene.enemies)
+    && Array.isArray(scene.pickups)
+    && scene.friend
+    && typeof scene.updateMovement === "function"
+    && typeof scene.spawnCheckpoint === "function"
+    && typeof scene.activateEnemy === "function"
+    && typeof scene.deltaCombatProfile === "function"
+    && typeof scene.fireDelta === "function"
+    && typeof scene.updatePendingDeltaEcho === "function"
+    && typeof scene.updateEnemies === "function"
+    && typeof scene.updatePickups === "function"
+    && typeof scene.updateHud === "function"
+    && typeof scene.syncTestState === "function"
+    && typeof scene.spawnPickup === "function"
+    && typeof scene.killEnemy === "function"
+    && typeof scene.collectPickup === "function"
+    && Number.isFinite(scene.elapsedActiveMs),
+  );
+}
 
+/**
+ * Pre-arms the qualified SurvivalScene before Phaser boot caches its update
+ * callback. Configuration that requires created display objects is deferred
+ * until the first real scene update, after SurvivalScene.create() has run.
+ */
+export function prepareCR3ECheckpointScene(scene: RuntimeScene): () => void {
   let disposed = false;
   let configured = false;
-  let animationFrameId: number | null = null;
-  let scene: RuntimeScene | undefined;
   let gateState: CR3ECheckpointGateState = createCR3ECheckpointGateState();
   let rewardSpawnContext: CR1CheckpointId | null = null;
 
-  let originalUpdate: RuntimeScene["update"] | null = null;
-  let patchedUpdate: RuntimeScene["update"] | null = null;
+  const originalUpdate = scene.update;
   let originalUpdateHud: ((...args: any[]) => any) | null = null;
-  let patchedUpdateHud: ((...args: any[]) => any) | null = null;
   let originalSyncTestState: ((...args: any[]) => any) | null = null;
-  let patchedSyncTestState: ((...args: any[]) => any) | null = null;
   let originalSpawnEnemy: ((...args: any[]) => any) | null = null;
-  let patchedSpawnEnemy: ((...args: any[]) => any) | null = null;
   let originalSpawnPickup: ((...args: any[]) => any) | null = null;
-  let patchedSpawnPickup: ((...args: any[]) => any) | null = null;
   let originalKillEnemy: ((...args: any[]) => any) | null = null;
-  let patchedKillEnemy: ((...args: any[]) => any) | null = null;
   let originalCollectPickup: ((...args: any[]) => any) | null = null;
+
+  let patchedUpdateHud: ((...args: any[]) => any) | null = null;
+  let patchedSyncTestState: ((...args: any[]) => any) | null = null;
+  let patchedSpawnEnemy: ((...args: any[]) => any) | null = null;
+  let patchedSpawnPickup: ((...args: any[]) => any) | null = null;
+  let patchedKillEnemy: ((...args: any[]) => any) | null = null;
   let patchedCollectPickup: ((...args: any[]) => any) | null = null;
 
   const reservedPickups: RuntimePickup[] = [];
 
+  const canvas = (): HTMLCanvasElement | null => {
+    const candidate = scene.sys?.game?.canvas;
+    return candidate instanceof HTMLCanvasElement ? candidate : null;
+  };
+
   const syncDiagnostics = (): void => {
-    if (!scene) return;
-    const canvas = game.canvas;
-    canvas.dataset.cr3e1CheckpointRuntime = configured ? "ACTIVE" : "WAITING";
-    canvas.dataset.directorProgressMs = String(Math.round(gateState.progressMs));
-    canvas.dataset.checkpointGatePhase = gateState.phase;
-    canvas.dataset.checkpointGateActive = gateState.activeCheckpoint ?? "";
-    canvas.dataset.checkpointGatePendingRewards = gateState.pendingRewards.join(",");
-    canvas.dataset.checkpointGateResolved = gateState.resolvedCheckpoints.join(",");
-    canvas.dataset.checkpointGateResolvedCount = String(gateState.resolvedCheckpoints.length);
-    canvas.dataset.checkpointGateBossReady = canStartCR3EBoss(gateState) ? "true" : "false";
-    canvas.dataset.checkpointReservedActive = String(reservedPickups.filter(pickup => pickup.active).length);
-    canvas.dataset.checkpointOrdinarySpawnIndex = String(scene.spawnIndex ?? 0);
-    const elite = scene.enemies.find((enemy: Record<string, any>) => enemy.active && enemy.elite && enemy.checkpointId === gateState.activeCheckpoint) ?? null;
-    canvas.dataset.checkpointEliteX = elite ? String(Math.round(elite.x)) : "";
-    canvas.dataset.checkpointEliteY = elite ? String(Math.round(elite.y)) : "";
-    canvas.dataset.checkpointEliteHp = elite ? String(elite.hp) : "";
-    canvas.dataset.checkpointEliteMaxHp = elite ? String(elite.maxHp) : "";
+    const target = canvas();
+    if (!target) return;
+    target.dataset.cr3e1CheckpointRuntime = configured ? "ACTIVE" : "WAITING";
+    target.dataset.directorProgressMs = String(Math.round(gateState.progressMs));
+    target.dataset.checkpointGatePhase = gateState.phase;
+    target.dataset.checkpointGateActive = gateState.activeCheckpoint ?? "";
+    target.dataset.checkpointGatePendingRewards = gateState.pendingRewards.join(",");
+    target.dataset.checkpointGateResolved = gateState.resolvedCheckpoints.join(",");
+    target.dataset.checkpointGateResolvedCount = String(gateState.resolvedCheckpoints.length);
+    target.dataset.checkpointGateBossReady = canStartCR3EBoss(gateState) ? "true" : "false";
+    target.dataset.checkpointReservedActive = String(reservedPickups.filter(pickup => pickup.active).length);
+    target.dataset.checkpointOrdinarySpawnIndex = String(scene.spawnIndex ?? 0);
+    const elite = scene.enemies?.find((enemy: Record<string, any>) => enemy.active && enemy.elite && enemy.checkpointId === gateState.activeCheckpoint) ?? null;
+    target.dataset.checkpointEliteX = elite ? String(Math.round(elite.x)) : "";
+    target.dataset.checkpointEliteY = elite ? String(Math.round(elite.y)) : "";
+    target.dataset.checkpointEliteHp = elite ? String(elite.hp) : "";
+    target.dataset.checkpointEliteMaxHp = elite ? String(elite.maxHp) : "";
   };
 
   const currentStage = () => stageForCR3ECheckpointGate(gateState);
 
   const syncDirectorState = (): void => {
-    if (!scene) return;
     const stage = currentStage();
     if (stage.id !== scene.directorStage) {
       scene.directorStage = stage.id;
@@ -130,7 +124,6 @@ export function installCR3ECheckpointPhaserRuntime(game: Phaser.Game): () => voi
   };
 
   const advanceDirector = (dt: number): void => {
-    if (!scene) return;
     const advance = advanceCR3ECheckpointGate(gateState, dt);
     gateState = advance.state;
     if (advance.checkpointActivated) {
@@ -145,7 +138,7 @@ export function installCR3ECheckpointPhaserRuntime(game: Phaser.Game): () => voi
   };
 
   const spawnEnemyForDirector = (): void => {
-    if (!scene || gateState.phase !== "RUNNING") return;
+    if (gateState.phase !== "RUNNING") return;
     const slot = scene.enemies.find((enemy: Record<string, any>) => !enemy.active);
     if (!slot) return;
     const spec = buildDirectedSpawnSpec(
@@ -160,7 +153,7 @@ export function installCR3ECheckpointPhaserRuntime(game: Phaser.Game): () => voi
   };
 
   const paintGateHud = (): void => {
-    if (!scene?.stageText) return;
+    if (!scene.stageText) return;
     const stage = currentStage();
     const active = gateState.activeCheckpoint;
     const label = active
@@ -170,7 +163,6 @@ export function installCR3ECheckpointPhaserRuntime(game: Phaser.Game): () => voi
   };
 
   const allocateReservedPickups = (): void => {
-    if (!scene) return;
     for (let index = 0; index < CR3E_CHECKPOINT_REWARD_RESERVE_SIZE; index += 1) {
       const view = scene.add.container(-500, -500).setDepth(15).setVisible(false);
       const pickup: RuntimePickup = {
@@ -196,7 +188,6 @@ export function installCR3ECheckpointPhaserRuntime(game: Phaser.Game): () => voi
     offsetIndex: number,
     checkpointId: CR1CheckpointId | null,
   ): void => {
-    if (!scene) return;
     pickup.active = true;
     pickup.kind = kind;
     pickup.magnetized = checkpointId !== null;
@@ -207,12 +198,13 @@ export function installCR3ECheckpointPhaserRuntime(game: Phaser.Game): () => voi
     pickup.view.setPosition(pickup.x, pickup.y).setVisible(true).setAlpha(1);
   };
 
-  const configure = (candidate: RuntimeScene): void => {
-    scene = candidate;
+  const configureAfterCreate = (): void => {
+    if (configured) return;
+    if (!sceneReady(scene)) throw new Error("CR-3E.1 SurvivalScene was not ready on its first update.");
+
     gateState = advanceCR3ECheckpointGate(createCR3ECheckpointGateState(), Math.max(0, scene.elapsedActiveMs)).state;
     allocateReservedPickups();
 
-    originalUpdate = scene.update;
     originalUpdateHud = scene.updateHud;
     originalSyncTestState = scene.syncTestState;
     originalSpawnEnemy = scene.spawnEnemy;
@@ -276,9 +268,7 @@ export function installCR3ECheckpointPhaserRuntime(game: Phaser.Game): () => voi
       if (checkpointId !== null) {
         pickup.checkpointId = null;
         const collected = collectCR3ECheckpointReward(gateState, checkpointId, kind);
-        if (!collected.accepted) {
-          throw new Error(`CR-3E.1 rejected delivered checkpoint reward ${checkpointId}:${kind}.`);
-        }
+        if (!collected.accepted) throw new Error(`CR-3E.1 rejected delivered checkpoint reward ${checkpointId}:${kind}.`);
         gateState = collected.state;
         if (collected.checkpointResolved) {
           this.spawnAccumulator = 0;
@@ -306,112 +296,95 @@ export function installCR3ECheckpointPhaserRuntime(game: Phaser.Game): () => voi
     };
     scene.syncTestState = patchedSyncTestState;
 
-    patchedUpdate = function (this: RuntimeScene, _time: number, delta: number): void {
-      if (this.dead || this.draftOpen) { this.syncTestState(); return; }
-      const dt = Math.min(50, Math.max(0, delta));
-      this.elapsedActiveMs += dt;
-      this.updateMovement(dt / 1000);
-      advanceDirector(dt);
-      const stage = currentStage();
-      if (gateState.phase === "RUNNING" && stage.spawnIntervalMs !== null) {
-        this.spawnAccumulator += dt;
-        while (this.spawnAccumulator >= stage.spawnIntervalMs) {
-          this.spawnAccumulator -= stage.spawnIntervalMs;
-          this.spawnEnemy();
-        }
-      } else {
-        this.spawnAccumulator = 0;
-      }
-
-      this.attackAccumulator += dt;
-      const profile = this.deltaCombatProfile();
-      if (this.attackAccumulator >= profile.cooldownMs) {
-        this.attackAccumulator %= profile.cooldownMs;
-        this.fireDelta(profile);
-      }
-      this.updatePendingDeltaEcho();
-
-      if (this.vectorOwned) {
-        const vectorProfile = this.vectorCombatProfile();
-        if (this.vectorTransferState.armed && !isVectorTransferArmed(this.vectorTransferState, this.elapsedActiveMs)) {
-          this.vectorTransferState = this.emptyVectorTransfer ? this.emptyVectorTransfer() : { armed: false, expiresAtMs: null, phase: null };
-          this.vectorTransferExpiries += 1;
-        }
-        this.vectorAccumulator = Math.min(vectorProfile.cooldownMs, this.vectorAccumulator + dt);
-        this.refreshVectorTarget();
-        if (this.vectorAccumulator >= vectorProfile.cooldownMs && this.activeVectorProjectileCount() < vectorProfile.maxInFlight) {
-          const target = this.currentVectorTarget();
-          if (target) {
-            this.fireVector(target);
-            this.vectorAccumulator = 0;
-          }
-        }
-        this.updateVectorProjectiles(dt / 1000);
-      }
-
-      if (this.orbitOwned) this.updateOrbit(dt);
-      else this.orbitNode.clear().setVisible(false);
-
-      if (this.echoOwned) this.updateEcho(dt);
-      else this.hideEchoViews();
-
-      if (this.signalOwned) this.updateSignalArc(dt);
-      else this.signalFx.clear().setVisible(false);
-
-      this.updateEnemies(dt / 1000);
-      this.updateBeaconProjectiles(dt / 1000);
-      this.updatePickups(dt / 1000);
-      this.updateHud();
-
-      if (!this.qualified && v21QualificationReached({
-        elapsedMs: this.elapsedActiveMs,
-        phase: this.phase,
-        hp: this.hp,
-        level: this.level,
-        xp: this.xp,
-        kills: this.kills,
-        shifts: this.shifts,
-        deltaRank: this.deltaRank,
-      })) {
-        this.qualified = true;
-        this.statusText.setText("V2-1 LOOP COMPLETE // keep surviving or review the build.");
-      }
-      this.syncTestState();
-    };
-    scene.update = patchedUpdate;
-
     syncDirectorState();
-    paintGateHud();
     configured = true;
-    scene.syncTestState();
+    syncDiagnostics();
   };
 
-  const tick = (): void => {
+  const patchedUpdate = function (this: RuntimeScene, _time: number, delta: number): void {
     if (disposed) return;
-    if (!configured) {
-      const candidate = game.scene.getScene("RareShiftV21Survival");
-      if (sceneReady(candidate)) {
-        try {
-          configure(candidate);
-        } catch (cause) {
-          game.canvas.dataset.cr3e1CheckpointRuntimeError = cause instanceof Error ? cause.message : String(cause);
-          disposed = true;
-          return;
-        }
+    if (!configured) configureAfterCreate();
+    if (this.dead || this.draftOpen) { this.syncTestState(); return; }
+
+    const dt = Math.min(50, Math.max(0, delta));
+    this.elapsedActiveMs += dt;
+    this.updateMovement(dt / 1000);
+    advanceDirector(dt);
+    const stage = currentStage();
+    if (gateState.phase === "RUNNING" && stage.spawnIntervalMs !== null) {
+      this.spawnAccumulator += dt;
+      while (this.spawnAccumulator >= stage.spawnIntervalMs) {
+        this.spawnAccumulator -= stage.spawnIntervalMs;
+        this.spawnEnemy();
       }
     } else {
-      syncDiagnostics();
+      this.spawnAccumulator = 0;
     }
-    animationFrameId = window.requestAnimationFrame(tick);
+
+    this.attackAccumulator += dt;
+    const profile = this.deltaCombatProfile();
+    if (this.attackAccumulator >= profile.cooldownMs) {
+      this.attackAccumulator %= profile.cooldownMs;
+      this.fireDelta(profile);
+    }
+    this.updatePendingDeltaEcho();
+
+    if (this.vectorOwned) {
+      const vectorProfile = this.vectorCombatProfile();
+      if (this.vectorTransferState.armed && !isVectorTransferArmed(this.vectorTransferState, this.elapsedActiveMs)) {
+        this.vectorTransferState = this.emptyVectorTransfer ? this.emptyVectorTransfer() : { armed: false, expiresAtMs: null, phase: null };
+        this.vectorTransferExpiries += 1;
+      }
+      this.vectorAccumulator = Math.min(vectorProfile.cooldownMs, this.vectorAccumulator + dt);
+      this.refreshVectorTarget();
+      if (this.vectorAccumulator >= vectorProfile.cooldownMs && this.activeVectorProjectileCount() < vectorProfile.maxInFlight) {
+        const target = this.currentVectorTarget();
+        if (target) {
+          this.fireVector(target);
+          this.vectorAccumulator = 0;
+        }
+      }
+      this.updateVectorProjectiles(dt / 1000);
+    }
+
+    if (this.orbitOwned) this.updateOrbit(dt);
+    else this.orbitNode.clear().setVisible(false);
+
+    if (this.echoOwned) this.updateEcho(dt);
+    else this.hideEchoViews();
+
+    if (this.signalOwned) this.updateSignalArc(dt);
+    else this.signalFx.clear().setVisible(false);
+
+    this.updateEnemies(dt / 1000);
+    this.updateBeaconProjectiles(dt / 1000);
+    this.updatePickups(dt / 1000);
+    this.updateHud();
+
+    if (!this.qualified && v21QualificationReached({
+      elapsedMs: this.elapsedActiveMs,
+      phase: this.phase,
+      hp: this.hp,
+      level: this.level,
+      xp: this.xp,
+      kills: this.kills,
+      shifts: this.shifts,
+      deltaRank: this.deltaRank,
+    })) {
+      this.qualified = true;
+      this.statusText.setText("V2-1 LOOP COMPLETE // keep surviving or review the build.");
+    }
+    this.syncTestState();
   };
 
-  animationFrameId = window.requestAnimationFrame(tick);
+  // This assignment occurs before Phaser boot. Phaser therefore caches the
+  // checkpoint-aware callback, rather than the already-qualified base callback.
+  scene.update = patchedUpdate;
 
   return () => {
     disposed = true;
-    if (animationFrameId !== null) window.cancelAnimationFrame(animationFrameId);
-    if (scene) {
-      if (originalUpdate && patchedUpdate && scene.update === patchedUpdate) scene.update = originalUpdate;
+    if (scene.update === patchedUpdate) scene.update = originalUpdate;
+    if (configured) {
       if (originalUpdateHud && patchedUpdateHud && scene.updateHud === patchedUpdateHud) scene.updateHud = originalUpdateHud;
       if (originalSyncTestState && patchedSyncTestState && scene.syncTestState === patchedSyncTestState) scene.syncTestState = originalSyncTestState;
       if (originalSpawnEnemy && patchedSpawnEnemy && scene.spawnEnemy === patchedSpawnEnemy) scene.spawnEnemy = originalSpawnEnemy;
@@ -424,6 +397,10 @@ export function installCR3ECheckpointPhaserRuntime(game: Phaser.Game): () => voi
       }
       scene.pickups = scene.pickups.filter((pickup: RuntimePickup) => !pickup.reservedForCheckpoint);
     }
-    delete game.canvas.dataset.cr3e1CheckpointRuntime;
+    const target = canvas();
+    if (target) {
+      delete target.dataset.cr3e1CheckpointRuntime;
+      delete target.dataset.cr3e1CheckpointPrearmed;
+    }
   };
 }
