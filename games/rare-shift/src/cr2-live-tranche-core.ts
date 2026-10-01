@@ -30,9 +30,6 @@ import type { DeltaProfile } from "./phase-combat-core.ts";
 import type { SignalArcRankProfile } from "./signal-arc-core.ts";
 import type { VectorRankProfile } from "./vector-core.ts";
 import {
-  buildV23ADraft,
-  useV23ARefract,
-  type V23BuildState,
   type V23DraftCandidate,
   type V23DraftResult,
   type V23ProtocolFamily,
@@ -57,7 +54,7 @@ function protocolRank(snapshot: CR2LiveSnapshot, family: V23ProtocolFamily): CR2
   return rank as CR2ProtocolRank;
 }
 
-function applyCandidateWithUniversalPassives(state: V23BuildState, candidate: V23DraftCandidate): V23BuildState {
+function applyCandidateWithUniversalPassives(state: ReturnType<typeof buildCR2StateFromLive>, candidate: V23DraftCandidate): ReturnType<typeof buildCR2StateFromLive> {
   const next = applyCR2DraftCandidate(state, candidate);
   if (candidate.candidateType !== "UTILITY" || candidate.familyId !== "FIELD_REPAIR") return next;
   const repairBonusHp = buildCR2PlayerProtocolRuntime(state.protocols).repairBonusHp;
@@ -70,13 +67,12 @@ export function buildCR2DraftFromLive(seed: number, level: number, snapshot: CR2
 }
 
 /**
- * Live Protocol integration deliberately excludes Evolution candidates until
- * the five evolved combat behaviors are wired and separately qualified.
- * This keeps Protocol drafting real without ever exposing a selectable no-op
- * Evolution in the Phaser scene.
+ * Compatibility name retained for the already-qualified Phaser integration.
+ * EV-3G promotes this bridge from Protocol-only drafting to the full CR-2
+ * production draft now that all five evolved combat runtimes are qualified.
  */
 export function buildCR2ProtocolDraftFromLive(seed: number, level: number, snapshot: CR2LiveSnapshot): V23DraftResult {
-  return buildV23ADraft(seed, level, buildCR2StateFromLive(snapshot));
+  return buildCR2DraftFromLive(seed, level, snapshot);
 }
 
 export function applyCR2DraftChoiceToLive(
@@ -95,20 +91,18 @@ export function applyCR2DraftChoiceToLive(
   });
 }
 
+/**
+ * Compatibility name retained for the Phaser scene. Selection now delegates
+ * to the full CR-2 draft so an eligible Evolution card is no longer rejected
+ * after EV-3F production-runtime qualification.
+ */
 export function applyCR2ProtocolDraftChoiceToLive(
   seed: number,
   level: number,
   snapshot: CR2LiveSnapshot,
   candidateId: string,
 ): CR2LiveDraftSelection {
-  const state = buildCR2StateFromLive(snapshot);
-  const draft = buildV23ADraft(seed, level, state);
-  const selected = draft.choices.find(candidate => candidate.candidateId === candidateId);
-  if (!selected) throw new Error(`CR-2 Protocol draft choice ${candidateId} is not present in the current legal triple.`);
-  return Object.freeze({
-    selected,
-    projection: projectCR2StateToLive(applyCandidateWithUniversalPassives(state, selected)),
-  });
+  return applyCR2DraftChoiceToLive(seed, level, snapshot, candidateId);
 }
 
 export function useCR2RefractFromLive(seed: number, level: number, snapshot: CR2LiveSnapshot): CR2LiveRefractResult {
@@ -116,9 +110,12 @@ export function useCR2RefractFromLive(seed: number, level: number, snapshot: CR2
   return Object.freeze({ projection: projectCR2StateToLive(result.state), draft: result.draft });
 }
 
+/**
+ * Compatibility name retained for the Phaser scene. REFRACT now preserves the
+ * full CR-2 Evolution-priority rules instead of falling back to V2-3A only.
+ */
 export function useCR2ProtocolRefractFromLive(seed: number, level: number, snapshot: CR2LiveSnapshot): CR2LiveRefractResult {
-  const result = useV23ARefract(seed, level, buildCR2StateFromLive(snapshot));
-  return Object.freeze({ projection: projectCR2StateToLive(result.state), draft: result.draft });
+  return useCR2RefractFromLive(seed, level, snapshot);
 }
 
 export function collectCR2EvolutionCoreLive(snapshot: CR2LiveSnapshot, count = 1): CR2LiveProjection {

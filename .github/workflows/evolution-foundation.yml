@@ -1,0 +1,170 @@
+name: RARE SHIFT Evolution Foundation
+
+on:
+  push:
+    branches:
+      - feature/evolution-runtime
+    paths:
+      - ".github/workflows/evolution-foundation.yml"
+      - "games/rare-shift/v2.tsx"
+      - "games/rare-shift/src/evolution-*.ts"
+      - "games/rare-shift/tests/evolution-*.test.ts"
+      - "scripts/evolution-*.mjs"
+      - "games/rare-shift/src/phase-combat-core.ts"
+      - "games/rare-shift/src/vector-core.ts"
+      - "games/rare-shift/src/orbit-core.ts"
+      - "games/rare-shift/src/echo-core.ts"
+      - "games/rare-shift/src/signal-arc-core.ts"
+      - "games/rare-shift/src/cr2-*.ts"
+      - "games/rare-shift/src/progression-core.ts"
+      - "games/rare-shift/src/phaser-survival.ts"
+      - "games/rare-shift/tests/cr-2-*.test.ts"
+      - "games/rare-shift/tests/v2-3b*.test.ts"
+      - "scripts/cr2-protocol-live-browser.mjs"
+      - "scripts/v2-*.mjs"
+      - "scripts/cr1-survival-director-browser.mjs"
+      - "package.json"
+      - "tsconfig.core.json"
+      - "games/rare-shift/tsconfig.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify-evolution-foundation:
+    name: EV-1/EV-2/EV-3A-G/EV-5 Evolution closeout qualification
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --init
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      FRIENDSDK_ARCHIVE: vendor/rarefriends-friendsdk-0.1.3.tgz
+      FRIENDSDK_SHA256: 8f156c469a15786e3c649b35d092e86ec6242ff30415b7ee7c451763a816e789
+      FRIENDSDK_URL: https://github.com/spokesz/friendsdk/releases/download/v0.1.3/rarefriends-friendsdk-0.1.3.tgz
+
+    steps:
+      - name: Checkout exact Evolution head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Trust mounted Git workspace inside container
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git rev-parse --show-toplevel
+          git rev-parse HEAD
+
+      - name: Verify clean committed candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git diff --exit-code
+          git diff --cached --exit-code
+          test -z "$(git status --short)"
+
+      - name: Fetch and verify FriendSDK v0.1.3
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p vendor
+          curl --fail --location --retry 5 --retry-all-errors --connect-timeout 20 --max-time 180 --output "$FRIENDSDK_ARCHIVE" "$FRIENDSDK_URL"
+          printf '%s  %s\n' "$FRIENDSDK_SHA256" "$FRIENDSDK_ARCHIVE" | sha256sum --check --strict
+
+      - name: Install project dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: EV-1/EV-2 deterministic Evolution contracts
+        run: npm run test:evolution
+
+      - name: CR-2 deterministic contracts
+        run: npm run test:cr-2a
+
+      - name: Inherited deterministic regression through CR-1 and B5
+        shell: bash
+        run: |
+          npm run test:cr-1
+          npm run test:core
+          npm run test:v2-combat
+          npm run test:v2-2e-cross
+          npm run test:v2-2-pointer
+          npm run test:v2-3a
+          npm run test:v2-3b1-delta
+          npm run test:v2-3b2-vector
+          npm run test:v2-3b3-orbit
+          npm run test:v2-3b4-echo
+          npm run test:v2-3b5-signal
+
+      - name: TypeScript and FriendSDK build qualification
+        shell: bash
+        run: |
+          npm run typecheck:core
+          npm run typecheck
+          npm run check
+          npm run build
+          npm run test:sdk
+
+      - name: Verify base Phaser Evolution guard remains fail-closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F 'buildCR2ProtocolDraftFromLive' games/rare-shift/src/phaser-survival.ts >/dev/null
+          grep -F 'Evolution projection reached Phaser before evolved combat runtime qualification.' games/rare-shift/src/phaser-survival.ts >/dev/null
+
+      - name: EV-3A RECONSTRUCTION FIELD controlled Phaser qualification
+        run: npm run test:evolution-reconstruction-browser
+
+      - name: EV-3B PRISM LANCE controlled Phaser qualification
+        run: npm run test:evolution-prism-browser
+
+      - name: EV-3C SYNC HALO controlled Phaser qualification
+        run: npm run test:evolution-sync-halo-browser
+
+      - name: EV-3D MEMORY COLLAPSE controlled Phaser qualification
+        run: node --experimental-strip-types scripts/evolution-memory-collapse-browser.mjs
+
+      - name: EV-3E CHAIN RESONANCE controlled Phaser qualification
+        shell: bash
+        run: |
+          node --experimental-strip-types --test games/rare-shift/tests/evolution-chain-resonance-core.test.ts
+          node --experimental-strip-types scripts/evolution-chain-resonance-browser.mjs
+
+      - name: EV-3F Production Evolution runtime closeout
+        shell: bash
+        run: |
+          node --experimental-strip-types --test games/rare-shift/tests/evolution-phaser-runtime-core.test.ts
+          node --experimental-strip-types scripts/evolution-production-runtime-browser.mjs
+
+      - name: EV-3G Natural CR-2 Evolution selection qualification
+        run: node --experimental-strip-types scripts/evolution-natural-selection-browser.mjs
+
+      - name: Live Protocol and REFRACT browser qualification
+        run: npm run test:cr-2-browser
+
+      - name: Inherited browser regression through B5
+        shell: bash
+        run: |
+          npm run test:v2-3b5-signal-browser
+          npm run test:v2-1-browser
+          npm run test:v2-2a-browser
+          npm run test:v2-2b-browser
+          npm run test:v2-2c-browser
+          npm run test:v2-2d-browser
+          npm run test:v2-2e-browser
+          npm run test:v2-3b1-delta-browser
+          npm run test:v2-3b2-vector-browser
+          npm run test:v2-3b3-orbit-browser
+          npm run test:v2-3b4-echo-browser
+
+      - name: Natural CR-1 Stage-IV regression
+        run: npm run test:cr-1-browser

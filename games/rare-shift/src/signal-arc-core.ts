@@ -167,10 +167,11 @@ export function signalArcForwardDegree(
   phase: Phase,
   visited: ReadonlySet<number>,
   profile: SignalArcProfile,
-  commonBonusAvailable: boolean,
+  commonBonusAuthority: number | boolean,
 ): number {
   const commonBonus = profile.commonRelayBonus ?? 0;
-  const nextRange = profile.relayRange + (commonBonusAvailable && candidate.kind === "TRACE" ? commonBonus : 0);
+  const hasCommonBonusAuthority = typeof commonBonusAuthority === "boolean" ? commonBonusAuthority : commonBonusAuthority > 0;
+  const nextRange = profile.relayRange + (hasCommonBonusAuthority && candidate.kind === "TRACE" ? commonBonus : 0);
   const blocked = new Set(visited);
   blocked.add(candidate.id);
   return legalCandidates(candidates, phase, candidate.x, candidate.y, nextRange, blocked).length;
@@ -183,7 +184,7 @@ function selectRelayCandidate(
   maxRange: number,
   visited: ReadonlySet<number>,
   profile: SignalArcProfile,
-  commonBonusAvailableAfterCurrentEdge: boolean,
+  commonBonusUsesRemainingAfterCurrentEdge: number,
 ): { readonly candidate: SignalArcCandidate; readonly forwardDegree: number | null } | null {
   const legal = legalCandidates(candidates, phase, origin.x, origin.y, maxRange, visited);
   if (legal.length === 0) return null;
@@ -196,7 +197,7 @@ function selectRelayCandidate(
   let bestDegree = -1;
   let bestDistanceSq = Number.POSITIVE_INFINITY;
   for (const candidate of legal) {
-    const degree = signalArcForwardDegree(candidate, candidates, phase, visited, profile, commonBonusAvailableAfterCurrentEdge);
+    const degree = signalArcForwardDegree(candidate, candidates, phase, visited, profile, commonBonusUsesRemainingAfterCurrentEdge);
     const candidateDistanceSq = distanceSq(candidate.x, candidate.y, origin.x, origin.y);
     if (
       degree > bestDegree
@@ -237,17 +238,17 @@ export function planSignalArc(
   }));
 
   let source = initial;
-  let commonBonusAvailable = (profile.commonBonusUses ?? 0) > 0;
+  let commonBonusUsesRemaining = Math.max(0, Math.floor(profile.commonBonusUses ?? 0));
   const commonBonus = profile.commonRelayBonus ?? 0;
 
   for (let index = 1; index < profile.maxTargets; index += 1) {
-    const currentEdgeUsesBonus = commonBonusAvailable && source.kind === "TRACE" && commonBonus > 0;
+    const currentEdgeUsesBonus = commonBonusUsesRemaining > 0 && source.kind === "TRACE" && commonBonus > 0;
     const edgeRange = profile.relayRange + (currentEdgeUsesBonus ? commonBonus : 0);
-    const bonusAfterCurrentEdge = commonBonusAvailable && !currentEdgeUsesBonus;
-    const selected = selectRelayCandidate(snapshot, phase, source, edgeRange, visited, profile, bonusAfterCurrentEdge);
+    const bonusUsesAfterCurrentEdge = commonBonusUsesRemaining - (currentEdgeUsesBonus ? 1 : 0);
+    const selected = selectRelayCandidate(snapshot, phase, source, edgeRange, visited, profile, bonusUsesAfterCurrentEdge);
     if (!selected) break;
 
-    if (currentEdgeUsesBonus) commonBonusAvailable = false;
+    if (currentEdgeUsesBonus) commonBonusUsesRemaining -= 1;
     const candidate = selected.candidate;
     visited.add(candidate.id);
     path.push(Object.freeze({

@@ -1,0 +1,424 @@
+import type Phaser from "phaser";
+import {
+  buildReconstructionCommonProfile,
+  canScheduleReconstructionCommon,
+  isReconstructionCommonTargetEligible,
+  PRISM_REFRACTION_DAMAGE,
+  PRISM_REFRACTION_RADIUS,
+  reconstructionCommonHitsTarget,
+  selectPrismRefractionTarget,
+  type ReconstructionCommonProfile,
+} from "./evolution-runtime-core.ts";
+import type { V2EnemyKind } from "./phase-combat-core.ts";
+import type { Phase, SelectedFramePair } from "./types.ts";
+import type { V23ProtocolFamily, V23WeaponFamily } from "./progression-core.ts";
+
+const EV3A_TARGET_ID = 9_003_001;
+const EV3B_PRIMARY_ID = 9_003_201;
+const EV3B_REFRACTION_ID = 9_003_202;
+const EV3B_GHOST_ID = 9_003_203;
+
+type EnemyRuntimeLike = {
+  id: number;
+  active: boolean;
+  kind: V2EnemyKind;
+  hp: number;
+  maxHp: number;
+  x: number;
+  y: number;
+  staggerUntilMs: number;
+  view: Phaser.GameObjects.Container;
+};
+
+type FriendRuntimeLike = {
+  x: number;
+  y: number;
+};
+
+type ActivateEnemyLike = (
+  slot: EnemyRuntimeLike,
+  id: number,
+  kind: V2EnemyKind,
+  x: number,
+  y: number,
+  elite: boolean,
+  checkpointId: null,
+  hpMultiplier?: number,
+) => void;
+
+type ReconstructionQualificationScene = Phaser.Scene & {
+  pair: SelectedFramePair;
+  friend: FriendRuntimeLike;
+  enemies: EnemyRuntimeLike[];
+  elapsedActiveMs: number;
+  dead: boolean;
+  draftOpen: boolean;
+  deltaRank: number;
+  deltaPrimaryPulses: number;
+  attackAccumulator: number;
+  evolvedWeapons: Partial<Record<V23WeaponFamily, boolean>>;
+  protocols: Partial<Record<V23ProtocolFamily, number>>;
+  fireDelta(profile: unknown): void;
+  activateEnemy: ActivateEnemyLike;
+  killEnemy(enemy: EnemyRuntimeLike): void;
+};
+
+type VectorProjectileLike = {
+  active: boolean;
+  targetId: number;
+  launchPhase: Phase;
+  profile: { readonly rank: number } | null;
+  hitIds: number[];
+};
+
+type PrismQualificationScene = Phaser.Scene & {
+  phase: Phase;
+  friend: FriendRuntimeLike;
+  enemies: EnemyRuntimeLike[];
+  elapsedActiveMs: number;
+  dead: boolean;
+  draftOpen: boolean;
+  vectorOwned: boolean;
+  vectorRank: number;
+  vectorAccumulator: number;
+  vectorShots: number;
+  vectorHits: number;
+  vectorPenetrationHits: number;
+  weaponSlotsUsed: number;
+  evolvedWeapons: Partial<Record<V23WeaponFamily, boolean>>;
+  protocols: Partial<Record<V23ProtocolFamily, number>>;
+  activateEnemy: ActivateEnemyLike;
+  killEnemy(enemy: EnemyRuntimeLike): void;
+  applyVectorProjectileHit(projectile: VectorProjectileLike, hitIndex: number): void;
+};
+
+type PendingReconstruction = {
+  readonly profile: ReconstructionCommonProfile;
+  readonly scheduledAtMs: number;
+  readonly originX: number;
+  readonly originY: number;
+};
+
+function reconstructionSceneReady(scene: ReconstructionQualificationScene | undefined): scene is ReconstructionQualificationScene {
+  return Boolean(
+    scene
+    && scene.friend
+    && Array.isArray(scene.enemies)
+    && typeof scene.fireDelta === "function"
+    && typeof scene.activateEnemy === "function"
+    && typeof scene.killEnemy === "function",
+  );
+}
+
+function prismSceneReady(scene: PrismQualificationScene | undefined): scene is PrismQualificationScene {
+  return Boolean(
+    scene
+    && scene.friend
+    && Array.isArray(scene.enemies)
+    && typeof scene.applyVectorProjectileHit === "function"
+    && typeof scene.activateEnemy === "function"
+    && typeof scene.killEnemy === "function",
+  );
+}
+
+function setDataset(canvas: HTMLCanvasElement, name: string, value: string | number | boolean): void {
+  canvas.dataset[name] = String(value);
+}
+
+export function installReconstructionFieldQualification(game: Phaser.Game): () => void {
+  let scene: ReconstructionQualificationScene | undefined;
+  let originalFireDelta: ReconstructionQualificationScene["fireDelta"] | null = null;
+  let patchedFireDelta: ReconstructionQualificationScene["fireDelta"] | null = null;
+  let target: EnemyRuntimeLike | null = null;
+  let pending: PendingReconstruction | null = null;
+  let lastScheduledAtMs: number | null = null;
+  let schedules = 0;
+  let fires = 0;
+  let hits = 0;
+  let lastScheduleAtMs: number | null = null;
+  let lastFireAtMs: number | null = null;
+  let configured = false;
+  let disposed = false;
+  let animationFrameId: number | null = null;
+
+  const syncDiagnostics = (): void => {
+    if (!configured || !scene || !target) return;
+    const canvas = game.canvas;
+    setDataset(canvas, "reconstructionQualificationFixture", "RECONSTRUCTION_FIELD");
+    setDataset(canvas, "reconstructionEvolved", scene.evolvedWeapons.DELTA === true);
+    setDataset(canvas, "reconstructionSchedules", schedules);
+    setDataset(canvas, "reconstructionFires", fires);
+    setDataset(canvas, "reconstructionHits", hits);
+    setDataset(canvas, "reconstructionPending", pending !== null);
+    setDataset(canvas, "reconstructionLastScheduleAtMs", lastScheduleAtMs ?? "");
+    setDataset(canvas, "reconstructionLastFireAtMs", lastFireAtMs ?? "");
+    setDataset(canvas, "reconstructionTargetId", target.id);
+    setDataset(canvas, "reconstructionTargetHp", target.hp);
+  };
+
+  const fireReconstruction = (event: PendingReconstruction): void => {
+    if (!scene || scene.dead) return;
+    fires += 1;
+    lastFireAtMs = scene.elapsedActiveMs;
+    const fx = scene.add.graphics().setPosition(event.originX, event.originY).setDepth(26);
+    fx.fillStyle(0xe8edf2, 0.32);
+    for (const point of event.profile.points) {
+      fx.fillRect(point.x * event.profile.worldScale - 3, point.y * event.profile.worldScale - 3, 6, 6);
+    }
+    scene.time.delayedCall(90, () => fx.destroy());
+
+    for (const enemy of scene.enemies) {
+      if (!enemy.active || !isReconstructionCommonTargetEligible(enemy.kind)) continue;
+      if (!reconstructionCommonHitsTarget(event.profile, enemy.x - event.originX, enemy.y - event.originY)) continue;
+      enemy.hp -= event.profile.damage;
+      hits += 1;
+      if (enemy.hp <= 0) scene.killEnemy(enemy);
+    }
+    syncDiagnostics();
+  };
+
+  const scheduleReconstruction = (): void => {
+    if (!scene || pending) return;
+    const profile = buildReconstructionCommonProfile(scene.pair.a.rows, scene.pair.b.rows, scene.evolvedWeapons.DELTA === true);
+    if (!profile || profile.points.length === 0) return;
+    if (!canScheduleReconstructionCommon(true, lastScheduledAtMs, scene.elapsedActiveMs)) return;
+    lastScheduledAtMs = scene.elapsedActiveMs;
+    lastScheduleAtMs = scene.elapsedActiveMs;
+    schedules += 1;
+    pending = Object.freeze({
+      profile,
+      scheduledAtMs: scene.elapsedActiveMs + profile.delayMs,
+      originX: scene.friend.x,
+      originY: scene.friend.y,
+    });
+    syncDiagnostics();
+  };
+
+  const configure = (candidate: ReconstructionQualificationScene): void => {
+    scene = candidate;
+    const profile = buildReconstructionCommonProfile(scene.pair.a.rows, scene.pair.b.rows, true);
+    if (!profile || profile.points.length === 0) {
+      throw new Error("EV-3A RECONSTRUCTION qualification requires at least one canonical A-intersection-B point.");
+    }
+    const slot = scene.enemies.find(enemy => !enemy.active);
+    if (!slot) throw new Error("EV-3A RECONSTRUCTION qualification could not reserve an enemy slot.");
+    const targetPoint = [...profile.points].sort((a, b) => Math.hypot(b.x, b.y) - Math.hypot(a.x, a.y))[0];
+
+    scene.deltaRank = 5;
+    scene.evolvedWeapons = { ...scene.evolvedWeapons, DELTA: true };
+    scene.protocols = { ...scene.protocols, COMMON_CORE: Math.max(1, scene.protocols.COMMON_CORE ?? 0) };
+    scene.attackAccumulator = 0;
+    scene.activateEnemy(
+      slot,
+      EV3A_TARGET_ID,
+      "TRACE",
+      scene.friend.x + targetPoint.x * profile.worldScale,
+      scene.friend.y + targetPoint.y * profile.worldScale,
+      false,
+      null,
+      1000,
+    );
+    slot.staggerUntilMs = Number.POSITIVE_INFINITY;
+    target = slot;
+
+    const canvas = game.canvas;
+    setDataset(canvas, "reconstructionDamage", profile.damage);
+    setDataset(canvas, "reconstructionDelayMs", profile.delayMs);
+    setDataset(canvas, "reconstructionRearmMs", profile.rearmMs);
+    setDataset(canvas, "reconstructionPointCount", profile.points.length);
+    setDataset(canvas, "reconstructionInstallPrimaryPulses", scene.deltaPrimaryPulses);
+    setDataset(canvas, "reconstructionTargetInitialHp", target.hp);
+
+    originalFireDelta = scene.fireDelta;
+    patchedFireDelta = function (this: ReconstructionQualificationScene, deltaProfile: unknown): void {
+      originalFireDelta?.call(this, deltaProfile);
+      scheduleReconstruction();
+    };
+    scene.fireDelta = patchedFireDelta;
+    configured = true;
+    syncDiagnostics();
+  };
+
+  const tick = (): void => {
+    if (disposed) return;
+    if (!configured) {
+      const candidate = game.scene.getScene("RareShiftV21Survival") as ReconstructionQualificationScene | undefined;
+      if (reconstructionSceneReady(candidate)) {
+        try {
+          configure(candidate);
+        } catch (cause) {
+          game.canvas.dataset.reconstructionQualificationError = cause instanceof Error ? cause.message : String(cause);
+          disposed = true;
+          return;
+        }
+      }
+    } else if (scene && pending && !scene.dead && !scene.draftOpen && scene.elapsedActiveMs >= pending.scheduledAtMs) {
+      const event = pending;
+      pending = null;
+      fireReconstruction(event);
+    }
+    syncDiagnostics();
+    animationFrameId = window.requestAnimationFrame(tick);
+  };
+
+  animationFrameId = window.requestAnimationFrame(tick);
+
+  return () => {
+    disposed = true;
+    if (animationFrameId !== null) window.cancelAnimationFrame(animationFrameId);
+    if (scene && originalFireDelta && patchedFireDelta && scene.fireDelta === patchedFireDelta) {
+      scene.fireDelta = originalFireDelta;
+    }
+    pending = null;
+  };
+}
+
+export function installPrismLanceQualification(game: Phaser.Game): () => void {
+  let scene: PrismQualificationScene | undefined;
+  let originalApplyVectorHit: PrismQualificationScene["applyVectorProjectileHit"] | null = null;
+  let patchedApplyVectorHit: PrismQualificationScene["applyVectorProjectileHit"] | null = null;
+  let primary: EnemyRuntimeLike | null = null;
+  let refractionTarget: EnemyRuntimeLike | null = null;
+  let ghostTarget: EnemyRuntimeLike | null = null;
+  let refractions = 0;
+  let hits = 0;
+  let lastPrimaryId: number | null = null;
+  let lastTargetId: number | null = null;
+  let lastDistanceSq: number | null = null;
+  let configured = false;
+  let disposed = false;
+  let animationFrameId: number | null = null;
+
+  const syncDiagnostics = (): void => {
+    if (!configured || !scene || !primary || !refractionTarget || !ghostTarget) return;
+    const canvas = game.canvas;
+    setDataset(canvas, "prismQualificationFixture", "PRISM_LANCE");
+    setDataset(canvas, "prismEvolved", scene.evolvedWeapons.VECTOR === true);
+    setDataset(canvas, "prismDamage", PRISM_REFRACTION_DAMAGE);
+    setDataset(canvas, "prismRadius", PRISM_REFRACTION_RADIUS);
+    setDataset(canvas, "prismRefractions", refractions);
+    setDataset(canvas, "prismHits", hits);
+    setDataset(canvas, "prismLastPrimaryId", lastPrimaryId ?? "");
+    setDataset(canvas, "prismLastTargetId", lastTargetId ?? "");
+    setDataset(canvas, "prismLastDistanceSq", lastDistanceSq ?? "");
+    setDataset(canvas, "prismPrimaryId", primary.id);
+    setDataset(canvas, "prismPrimaryHp", primary.hp);
+    setDataset(canvas, "prismRefractionTargetId", refractionTarget.id);
+    setDataset(canvas, "prismRefractionTargetHp", refractionTarget.hp);
+    setDataset(canvas, "prismGhostTargetId", ghostTarget.id);
+    setDataset(canvas, "prismGhostTargetHp", ghostTarget.hp);
+  };
+
+  const configure = (candidate: PrismQualificationScene): void => {
+    scene = candidate;
+    const slots = scene.enemies.filter(enemy => !enemy.active).slice(0, 3);
+    if (slots.length < 3) throw new Error("EV-3B PRISM qualification requires three inactive enemy slots.");
+
+    const primarySlot = slots[0];
+    const refractionSlot = slots[1];
+    const ghostSlot = slots[2];
+    const legalPhaseKind: V2EnemyKind = scene.phase === "A" ? "SPLIT_A" : "SPLIT_B";
+    const ghostPhaseKind: V2EnemyKind = scene.phase === "A" ? "SPLIT_B" : "SPLIT_A";
+    const primaryX = scene.friend.x + 160;
+    const primaryY = scene.friend.y;
+
+    scene.vectorOwned = true;
+    scene.vectorRank = 5;
+    scene.vectorAccumulator = 0;
+    scene.weaponSlotsUsed = Math.max(2, scene.weaponSlotsUsed);
+    scene.evolvedWeapons = { ...scene.evolvedWeapons, VECTOR: true };
+    scene.protocols = { ...scene.protocols, VECTOR_LENS: Math.max(1, scene.protocols.VECTOR_LENS ?? 0) };
+
+    scene.activateEnemy(primarySlot, EV3B_PRIMARY_ID, "TRACE", primaryX, primaryY, false, null, 1000);
+    scene.activateEnemy(refractionSlot, EV3B_REFRACTION_ID, legalPhaseKind, primaryX, primaryY + 90, false, null, 1000);
+    scene.activateEnemy(ghostSlot, EV3B_GHOST_ID, ghostPhaseKind, primaryX, primaryY + 60, false, null, 1000);
+    primarySlot.staggerUntilMs = Number.POSITIVE_INFINITY;
+    refractionSlot.staggerUntilMs = Number.POSITIVE_INFINITY;
+    ghostSlot.staggerUntilMs = Number.POSITIVE_INFINITY;
+    primary = primarySlot;
+    refractionTarget = refractionSlot;
+    ghostTarget = ghostSlot;
+
+    const canvas = game.canvas;
+    setDataset(canvas, "prismInstallVectorShots", scene.vectorShots);
+    setDataset(canvas, "prismInstallVectorHits", scene.vectorHits);
+    setDataset(canvas, "prismInstallPenetrationHits", scene.vectorPenetrationHits);
+    setDataset(canvas, "prismPrimaryInitialHp", primary.hp);
+    setDataset(canvas, "prismRefractionTargetInitialHp", refractionTarget.hp);
+    setDataset(canvas, "prismGhostTargetInitialHp", ghostTarget.hp);
+    setDataset(canvas, "prismLegalPhaseKind", legalPhaseKind);
+    setDataset(canvas, "prismGhostPhaseKind", ghostPhaseKind);
+
+    originalApplyVectorHit = scene.applyVectorProjectileHit;
+    patchedApplyVectorHit = function (this: PrismQualificationScene, projectile: VectorProjectileLike, hitIndex: number): void {
+      const primaryHitId = projectile.hitIds[hitIndex] ?? null;
+      originalApplyVectorHit?.call(this, projectile, hitIndex);
+      if (
+        hitIndex !== 0
+        || projectile.profile?.rank !== 5
+        || this.evolvedWeapons.VECTOR !== true
+        || primaryHitId === null
+      ) return;
+
+      const source = this.enemies.find(enemy => enemy.active && enemy.id === primaryHitId) ?? null;
+      if (!source) return;
+      const excludedIds = new Set(projectile.hitIds);
+      const selected = selectPrismRefractionTarget(
+        true,
+        this.enemies,
+        projectile.launchPhase,
+        source.x,
+        source.y,
+        excludedIds,
+      );
+      if (!selected) return;
+      const target = this.enemies.find(enemy => enemy.active && enemy.id === selected.id) ?? null;
+      if (!target) return;
+
+      refractions += 1;
+      lastPrimaryId = source.id;
+      lastTargetId = target.id;
+      lastDistanceSq = selected.distanceSq;
+      target.hp -= selected.damage;
+      hits += 1;
+      const fx = this.add.graphics().setDepth(27);
+      fx.fillStyle(0xe8edf2, 0.72);
+      fx.fillRect(source.x - 4, source.y - 4, 8, 8);
+      fx.fillRect(target.x - 5, target.y - 5, 10, 10);
+      this.time.delayedCall(90, () => fx.destroy());
+      if (target.hp <= 0) this.killEnemy(target);
+      syncDiagnostics();
+    };
+    scene.applyVectorProjectileHit = patchedApplyVectorHit;
+    configured = true;
+    syncDiagnostics();
+  };
+
+  const tick = (): void => {
+    if (disposed) return;
+    if (!configured) {
+      const candidate = game.scene.getScene("RareShiftV21Survival") as PrismQualificationScene | undefined;
+      if (prismSceneReady(candidate)) {
+        try {
+          configure(candidate);
+        } catch (cause) {
+          game.canvas.dataset.prismQualificationError = cause instanceof Error ? cause.message : String(cause);
+          disposed = true;
+          return;
+        }
+      }
+    }
+    syncDiagnostics();
+    animationFrameId = window.requestAnimationFrame(tick);
+  };
+
+  animationFrameId = window.requestAnimationFrame(tick);
+
+  return () => {
+    disposed = true;
+    if (animationFrameId !== null) window.cancelAnimationFrame(animationFrameId);
+    if (scene && originalApplyVectorHit && patchedApplyVectorHit && scene.applyVectorProjectileHit === patchedApplyVectorHit) {
+      scene.applyVectorProjectileHit = originalApplyVectorHit;
+    }
+  };
+}
