@@ -68,9 +68,6 @@ function entryScore(entry, hp, allowRepair = true) {
   const isOrbitAcquire = candidate === "WEAPON_ACQUIRE:ORBIT" || legacy === "ORBIT_NODES";
   const isOrbitRank = candidate.startsWith("WEAPON_RANK:ORBIT:") || legacy === "ORBIT_RANK";
   if (allowRepair && hp <= 78 && isRepair) return 0;
-  // A critically damaged natural player takes the available close-defense tool
-  // before more DELTA damage. This changes only the legal draft click, never the
-  // generated draft or gameplay state.
   if (hp <= 40 && (isOrbitAcquire || isOrbitRank)) return 1;
   if (candidate.startsWith("EVOLUTION:DELTA:") || legacy.startsWith("EVOLUTION:DELTA:")) return 2;
   if (candidate.startsWith("WEAPON_RANK:DELTA:") || legacy === "DELTA_RANK") return 3;
@@ -122,19 +119,49 @@ async function pressFor(canvas, key, ms, page) {
   await page.waitForTimeout(15);
 }
 
+async function canvasAlive(canvas) {
+  try {
+    return await canvas.isVisible();
+  } catch {
+    return false;
+  }
+}
+
 async function moveToward(canvas, data, target, page, maxSteps = 28) {
   for (let step = 0; step < maxSteps; step += 1) {
-    if (bool(await data("dead")) || bool(await data("draft-open"))) return false;
-    const x = Number(await data("x"));
-    const y = Number(await data("y"));
-    const dx = target.x - x;
-    const dy = target.y - y;
+    if (!await canvasAlive(canvas)) return false;
+    let dead;
+    let draftOpen;
+    let x;
+    let y;
+    try {
+      [dead, draftOpen, x, y] = await Promise.all([
+        data("dead"),
+        data("draft-open"),
+        data("x"),
+        data("y"),
+      ]);
+    } catch (cause) {
+      // A terminal CR-3D transition removes the survival canvas. That is an
+      // authoritative game outcome, not a movement-driver failure; the outer
+      // loop immediately evaluates the results surface on its next iteration.
+      if (!await canvasAlive(canvas)) return false;
+      throw cause;
+    }
+    if (bool(dead) || bool(draftOpen)) return false;
+    const dx = target.x - Number(x);
+    const dy = target.y - Number(y);
     if (Math.abs(dx) <= 9 && Math.abs(dy) <= 9) return true;
     const horizontal = Math.abs(dx) >= Math.abs(dy);
     const distance = horizontal ? Math.abs(dx) : Math.abs(dy);
     const key = horizontal ? (dx > 0 ? "ArrowRight" : "ArrowLeft") : (dy > 0 ? "ArrowDown" : "ArrowUp");
     const duration = Math.max(30, Math.min(150, distance / PLAYER_SPEED * 1000 * 0.72));
-    await pressFor(canvas, key, duration, page);
+    try {
+      await pressFor(canvas, key, duration, page);
+    } catch (cause) {
+      if (!await canvasAlive(canvas)) return false;
+      throw cause;
+    }
   }
   return false;
 }
@@ -148,7 +175,6 @@ async function patrol(canvas, data, page, tick) {
   else if (y >= 950 && x > 300) key = "ArrowLeft";
   else if (x <= 300 && y > 250) key = "ArrowUp";
   else key = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"][Math.floor(tick / 10) % 4];
-  // Preserve the already-established CR-1 natural-player patrol exactly.
   await canvas.focus();
   await canvas.press(key, { delay: 520 });
   await page.waitForTimeout(80);
@@ -242,7 +268,7 @@ async function naturalVictory() {
         if (await results.count()) {
           throw new Error(`CR-3E natural win terminated before boss: outcome=${await results.getAttribute("data-outcome")} finalHp=${await results.getAttribute("data-final-hp")} damage=${await results.getAttribute("data-damage-taken")}`);
         }
-        if (!await canvas.isVisible()) throw new Error("CR-3E natural win lost the survival canvas before the boss handoff.");
+        if (!await canvasAlive(canvas)) throw new Error("CR-3E natural win lost the survival canvas before the boss handoff.");
       };
 
       const preBossDeadline = Date.now() + 430_000;
@@ -286,7 +312,7 @@ async function naturalVictory() {
         if (await defeat.count()) {
           throw new Error(`CR-3E natural win died during THE DESYNC: finalHp=${await defeat.getAttribute("data-final-hp")} damage=${await defeat.getAttribute("data-damage-taken")}`);
         }
-        if (!await canvas.isVisible()) {
+        if (!await canvasAlive(canvas)) {
           await page.waitForTimeout(50);
           continue;
         }
@@ -388,6 +414,12 @@ async function naturalDeathRetry() {
     screenshot: resolve("artifacts/rare-shift-cr3e-natural-death-host-960.png"),
     check: async ({ page, game }) => {
       await game.locator('[data-stage="scan"]').waitFor({ state: "visible" });
+      const flags = await game.locator("body").evaluate(() => ({
+        cr3b: window.__RARE_SHIFT_CR3B_RUNTIME__ === true,
+        cr3d: window.__RARE_SHIFT_CR3D_RUNTIME__ === true,
+      }));
+      assert.deepEqual(flags, { cr3b: false, cr3d: false }, "CR-3E natural death proof must not enable controlled runtime flags");
+
       await game.getByRole("button", { name: /ENTER SIGNAL DESCENT/i }).click();
       let canvas = game.locator("canvas");
       await canvas.waitFor({ state: "visible" });
@@ -399,7 +431,7 @@ async function naturalDeathRetry() {
       while (Date.now() < deadline) {
         const failure = game.locator('[data-stage="results"][data-outcome="DEFEAT"]');
         if (await failure.count()) break;
-        if (!await canvas.isVisible()) {
+        if (!await canvasAlive(canvas)) {
           await page.waitForTimeout(50);
           continue;
         }
@@ -407,8 +439,6 @@ async function naturalDeathRetry() {
           await chooseDraft(page, canvas, data, "CR3E_DEATH", false);
           continue;
         }
-        // Deliberate but legal failure route: no movement and no SHIFT. The
-        // ordinary auto-attack remains active; no scene or health state is touched.
         await page.waitForTimeout(250);
       }
 
