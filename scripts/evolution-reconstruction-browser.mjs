@@ -19,7 +19,7 @@ async function waitForNumber(data, name, predicate, timeoutMs = 10_000) {
 function qualify(width) {
   return async ({ page, game }) => {
     await game.locator('[data-stage="scan"]').waitFor({ state: "visible" });
-    await page.evaluate(() => {
+    await game.locator("body").evaluate(() => {
       window.__RARE_SHIFT_EV3A_RECONSTRUCTION__ = true;
     });
 
@@ -37,6 +37,8 @@ function qualify(width) {
 
     const fixtureDeadline = Date.now() + 8_000;
     while (Date.now() < fixtureDeadline && await data("reconstruction-qualification-fixture") !== "RECONSTRUCTION_FIELD") {
+      const fixtureError = await data("reconstruction-qualification-error");
+      if (fixtureError) throw new Error(`EV-3A fixture initialization failed: ${fixtureError}`);
       await page.waitForTimeout(60);
     }
 
