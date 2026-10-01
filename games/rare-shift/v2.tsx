@@ -8,6 +8,7 @@ import Phaser from "phaser";
 import { derivePhaseField, selectFramePair } from "./src/phase-core.ts";
 import { draftIndexForPoint } from "./src/draft-pointer-core.ts";
 import { installPrismLanceQualification, installReconstructionFieldQualification } from "./src/evolution-phaser-qualification.ts";
+import { installMemoryCollapseQualification } from "./src/evolution-memory-collapse-qualification.ts";
 import { installSyncHaloQualification } from "./src/evolution-sync-halo-qualification.ts";
 import { mountPhaserSurvival, type PhaserSurvivalController } from "./src/phaser-survival.ts";
 import type { FrameCandidate, FrameRows, PixelClass, SelectedFramePair } from "./src/types.ts";
@@ -22,6 +23,7 @@ type QualificationWindow = Window & {
   __RARE_SHIFT_EV3A_RECONSTRUCTION__?: unknown;
   __RARE_SHIFT_EV3B_PRISM__?: unknown;
   __RARE_SHIFT_EV3C_SYNC_HALO__?: unknown;
+  __RARE_SHIFT_EV3D_MEMORY_COLLAPSE__?: unknown;
 };
 
 interface PreparedV2 {
@@ -208,7 +210,8 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
     const reconstructionQualification = qualificationWindow.__RARE_SHIFT_EV3A_RECONSTRUCTION__ === true;
     const prismQualification = qualificationWindow.__RARE_SHIFT_EV3B_PRISM__ === true;
     const syncQualification = qualificationWindow.__RARE_SHIFT_EV3C_SYNC_HALO__ === true;
-    const captureQualification = rank4Qualification || reconstructionQualification || prismQualification || syncQualification;
+    const memoryQualification = qualificationWindow.__RARE_SHIFT_EV3D_MEMORY_COLLAPSE__ === true;
+    const captureQualification = rank4Qualification || reconstructionQualification || prismQualification || syncQualification || memoryQualification;
     const capturedGames: Phaser.Game[] = [];
     type QualificationGamePrototype = { boot: (...args: unknown[]) => unknown };
     const gamePrototype = Phaser.Game.prototype as unknown as QualificationGamePrototype;
@@ -226,6 +229,7 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
     let cleanupReconstruction = () => {};
     let cleanupPrism = () => {};
     let cleanupSync = () => {};
+    let cleanupMemory = () => {};
     try {
       mounted = mountPhaserSurvival({
         parent: host.current,
@@ -235,7 +239,7 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
         familyName: prepared.familyName,
       });
       const capturedGame = capturedGames[0];
-      if ((reconstructionQualification || prismQualification || syncQualification) && !capturedGame) {
+      if ((reconstructionQualification || prismQualification || syncQualification || memoryQualification) && !capturedGame) {
         throw new Error("Evolution qualification could not capture the mounted Phaser game.");
       }
       if (reconstructionQualification && capturedGame) {
@@ -247,6 +251,9 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
       if (syncQualification && capturedGame) {
         cleanupSync = installSyncHaloQualification(capturedGame);
       }
+      if (memoryQualification && capturedGame) {
+        cleanupMemory = installMemoryCollapseQualification(capturedGame);
+      }
     } catch (cause) {
       mounted?.destroy();
       throw cause;
@@ -257,6 +264,7 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
     controller.current = mounted;
     mounted.setPaused(paused);
     return () => {
+      cleanupMemory();
       cleanupSync();
       cleanupPrism();
       cleanupReconstruction();
