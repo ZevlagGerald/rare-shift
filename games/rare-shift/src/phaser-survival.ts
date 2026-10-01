@@ -20,10 +20,6 @@ type CaptureGamePrototype = {
   boot: (...args: unknown[]) => unknown;
 };
 
-type SceneManagerPrototype = {
-  add: (...args: unknown[]) => unknown;
-};
-
 type CR3ControlledQualificationWindow = Window & {
   __RARE_SHIFT_V23B5_SIGNAL_RANK__?: unknown;
   __RARE_SHIFT_CR3B_RUNTIME__?: unknown;
@@ -31,6 +27,7 @@ type CR3ControlledQualificationWindow = Window & {
 };
 
 type RuntimeScene = Phaser.Scene & Record<string, any>;
+type RuntimeSystems = Phaser.Scenes.Systems & { sceneUpdate?: (...args: unknown[]) => unknown };
 
 export function mountPhaserSurvival(options: SurvivalOptions): PhaserSurvivalController {
   const qualificationWindow = window as CR3ControlledQualificationWindow;
@@ -42,57 +39,52 @@ export function mountPhaserSurvival(options: SurvivalOptions): PhaserSurvivalCon
   const capturedGames: Phaser.Game[] = [];
   const gamePrototype = Phaser.Game.prototype as unknown as CaptureGamePrototype;
   const previousBoot = gamePrototype.boot;
-  const sceneManagerPrototype = Phaser.Scenes.SceneManager.prototype as unknown as SceneManagerPrototype;
-  const previousAdd = sceneManagerPrototype.add;
-
-  let cleanupCheckpointRuntime = () => {};
-  let checkpointPrepared = false;
 
   gamePrototype.boot = function (this: Phaser.Game, ...args: unknown[]) {
     capturedGames.push(this);
     return previousBoot.apply(this, args);
   };
 
-  sceneManagerPrototype.add = function (this: Phaser.Scenes.SceneManager, ...args: unknown[]) {
-    if (!controlledQualification && !checkpointPrepared) {
-      // Phaser SceneManager.add(key, sceneConfig, autoStart, data) receives the
-      // already-constructed SurvivalScene instance from the qualified mount.
-      // Pre-arm it before the original add() gives Systems a chance to cache
-      // the scene's update callback.
-      const candidate = args[1] as RuntimeScene | undefined;
-      if (candidate instanceof Phaser.Scene && candidate.sys?.settings?.key === "RareShiftV21Survival") {
-        cleanupCheckpointRuntime = prepareCR3ECheckpointScene(candidate);
-        checkpointPrepared = true;
-      }
-    }
-    return previousAdd.apply(this, args);
-  };
-
   let controller: PhaserSurvivalController;
   try {
     controller = mountQualifiedPhaserSurvival(options);
   } finally {
-    sceneManagerPrototype.add = previousAdd;
     gamePrototype.boot = previousBoot;
   }
 
   const game = capturedGames[0];
   if (!game) {
-    cleanupCheckpointRuntime();
     controller.destroy();
     throw new Error("CR-3E.1 could not capture the qualified Phaser survival game.");
   }
+
+  let cleanupCheckpointRuntime = () => {};
+  let cachedSceneUpdate: RuntimeSystems["sceneUpdate"] = undefined;
+  let patchedSceneUpdate: RuntimeSystems["sceneUpdate"] = undefined;
+  let runtimeScene: RuntimeScene | null = null;
 
   if (controlledQualification) {
     game.canvas.dataset.cr3e1CheckpointRuntime = controlledB5SignalQualification
       ? "SUPPRESSED_FOR_CONTROLLED_B5_SIGNAL_QUALIFICATION"
       : "SUPPRESSED_FOR_CONTROLLED_CR3_QUALIFICATION";
-  } else if (!checkpointPrepared) {
-    cleanupCheckpointRuntime();
-    controller.destroy();
-    throw new Error("CR-3E.1 did not observe the qualified SurvivalScene registration.");
   } else {
-    game.canvas.dataset.cr3e1CheckpointPrearmed = "true";
+    runtimeScene = game.scene.getScene("RareShiftV21Survival") as RuntimeScene | null;
+    if (!runtimeScene) {
+      controller.destroy();
+      throw new Error("CR-3E.1 could not locate the qualified SurvivalScene after mount.");
+    }
+
+    const systems = runtimeScene.sys as RuntimeSystems;
+    cachedSceneUpdate = systems.sceneUpdate;
+    cleanupCheckpointRuntime = prepareCR3ECheckpointScene(runtimeScene);
+    patchedSceneUpdate = runtimeScene.update.bind(runtimeScene);
+
+    // Phaser Systems caches Scene.update separately from scene.update. The
+    // qualified scene is already mounted at this point, so bind the bounded
+    // checkpoint-aware callback into that exact cache instead of rewiring
+    // lifecycle events or replacing the surrounding game loop.
+    systems.sceneUpdate = patchedSceneUpdate;
+    game.canvas.dataset.cr3e1CheckpointBound = "scene.sys.sceneUpdate";
   }
 
   let destroyed = false;
@@ -100,8 +92,14 @@ export function mountPhaserSurvival(options: SurvivalOptions): PhaserSurvivalCon
     destroy: () => {
       if (destroyed) return;
       destroyed = true;
-      if (controlledQualification) delete game.canvas.dataset.cr3e1CheckpointRuntime;
-      cleanupCheckpointRuntime();
+      if (controlledQualification) {
+        delete game.canvas.dataset.cr3e1CheckpointRuntime;
+      } else if (runtimeScene) {
+        const systems = runtimeScene.sys as RuntimeSystems;
+        if (patchedSceneUpdate && systems.sceneUpdate === patchedSceneUpdate) systems.sceneUpdate = cachedSceneUpdate;
+        delete game.canvas.dataset.cr3e1CheckpointBound;
+        cleanupCheckpointRuntime();
+      }
       controller.destroy();
     },
     setPaused: paused => controller.setPaused(paused),
