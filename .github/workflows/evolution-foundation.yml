@@ -29,7 +29,7 @@ permissions:
 
 jobs:
   qualify-evolution-foundation:
-    name: EV-1/EV-2/EV-3A/EV-3B/EV-3C/EV-3D/EV-3E/EV-3F Evolution qualification
+    name: EV-1/EV-2/EV-3A/EV-3B/EV-3C/EV-3D/EV-3E/EV-3F/EV-3G Evolution qualification
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
@@ -94,7 +94,7 @@ jobs:
           npm run typecheck:core
           npm run typecheck
 
-      - name: Verify natural Evolution path remains blocked
+      - name: Verify base Phaser Evolution guard remains fail-closed
         shell: bash
         run: |
           set -euo pipefail
@@ -124,3 +124,6 @@ jobs:
         run: |
           node --experimental-strip-types --test games/rare-shift/tests/evolution-phaser-runtime-core.test.ts
           node --experimental-strip-types scripts/evolution-production-runtime-browser.mjs
+
+      - name: EV-3G Natural CR-2 Evolution selection qualification
+        run: node --experimental-strip-types scripts/evolution-natural-selection-browser.mjs
