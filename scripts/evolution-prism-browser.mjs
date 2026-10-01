@@ -73,8 +73,16 @@ function qualify(width) {
     assert.equal(installHits, 0, "controlled Evolution install must not manufacture a VECTOR hit");
     assert.equal(installPenetrations, 0, "controlled Evolution install must not manufacture VECTOR penetration");
     assert.ok(primaryInitialHp > 0 && refractionInitialHp > 0 && ghostInitialHp > 0);
-    assert.equal(Number(await data("prism-refractions")), 0, "PRISM must not fire before a genuine VECTOR primary hit");
-    assert.equal(Number(await data("prism-hits")), 0, "PRISM must not damage before a genuine VECTOR primary hit");
+
+    // Browser scheduling may allow the genuine Rank-V VECTOR event to occur before
+    // this observer reaches the fixture. Prove causality rather than wall-clock order:
+    // installation itself is zero-shot/zero-hit, and every observed PRISM event must
+    // be backed by a real post-install primary VECTOR hit.
+    const observedVectorHits = Number(await data("vector-hits"));
+    const observedRefractions = Number(await data("prism-refractions"));
+    const observedPrismHits = Number(await data("prism-hits"));
+    assert.ok(observedRefractions <= Math.max(0, observedVectorHits - installHits), "PRISM refraction evidence must not exceed genuine post-install VECTOR primary-hit evidence");
+    assert.ok(observedPrismHits <= observedRefractions, "PRISM damage evidence must be backed by a PRISM refraction event");
 
     const vectorShots = await waitForNumber(data, "vector-shots", value => value >= 1);
     assert.ok(vectorShots >= 1, "Rank-V VECTOR must naturally fire before PRISM can refract");
