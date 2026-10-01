@@ -142,9 +142,6 @@ async function moveToward(canvas, data, target, page, maxSteps = 28) {
         data("y"),
       ]);
     } catch (cause) {
-      // A terminal CR-3D transition removes the survival canvas. That is an
-      // authoritative game outcome, not a movement-driver failure; the outer
-      // loop immediately evaluates the results surface on its next iteration.
       if (!await canvasAlive(canvas)) return false;
       throw cause;
     }
@@ -362,16 +359,27 @@ async function naturalVictory() {
           attack: String(await data("cr3-pressure-attack") ?? ""),
         };
         const plan = currentPressurePlan(pressureSnapshot);
-        const attackTarget = chooseSafeDeltaTarget(points[vulnerability], bossX, bossY, scale, plan);
-        if (!attackTarget) {
-          const dodge = chooseSafeDodgeTarget(bossX, bossY, plan);
-          await moveToward(canvas, data, dodge, page, 16);
-          await page.waitForTimeout(180);
+
+        // Respect the rendered 850 ms structural telegraph as a player would:
+        // first make the current position safe and let the telegraph resolve;
+        // only use the post-resolution portion of the boss cycle to approach
+        // canonical DELTA geometry. Re-plan after short movement slices so a
+        // new telegraph can never age unseen behind a multi-second move.
+        if (plan) {
+          const playerX = Number(await data("x"));
+          const playerY = Number(await data("y"));
+          if (cr3PressureHitsPoint(plan, bossX, bossY, playerX, playerY)) {
+            const dodge = chooseSafeDodgeTarget(bossX, bossY, plan);
+            await moveToward(canvas, data, dodge, page, 3);
+          } else {
+            await page.waitForTimeout(120);
+          }
           continue;
         }
 
-        await moveToward(canvas, data, attackTarget, page, 18);
-        await page.waitForTimeout(170);
+        const attackTarget = chooseSafeDeltaTarget(points[vulnerability], bossX, bossY, scale, null);
+        await moveToward(canvas, data, attackTarget, page, 3);
+        await page.waitForTimeout(120);
       }
 
       const results = game.locator('[data-stage="results"][data-outcome="VICTORY"]');
