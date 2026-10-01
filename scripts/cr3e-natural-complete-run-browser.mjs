@@ -163,18 +163,23 @@ async function moveToward(canvas, data, target, page, maxSteps = 28) {
   return false;
 }
 
-async function patrol(canvas, data, page, tick) {
+async function patrol(canvas, data, page) {
   const x = Number(await data("x"));
   const y = Number(await data("y"));
+  // Keep the ordinary run in a compact central circuit. Enemies naturally
+  // chase toward this circuit, so their normal Signal-XP drops remain close
+  // enough to be collected by normal movement instead of being abandoned on
+  // the far perimeter. This uses only keyboard movement and no pickup state.
   let key;
-  if (y < 250 && x < 1500) key = "ArrowRight";
-  else if (x >= 1500 && y < 950) key = "ArrowDown";
-  else if (y >= 950 && x > 300) key = "ArrowLeft";
-  else if (x <= 300 && y > 250) key = "ArrowUp";
-  else key = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"][Math.floor(tick / 10) % 4];
+  if (y > 430 && x <= 1180) key = "ArrowUp";
+  else if (y <= 430 && x < 1180) key = "ArrowRight";
+  else if (x >= 1180 && y < 770) key = "ArrowDown";
+  else if (y >= 770 && x > 620) key = "ArrowLeft";
+  else if (x <= 620 && y > 430) key = "ArrowUp";
+  else key = "ArrowRight";
   await canvas.focus();
-  await canvas.press(key, { delay: 520 });
-  await page.waitForTimeout(80);
+  await canvas.press(key, { delay: 420 });
+  await page.waitForTimeout(55);
 }
 
 function currentPressurePlan(snapshot) {
@@ -188,22 +193,25 @@ function targetForPoint(bossX, bossY, point, scale) {
   return Object.freeze({ x: bossX - point.x * scale, y: bossY - point.y * scale });
 }
 
-function chooseSafeDeltaTarget(points, bossX, bossY, scale, plan) {
-  const candidates = points.map(point => targetForPoint(bossX, bossY, point, scale));
-  if (!plan) return candidates[0];
-  return candidates.find(candidate => !cr3PressureHitsPoint(plan, bossX, bossY, candidate.x, candidate.y)) ?? null;
+function chooseDeltaTarget(points, bossX, bossY, scale, ordinal) {
+  return targetForPoint(bossX, bossY, points[Math.abs(ordinal) % points.length], scale);
 }
 
-function chooseSafeDodgeTarget(bossX, bossY, plan) {
+function chooseSafeDodgeTarget(bossX, bossY, plan, playerX, playerY) {
   const offsets = [
-    [130, 0], [-130, 0], [0, 130], [0, -130],
-    [120, 120], [120, -120], [-120, 120], [-120, -120],
+    [155, 0], [110, 110], [0, 155], [-110, 110],
+    [-155, 0], [-110, -110], [0, -155], [110, -110],
   ];
-  for (const [dx, dy] of offsets) {
-    const candidate = { x: bossX + dx, y: bossY + dy };
-    if (!plan || !cr3PressureHitsPoint(plan, bossX, bossY, candidate.x, candidate.y)) return candidate;
-  }
-  return { x: bossX + 145, y: bossY + 145 };
+  const candidates = offsets
+    .map(([dx, dy]) => ({ x: bossX + dx, y: bossY + dy }))
+    .filter(candidate => !plan || !cr3PressureHitsPoint(plan, bossX, bossY, candidate.x, candidate.y));
+  assert.ok(candidates.length > 0, "boss telegraph must leave at least one deterministic dodge point");
+  candidates.sort((a, b) => {
+    const ad = (a.x - playerX) ** 2 + (a.y - playerY) ** 2;
+    const bd = (b.x - playerX) ** 2 + (b.y - playerY) ** 2;
+    return bd - ad;
+  });
+  return candidates[0];
 }
 
 async function naturalVictory() {
@@ -244,6 +252,7 @@ async function naturalVictory() {
       let maxPressureResolves = 0;
       let moveTicks = 0;
       let botShifts = 0;
+      let bossAttackStep = 0;
       const seed = Number(await data("seed"));
       assert.ok(Number.isInteger(seed) && seed >= 0, `natural run seed must be present, got ${seed}`);
 
@@ -280,7 +289,7 @@ async function naturalVictory() {
           continue;
         }
         if (bool(await data("boss-pending")) && String(await data("cr3-boss-active")) === "true") break;
-        await patrol(canvas, data, page, moveTicks);
+        await patrol(canvas, data, page);
         moveTicks += 1;
         if (moveTicks % 7 === 0 && !bool(await data("draft-open"))) {
           await shift(canvas, page);
@@ -300,6 +309,7 @@ async function naturalVictory() {
         assert.ok(observedCheckpoints.has(checkpoint), `natural run must observe ${checkpoint}; got ${[...observedCheckpoints].join(",")}`);
       }
       assert.ok(botShifts >= 8, `natural run must exercise SHIFT repeatedly, got ${botShifts}`);
+      console.log(`CR3E_BOSS_ENTRY=L${await data("level")}:HP${await data("hp")}:K${await data("kills")}:XP${await data("xp")}`);
 
       const bossDeadline = Date.now() + 150_000;
       while (Date.now() < bossDeadline) {
@@ -322,7 +332,7 @@ async function naturalVictory() {
 
         const bossPhase = String(await data("cr3-boss-phase") ?? "");
         if (bossPhase === "DEFEATED") {
-          await page.waitForTimeout(80);
+          await page.waitForTimeout(40);
           continue;
         }
         const vulnerability = String(await data("cr3-boss-vulnerability") ?? "");
@@ -337,14 +347,14 @@ async function naturalVictory() {
           }
           await shift(canvas, page);
           botShifts += 1;
-          await page.waitForTimeout(40);
+          await page.waitForTimeout(30);
           continue;
         }
 
         if (String(await data("phase")) !== vulnerability) {
           await shift(canvas, page);
           botShifts += 1;
-          await page.waitForTimeout(35);
+          await page.waitForTimeout(25);
           continue;
         }
 
@@ -360,26 +370,19 @@ async function naturalVictory() {
         };
         const plan = currentPressurePlan(pressureSnapshot);
 
-        // Respect the rendered 850 ms structural telegraph as a player would:
-        // first make the current position safe and let the telegraph resolve;
-        // only use the post-resolution portion of the boss cycle to approach
-        // canonical DELTA geometry. Re-plan after short movement slices so a
-        // new telegraph can never age unseen behind a multi-second move.
         if (plan) {
           const playerX = Number(await data("x"));
           const playerY = Number(await data("y"));
-          if (cr3PressureHitsPoint(plan, bossX, bossY, playerX, playerY)) {
-            const dodge = chooseSafeDodgeTarget(bossX, bossY, plan);
-            await moveToward(canvas, data, dodge, page, 3);
-          } else {
-            await page.waitForTimeout(120);
-          }
+          const dodge = chooseSafeDodgeTarget(bossX, bossY, plan, playerX, playerY);
+          await moveToward(canvas, data, dodge, page, 2);
+          await page.waitForTimeout(45);
           continue;
         }
 
-        const attackTarget = chooseSafeDeltaTarget(points[vulnerability], bossX, bossY, scale, null);
-        await moveToward(canvas, data, attackTarget, page, 3);
-        await page.waitForTimeout(120);
+        const attackTarget = chooseDeltaTarget(points[vulnerability], bossX, bossY, scale, bossAttackStep);
+        bossAttackStep += 1;
+        await moveToward(canvas, data, attackTarget, page, 2);
+        await page.waitForTimeout(45);
       }
 
       const results = game.locator('[data-stage="results"][data-outcome="VICTORY"]');
