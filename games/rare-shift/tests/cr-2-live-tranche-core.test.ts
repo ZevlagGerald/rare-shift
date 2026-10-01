@@ -71,17 +71,16 @@ test("live CR-2 draft exposes Protocol choices from Level 5 through the normaliz
   assert.ok(allIds.length > 0);
 });
 
-test("Protocol-only live draft never exposes Evolution before evolved combat runtime is wired", () => {
+test("production compatibility draft exposes the same eligible Evolution after EV-3F runtime qualification", () => {
   const ready = snapshot({
     deltaRank: 5,
     protocols: { COMMON_CORE: 1 },
     evolutionCores: 1,
   });
   const full = buildCR2DraftFromLive(SEED, 12, ready);
-  assert.equal(full.choices[0].candidateType, "EVOLUTION", "full CR-2 path should prove the gate is genuinely open");
-  const protocolOnly = buildCR2ProtocolDraftFromLive(SEED, 12, ready);
-  assert.equal(protocolOnly.choices.some(choice => choice.candidateType === "EVOLUTION"), false);
-  assert.equal(protocolOnly.choices.length, 3);
+  assert.equal(full.choices[0].candidateId, "EVOLUTION:DELTA:RECONSTRUCTION_FIELD");
+  const production = buildCR2ProtocolDraftFromLive(SEED, 12, ready);
+  assert.deepEqual(production, full);
 });
 
 test("live CR-2 selection rejects candidates outside the current deterministic triple", () => {
@@ -99,16 +98,28 @@ test("live CR-2 selection applies the chosen normalized candidate without slot d
   assert.equal(result.projection.weaponSlotsUsed, 2);
 });
 
-test("Protocol-only live selection applies only a candidate from its own current triple", () => {
-  const before = snapshot({ hp: 100, pickupRadius: 220 });
-  const draft = buildCR2ProtocolDraftFromLive(SEED, 5, before);
-  const selected = draft.choices[0];
-  const applied = applyCR2ProtocolDraftChoiceToLive(SEED, 5, before, selected.candidateId);
-  assert.equal(applied.selected.candidateId, selected.candidateId);
-  assert.throws(
-    () => applyCR2ProtocolDraftChoiceToLive(SEED, 5, before, "EVOLUTION:DELTA:RECONSTRUCTION_FIELD"),
-    /not present in the current legal triple/u,
-  );
+test("production compatibility selection applies a real Evolution with exact Core and continuity semantics", () => {
+  const before = snapshot({
+    deltaRank: 5,
+    protocols: { COMMON_CORE: 1 },
+    evolutionCores: 1,
+    hp: 73,
+    pickupRadius: 111,
+    refracts: 1,
+    rerollNonce: 4,
+  });
+  const candidateId = "EVOLUTION:DELTA:RECONSTRUCTION_FIELD";
+  const applied = applyCR2ProtocolDraftChoiceToLive(SEED, 12, before, candidateId);
+  assert.equal(applied.selected.candidateId, candidateId);
+  assert.equal(applied.projection.evolvedWeapons.DELTA, true);
+  assert.equal(applied.projection.evolutionCores, 0);
+  assert.equal(applied.projection.deltaRank, 5);
+  assert.equal(applied.projection.weaponSlotsUsed, before.weaponSlotsUsed);
+  assert.deepEqual(applied.projection.protocols, before.protocols);
+  assert.equal(applied.projection.hp, before.hp);
+  assert.equal(applied.projection.pickupRadius, before.pickupRadius);
+  assert.equal(applied.projection.refracts, before.refracts);
+  assert.equal(applied.projection.rerollNonce, before.rerollNonce);
 });
 
 test("live Evolution Core collection mutates only Core inventory", () => {
@@ -140,7 +151,7 @@ test("live REFRACT consumes one charge and produces a deterministic replacement 
   assert.deepEqual(useCR2RefractFromLive(SEED, 5, before), rerolled);
 });
 
-test("Protocol-only REFRACT remains deterministic and cannot introduce an Evolution", () => {
+test("production compatibility REFRACT preserves Evolution priority deterministically", () => {
   const before = snapshot({
     deltaRank: 5,
     protocols: { COMMON_CORE: 1 },
@@ -150,7 +161,7 @@ test("Protocol-only REFRACT remains deterministic and cannot introduce an Evolut
   const rerolled = useCR2ProtocolRefractFromLive(SEED, 12, before);
   assert.equal(rerolled.projection.refracts, 0);
   assert.equal(rerolled.projection.rerollNonce, 1);
-  assert.equal(rerolled.draft.choices.some(choice => choice.candidateType === "EVOLUTION"), false);
+  assert.equal(rerolled.draft.choices[0].candidateId, "EVOLUTION:DELTA:RECONSTRUCTION_FIELD");
   assert.deepEqual(useCR2ProtocolRefractFromLive(SEED, 12, before), rerolled);
 });
 
