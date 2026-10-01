@@ -17,8 +17,12 @@ on:
       - "games/rare-shift/src/signal-arc-core.ts"
       - "games/rare-shift/src/cr2-*.ts"
       - "games/rare-shift/src/progression-core.ts"
+      - "games/rare-shift/src/phaser-survival.ts"
       - "games/rare-shift/tests/cr-2-*.test.ts"
       - "games/rare-shift/tests/v2-3b*.test.ts"
+      - "scripts/cr2-protocol-live-browser.mjs"
+      - "scripts/v2-*.mjs"
+      - "scripts/cr1-survival-director-browser.mjs"
       - "package.json"
       - "tsconfig.core.json"
       - "games/rare-shift/tsconfig.json"
@@ -29,9 +33,9 @@ permissions:
 
 jobs:
   qualify-evolution-foundation:
-    name: EV-1/EV-2/EV-3A/EV-3B/EV-3C/EV-3D/EV-3E/EV-3F/EV-3G Evolution qualification
+    name: EV-1/EV-2/EV-3A-G/EV-5 Evolution closeout qualification
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 150
     container:
       image: mcr.microsoft.com/playwright:v1.63.0-noble
       options: --init
@@ -44,6 +48,8 @@ jobs:
     steps:
       - name: Checkout exact Evolution head
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Use Node.js 24
         uses: actions/setup-node@v4
@@ -52,7 +58,11 @@ jobs:
 
       - name: Trust mounted Git workspace inside container
         shell: bash
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git rev-parse --show-toplevel
+          git rev-parse HEAD
 
       - name: Verify clean committed candidate
         shell: bash
@@ -77,22 +87,32 @@ jobs:
       - name: EV-1/EV-2 deterministic Evolution contracts
         run: npm run test:evolution
 
-      - name: Inherited CR-2 and Rank-V deterministic regression
+      - name: CR-2 deterministic contracts
+        run: npm run test:cr-2a
+
+      - name: Inherited deterministic regression through CR-1 and B5
         shell: bash
         run: |
-          npm run test:cr-2a
+          npm run test:cr-1
+          npm run test:core
+          npm run test:v2-combat
+          npm run test:v2-2e-cross
+          npm run test:v2-2-pointer
+          npm run test:v2-3a
           npm run test:v2-3b1-delta
           npm run test:v2-3b2-vector
           npm run test:v2-3b3-orbit
           npm run test:v2-3b4-echo
           npm run test:v2-3b5-signal
-          npm run test:cr-1
 
-      - name: TypeScript qualification
+      - name: TypeScript and FriendSDK build qualification
         shell: bash
         run: |
           npm run typecheck:core
           npm run typecheck
+          npm run check
+          npm run build
+          npm run test:sdk
 
       - name: Verify base Phaser Evolution guard remains fail-closed
         shell: bash
@@ -127,3 +147,24 @@ jobs:
 
       - name: EV-3G Natural CR-2 Evolution selection qualification
         run: node --experimental-strip-types scripts/evolution-natural-selection-browser.mjs
+
+      - name: Live Protocol and REFRACT browser qualification
+        run: npm run test:cr-2-browser
+
+      - name: Inherited browser regression through B5
+        shell: bash
+        run: |
+          npm run test:v2-3b5-signal-browser
+          npm run test:v2-1-browser
+          npm run test:v2-2a-browser
+          npm run test:v2-2b-browser
+          npm run test:v2-2c-browser
+          npm run test:v2-2d-browser
+          npm run test:v2-2e-browser
+          npm run test:v2-3b1-delta-browser
+          npm run test:v2-3b2-vector-browser
+          npm run test:v2-3b3-orbit-browser
+          npm run test:v2-3b4-echo-browser
+
+      - name: Natural CR-1 Stage-IV regression
+        run: npm run test:cr-1-browser
