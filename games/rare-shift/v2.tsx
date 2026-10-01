@@ -6,6 +6,9 @@ import type { GameComponentProps } from "@rarefriends/friendsdk/runtime";
 import { createFriendReader, decodeSpriteBitmap } from "@rarefriends/friendsdk/sprites";
 import Phaser from "phaser";
 import { installCR3DesyncPhaserRuntime } from "./src/cr3-desync-phaser-runtime.ts";
+import { buildCR3RunResult, detectCR3TerminalOutcome, type CR3RunResult } from "./src/cr3-results-core.ts";
+import { installCR3ResultsPhaserRuntime } from "./src/cr3-results-phaser-runtime.ts";
+import { CR3ResultsStage } from "./src/cr3-results-ui.tsx";
 import { derivePhaseField, selectFramePair } from "./src/phase-core.ts";
 import { draftIndexForPoint } from "./src/draft-pointer-core.ts";
 import { installChainResonanceQualification } from "./src/evolution-chain-resonance-qualification.ts";
@@ -17,8 +20,9 @@ import { mountPhaserSurvival, type PhaserSurvivalController } from "./src/phaser
 import type { FrameCandidate, FrameRows, PixelClass, SelectedFramePair } from "./src/types.ts";
 import "./style.css";
 import "./v2-1a.css";
+import "./cr3-results.css";
 
-type Stage = "loading" | "scan" | "survival" | "error";
+type Stage = "loading" | "scan" | "survival" | "results" | "error";
 
 type QualificationWindow = Window & {
   __RARE_SHIFT_V23B5_SIGNAL_RANK__?: unknown;
@@ -32,6 +36,8 @@ type QualificationWindow = Window & {
   __RARE_SHIFT_EV3F_PHASER__?: { readonly GAMES: Phaser.Game[] };
   __RARE_SHIFT_CR3B_RUNTIME__?: unknown;
   __RARE_SHIFT_CR3B_PHASER__?: { readonly GAMES: Phaser.Game[] };
+  __RARE_SHIFT_CR3D_RUNTIME__?: unknown;
+  __RARE_SHIFT_CR3D_PHASER__?: { readonly GAMES: Phaser.Game[] };
 };
 
 interface PreparedV2 {
@@ -174,6 +180,7 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
   const controller = useRef<PhaserSurvivalController | null>(null);
   const [stage, setStage] = useState<Stage>("loading");
   const [prepared, setPrepared] = useState<PreparedV2 | null>(null);
+  const [runResult, setRunResult] = useState<CR3RunResult | null>(null);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -193,6 +200,7 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
   useEffect(() => {
     let cancelled = false;
     setPrepared(null);
+    setRunResult(null);
     setStage("loading");
     setError("");
     void Promise.all([createFriendReader().read(friendId), client.read()]).then(([sprites, snapshot]) => {
@@ -222,6 +230,7 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
     const chainQualification = qualificationWindow.__RARE_SHIFT_EV3E_CHAIN_RESONANCE__ === true;
     const productionRuntimeQualification = qualificationWindow.__RARE_SHIFT_EV3F_PRODUCTION_RUNTIME__ === true;
     const cr3bQualification = qualificationWindow.__RARE_SHIFT_CR3B_RUNTIME__ === true;
+    const cr3dQualification = qualificationWindow.__RARE_SHIFT_CR3D_RUNTIME__ === true;
     const controlledEvolutionQualification = reconstructionQualification || prismQualification || syncQualification || memoryQualification || chainQualification;
     const capturedGames: Phaser.Game[] = [];
     type QualificationGamePrototype = { boot: (...args: unknown[]) => unknown };
@@ -231,12 +240,14 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
     if (rank4Qualification) qualificationWindow.__RARE_SHIFT_B5_PHASER__ = { GAMES: capturedGames };
     if (productionRuntimeQualification) qualificationWindow.__RARE_SHIFT_EV3F_PHASER__ = { GAMES: capturedGames };
     if (cr3bQualification) qualificationWindow.__RARE_SHIFT_CR3B_PHASER__ = { GAMES: capturedGames };
+    if (cr3dQualification) qualificationWindow.__RARE_SHIFT_CR3D_PHASER__ = { GAMES: capturedGames };
     gamePrototype.boot = function (this: Phaser.Game, ...args: unknown[]) {
       capturedGames.push(this);
       return originalBoot.apply(this, args);
     };
 
     let mounted: PhaserSurvivalController | null = null;
+    let cleanupCR3ResultsRuntime = () => {};
     let cleanupCR3Runtime = () => {};
     let cleanupEvolutionRuntime = () => {};
     let cleanupReconstruction = () => {};
@@ -261,7 +272,9 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
       if (memoryQualification) cleanupMemory = installMemoryCollapseQualification(capturedGame);
       if (chainQualification) cleanupChain = installChainResonanceQualification(capturedGame);
       cleanupCR3Runtime = installCR3DesyncPhaserRuntime(capturedGame);
+      cleanupCR3ResultsRuntime = installCR3ResultsPhaserRuntime(capturedGame);
     } catch (cause) {
+      cleanupCR3ResultsRuntime();
       cleanupCR3Runtime();
       cleanupEvolutionRuntime();
       mounted?.destroy();
@@ -273,6 +286,7 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
     controller.current = mounted;
     mounted.setPaused(paused);
     return () => {
+      cleanupCR3ResultsRuntime();
       cleanupCR3Runtime();
       cleanupChain();
       cleanupMemory();
@@ -284,6 +298,7 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
       if (rank4Qualification) delete qualificationWindow.__RARE_SHIFT_B5_PHASER__;
       if (productionRuntimeQualification) delete qualificationWindow.__RARE_SHIFT_EV3F_PHASER__;
       if (cr3bQualification) delete qualificationWindow.__RARE_SHIFT_CR3B_PHASER__;
+      if (cr3dQualification) delete qualificationWindow.__RARE_SHIFT_CR3D_PHASER__;
       if (controller.current === mounted) controller.current = null;
     };
   }, [stage, prepared]);
@@ -294,8 +309,20 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
       return;
     }
     const hostNode = host.current;
-    const readGuide = () => setSurvivalGuide(guideFromCanvas(hostNode.querySelector("canvas")));
-    const interval = window.setInterval(readGuide, 120);
+    let terminalCaptured = false;
+    const readGuide = () => {
+      const canvas = hostNode.querySelector("canvas");
+      setSurvivalGuide(guideFromCanvas(canvas));
+      if (!(canvas instanceof HTMLCanvasElement) || terminalCaptured) return;
+      const outcome = detectCR3TerminalOutcome(canvas.dataset);
+      if (!outcome) return;
+      terminalCaptured = true;
+      controller.current?.setPaused(true);
+      setRunResult(buildCR3RunResult(canvas.dataset, outcome));
+      setSurvivalGuide(null);
+      setStage("results");
+    };
+    const interval = window.setInterval(readGuide, 50);
     readGuide();
 
     const onPointerDown = (event: PointerEvent) => {
@@ -327,6 +354,11 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
       <span> // {survivalGuide.body}</span>
     </div>}
     {stage === "scan" && prepared && <ScanStage prepared={prepared} paused={paused} onEnter={() => setStage("survival")} />}
+    {stage === "results" && prepared && runResult && <CR3ResultsStage result={runResult} pair={prepared.pair} paused={paused} onRunAgain={() => {
+      setRunResult(null);
+      setSurvivalGuide(null);
+      setStage("survival");
+    }} />}
     {(stage === "loading" || stage === "error") && <div className="rare-shift-overlay" role={stage === "error" ? "alert" : "status"}>
       <strong>{stage === "loading" ? "Reading your Friend's 64 canonical frames…" : "RARE//SHIFT could not start"}</strong>
       {stage === "error" && <><p>{error}</p><button type="button" disabled={paused} onClick={() => setRetry(value => value + 1)}>Retry</button></>}
