@@ -23,6 +23,7 @@
     "test:evolution": "node --experimental-strip-types --test games/rare-shift/tests/evolution-runtime-core.test.ts games/rare-shift/tests/evolution-live-state-core.test.ts",
     "test:evolution-reconstruction-browser": "node --experimental-strip-types scripts/evolution-reconstruction-browser.mjs",
     "test:evolution-prism-browser": "node --experimental-strip-types scripts/evolution-prism-browser.mjs",
+    "test:evolution-sync-halo-browser": "node --experimental-strip-types scripts/evolution-sync-halo-browser.mjs",
     "test:cr-2-browser": "node --experimental-strip-types scripts/cr2-protocol-live-browser.mjs",
     "proof:v2-art": "node --experimental-strip-types scripts/v2-art00-generate.mjs",
     "test:v2-art-browser": "node scripts/v2-art00-browser.mjs",
