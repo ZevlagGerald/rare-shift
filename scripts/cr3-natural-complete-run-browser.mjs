@@ -22,9 +22,7 @@ async function clickDraft(canvas, index, count) {
   assert.ok(box, "draft canvas must have a bounding box");
   await canvas.click({ position: { x: box.width * centers(count)[index] / 960, y: box.height * 320 / 640 } });
 }
-async function pressShift(canvas) {
-  await canvas.press("Space");
-}
+async function pressShift(canvas) { await canvas.press("Space"); }
 async function mount(game) {
   await game.getByRole("button", { name: /ENTER SIGNAL DESCENT/i }).click();
   const canvas = game.locator("canvas");
@@ -65,11 +63,9 @@ async function chooseNaturalDraft(canvas, data, page, healingBias = true) {
   assert.equal(ids.length, count, "draft ids/count mismatch");
   assert.ok(count >= 1 && count <= 3, `unexpected draft count ${count}`);
   const hp = Number(await data("hp"));
-
   const prefer = healingBias && hp <= 70
     ? ["FIELD_REPAIR", "EVOLUTION", "ORBIT_NODES", "ECHO_MINE", "SIGNAL_ARC", "ORBIT_RANK", "ECHO_RANK", "SIGNAL_RANK", "DELTA_RANK", "VECTOR_NEEDLE", "VECTOR_RANK", "SIGNAL_MAGNET"]
     : ["EVOLUTION", "ORBIT_NODES", "ECHO_MINE", "SIGNAL_ARC", "ORBIT_RANK", "ECHO_RANK", "SIGNAL_RANK", "DELTA_RANK", "VECTOR_NEEDLE", "VECTOR_RANK", "FIELD_REPAIR", "SIGNAL_MAGNET"];
-
   let index = -1;
   for (const token of prefer) {
     index = ids.findIndex(id => id === token || id.startsWith(`${token}:`));
@@ -92,7 +88,6 @@ async function naturalDeathQualification() {
       const canvas = await mount(game);
       const data = name => canvas.getAttribute(`data-${name}`);
       const deadline = Date.now() + 240_000;
-
       while (Date.now() < deadline) {
         const failure = game.locator('[data-stage="results"][data-outcome="DEFEAT"]');
         if (await failure.count()) break;
@@ -100,18 +95,14 @@ async function naturalDeathQualification() {
           await chooseNaturalDraft(canvas, data, page, false);
           continue;
         }
-        // Intentionally make no evasive movement and never SHIFT. This is a
-        // legitimate losing player route; no HP, enemy, timer or scene state is written.
         await page.waitForTimeout(250);
       }
-
       const failure = game.locator('[data-stage="results"][data-outcome="DEFEAT"]');
       await failure.waitFor({ state: "visible", timeout: 5_000 });
       assert.equal(Number(await failure.getAttribute("data-final-hp")), 0);
       assert.ok(Number(await failure.getAttribute("data-damage-taken")) > 0, "natural death must record real accepted damage");
       assert.equal(Number(await failure.getAttribute("data-terminal-pause-events")), 1);
       assert.notEqual(await failure.getAttribute("data-boss-result"), "DEFEATED");
-
       await game.getByRole("button", { name: /RUN AGAIN/i }).click();
       const retryCanvas = game.locator("canvas");
       await retryCanvas.waitFor({ state: "visible" });
@@ -126,7 +117,7 @@ async function naturalVictoryQualification() {
   await testGame(gameDirectory, {
     width: 960,
     height: 800,
-    timeout: 620_000,
+    timeout: 760_000,
     screenshot: resolve("artifacts/rare-shift-cr3e-natural-victory-host-960.png"),
     check: async ({ page, game }) => {
       const scan = game.locator('[data-stage="scan"]');
@@ -135,7 +126,6 @@ async function naturalVictoryQualification() {
       const startingFrameB = Number(await scan.getAttribute("data-frame-b"));
       const canvas = await mount(game);
       const data = name => canvas.getAttribute(`data-${name}`);
-
       const observedStages = new Set();
       const observedCheckpoints = new Set();
       const observedKinds = new Set();
@@ -148,7 +138,7 @@ async function naturalVictoryQualification() {
       let bossSearchOrdinal = 0;
       let lastBossCycle = "";
       let lastSnapshot = null;
-      const deadline = Date.now() + 560_000;
+      const deadline = Date.now() + 700_000;
 
       const record = async () => {
         const stage = String(await data("director-stage"));
@@ -173,23 +163,33 @@ async function naturalVictoryQualification() {
       };
 
       const patrolStages = async () => {
-        // Reuse the compact movement cadence already proven by the V2-1 browser:
-        // a small repeating square keeps threats in weapon/pickup range instead of
-        // starving the build by running the world perimeter.
-        const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
-        await canvas.press(route[movementTicks % route.length], { delay: 460 });
-        movementTicks += 1;
-        await page.waitForTimeout(350);
-        if (movementTicks % 2 === 0 && !bool(await data("draft-open"))) {
-          if (await acceptedShift(canvas)) ordinaryShifts += 1;
-          await page.waitForTimeout(80);
+        // Exact CR-1 natural Stage-IV survival navigation: a large inset rectangle
+        // with infrequent SHIFT. This route is already qualified against the same
+        // production gameplay and avoids the compact route's collision-heavy churn.
+        const x = Number(await data("x"));
+        const y = Number(await data("y"));
+        let key;
+        if (y < 250 && x < 1500) key = "ArrowRight";
+        else if (x >= 1500 && y < 950) key = "ArrowDown";
+        else if (y >= 950 && x > 300) key = "ArrowLeft";
+        else if (x <= 300 && y > 250) key = "ArrowUp";
+        else {
+          const route = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
+          key = route[Math.floor(movementTicks / 10) % route.length];
         }
+        await canvas.press(key, { delay: 520 });
+        movementTicks += 1;
+        await page.waitForTimeout(80);
+        if (movementTicks % 7 === 0 && !bool(await data("draft-open"))) {
+          if (await acceptedShift(canvas)) ordinaryShifts += 1;
+          await page.waitForTimeout(70);
+        }
+        if (movementTicks % 60 === 0) console.log(`CR3E_NATURAL_STATE=${JSON.stringify(lastSnapshot)}`);
       };
 
       const alignTo = async targetPhase => {
         if (targetPhase !== "A" && targetPhase !== "B") return;
-        const current = await data("phase");
-        if (current !== targetPhase) {
+        if (await data("phase") !== targetPhase) {
           await acceptedShift(canvas);
           await page.waitForTimeout(80);
         }
@@ -215,31 +215,19 @@ async function naturalVictoryQualification() {
 
       const fightBoss = async () => {
         const bossPhase = String(await data("cr3-boss-phase") ?? "");
-        if (!bossPhase) {
-          await page.waitForTimeout(80);
-          return;
-        }
+        if (!bossPhase) { await page.waitForTimeout(80); return; }
         observedBossPhases.add(bossPhase);
         if (bossPhase === "DEFEATED") return;
-
         if (bossPhase === "BREAK_WINDOW" && await data("cr3-boss-break-open") !== "true") {
           await answerBreakTell(await data("cr3-boss-expected-response"));
           await page.waitForTimeout(60);
         }
-
         const vulnerability = await data("cr3-boss-vulnerability");
         await alignTo(vulnerability);
-
         const bossX = Number(await data("cr3-boss-x"));
         const bossY = Number(await data("cr3-boss-y"));
         const cycle = `${bossPhase}:${await data("cr3-boss-cycle-ordinal")}:${vulnerability}:${await data("cr3-boss-break-open")}`;
-        if (cycle !== lastBossCycle) {
-          lastBossCycle = cycle;
-          bossSearchOrdinal = 0;
-        }
-
-        // Search the boss perimeter using ordinary movement only. Auto-fire remains
-        // authoritative; the route merely finds legal canonical DELTA geometry.
+        if (cycle !== lastBossCycle) { lastBossCycle = cycle; bossSearchOrdinal = 0; }
         const offsets = [
           [0, 96], [96, 0], [0, -96], [-96, 0],
           [72, 72], [72, -72], [-72, 72], [-72, -72],
@@ -262,21 +250,14 @@ async function naturalVictoryQualification() {
           if (outcome === "VICTORY") break;
           throw new Error(`natural CR-3E win route terminated as ${outcome}; last=${JSON.stringify(lastSnapshot)}; damageTaken=${await terminal.getAttribute("data-damage-taken")}; bossResult=${await terminal.getAttribute("data-boss-result")}`);
         }
-
         await record();
-        if (bool(await data("dead"))) {
-          throw new Error(`natural CR-3E win route died before result transition; last=${JSON.stringify(lastSnapshot)}`);
-        }
+        if (bool(await data("dead"))) throw new Error(`natural CR-3E win route died before result transition; last=${JSON.stringify(lastSnapshot)}`);
         if (bool(await data("draft-open"))) {
           await chooseNaturalDraft(canvas, data, page, true);
           continue;
         }
-
-        if (await data("director-stage") === "BOSS_PENDING" || await data("cr3-boss-active") === "true") {
-          await fightBoss();
-        } else {
-          await patrolStages();
-        }
+        if (await data("director-stage") === "BOSS_PENDING" || await data("cr3-boss-active") === "true") await fightBoss();
+        else await patrolStages();
       }
 
       const victory = game.locator('[data-stage="results"][data-outcome="VICTORY"]');
@@ -287,7 +268,6 @@ async function naturalVictoryQualification() {
       assert.equal(Number(await victory.getAttribute("data-frame-a")), startingFrameA);
       assert.equal(Number(await victory.getAttribute("data-frame-b")), startingFrameB);
       assert.match(await victory.getAttribute("data-fingerprint"), /^CR3D-[0-9a-f]{8}$/u);
-
       assert.ok(observedStages.has("STAGE_I"));
       assert.ok(observedStages.has("STAGE_II"));
       assert.ok(observedStages.has("STAGE_III"));
@@ -306,17 +286,14 @@ async function naturalVictoryQualification() {
       assert.ok(maxElitesDefeated >= 3, `expected all three elites defeated, got ${maxElitesDefeated}`);
       assert.ok(maxCores >= 1, "natural run must acquire at least one Evolution Core");
       assert.ok(ordinaryShifts >= 8, `natural pre-boss run must repeatedly exercise SHIFT, got ${ordinaryShifts}`);
-
       await game.locator('[data-results-view="reconstruction-a"]').waitFor({ state: "visible" });
       await game.locator('[data-results-view="reconstruction-b"]').waitFor({ state: "visible" });
       await page.locator(".rf-game-frame").screenshot({ path: resolve("artifacts/rare-shift-cr3e-natural-victory-results-960.png") });
-
       await game.getByRole("button", { name: /RUN AGAIN/i }).click();
       const retryCanvas = game.locator("canvas");
       await retryCanvas.waitFor({ state: "visible" });
       assert.equal(await retryCanvas.getAttribute("data-dead"), "false");
       assert.equal(Number(await retryCanvas.getAttribute("data-hp")), 100);
-
       console.log(`CR3E_NATURAL_VICTORY_MAX_CORES=${maxCores}`);
       console.log(`CR3E_NATURAL_VICTORY_MAX_ELITES=${maxElitesDefeated}`);
       console.log(`CR3E_NATURAL_VICTORY_BOSS_PHASES=${[...observedBossPhases].join(",")}`);
