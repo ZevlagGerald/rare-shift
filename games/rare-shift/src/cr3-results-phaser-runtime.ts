@@ -80,6 +80,7 @@ export function installCR3ResultsPhaserRuntime(game: Phaser.Game): () => void {
     originalApplyPlayerDamage = scene.applyPlayerDamage;
 
     patchedFireDelta = function (this: CR3DResultsScene, profile: DeltaProfile): void {
+      if (terminal) return;
       originalFireDelta?.call(this, profile);
       inspectTerminal();
       syncDiagnostics();
@@ -87,6 +88,7 @@ export function installCR3ResultsPhaserRuntime(game: Phaser.Game): () => void {
     scene.fireDelta = patchedFireDelta;
 
     patchedApplyPlayerDamage = function (this: CR3DResultsScene, amount: number): boolean {
+      if (terminal) return false;
       const hpBefore = this.hp;
       const accepted = originalApplyPlayerDamage?.call(this, amount) ?? false;
       if (accepted) damageTaken += Math.max(0, hpBefore - this.hp);
