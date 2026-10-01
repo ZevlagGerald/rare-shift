@@ -21,6 +21,7 @@ type CaptureGamePrototype = {
 };
 
 type CR3ControlledQualificationWindow = Window & {
+  __RARE_SHIFT_V23B5_SIGNAL_RANK__?: unknown;
   __RARE_SHIFT_CR3B_RUNTIME__?: unknown;
   __RARE_SHIFT_CR3D_RUNTIME__?: unknown;
 };
@@ -53,7 +54,9 @@ export function mountPhaserSurvival(options: SurvivalOptions): PhaserSurvivalCon
   }
 
   const qualificationWindow = window as CR3ControlledQualificationWindow;
-  const controlledCR3Qualification = qualificationWindow.__RARE_SHIFT_CR3B_RUNTIME__ === true
+  const controlledB5SignalQualification = Number.isInteger(qualificationWindow.__RARE_SHIFT_V23B5_SIGNAL_RANK__);
+  const controlledQualification = controlledB5SignalQualification
+    || qualificationWindow.__RARE_SHIFT_CR3B_RUNTIME__ === true
     || qualificationWindow.__RARE_SHIFT_CR3D_RUNTIME__ === true;
 
   let survivalScene: RuntimeScene | null = null;
@@ -63,7 +66,7 @@ export function mountPhaserSurvival(options: SurvivalOptions): PhaserSurvivalCon
   let rewireFrame: number | null = null;
 
   const captureAndRewireCheckpointUpdate = (): void => {
-    if (controlledCR3Qualification || updateRewired) return;
+    if (controlledQualification || updateRewired) return;
 
     if (!survivalScene) {
       const candidate = game.scene.getScene("RareShiftV21Survival") as RuntimeScene | undefined;
@@ -102,13 +105,15 @@ export function mountPhaserSurvival(options: SurvivalOptions): PhaserSurvivalCon
   // Schedule this before the checkpoint adapter schedules its own RAF. That
   // guarantees the first frame that exposes the survival scene captures the
   // qualified callback before the adapter replaces scene.update.
-  if (!controlledCR3Qualification) {
+  if (!controlledQualification) {
     rewireFrame = window.requestAnimationFrame(captureAndRewireCheckpointUpdate);
   }
 
-  const cleanupCheckpointRuntime = controlledCR3Qualification
+  const cleanupCheckpointRuntime = controlledQualification
     ? (() => {
-        game.canvas.dataset.cr3e1CheckpointRuntime = "SUPPRESSED_FOR_CONTROLLED_CR3_QUALIFICATION";
+        game.canvas.dataset.cr3e1CheckpointRuntime = controlledB5SignalQualification
+          ? "SUPPRESSED_FOR_CONTROLLED_B5_SIGNAL_QUALIFICATION"
+          : "SUPPRESSED_FOR_CONTROLLED_CR3_QUALIFICATION";
         return () => { delete game.canvas.dataset.cr3e1CheckpointRuntime; };
       })()
     : installCR3ECheckpointPhaserRuntime(game);
