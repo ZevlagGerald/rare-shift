@@ -5,6 +5,7 @@ import type { CSSProperties } from "react";
 import type { GameComponentProps } from "@rarefriends/friendsdk/runtime";
 import { createFriendReader, decodeSpriteBitmap } from "@rarefriends/friendsdk/sprites";
 import Phaser from "phaser";
+import { installCR3DesyncPhaserRuntime } from "./src/cr3-desync-phaser-runtime.ts";
 import { derivePhaseField, selectFramePair } from "./src/phase-core.ts";
 import { draftIndexForPoint } from "./src/draft-pointer-core.ts";
 import { installChainResonanceQualification } from "./src/evolution-chain-resonance-qualification.ts";
@@ -29,6 +30,8 @@ type QualificationWindow = Window & {
   __RARE_SHIFT_EV3E_CHAIN_RESONANCE__?: unknown;
   __RARE_SHIFT_EV3F_PRODUCTION_RUNTIME__?: unknown;
   __RARE_SHIFT_EV3F_PHASER__?: { readonly GAMES: Phaser.Game[] };
+  __RARE_SHIFT_CR3B_RUNTIME__?: unknown;
+  __RARE_SHIFT_CR3B_PHASER__?: { readonly GAMES: Phaser.Game[] };
 };
 
 interface PreparedV2 {
@@ -218,6 +221,7 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
     const memoryQualification = qualificationWindow.__RARE_SHIFT_EV3D_MEMORY_COLLAPSE__ === true;
     const chainQualification = qualificationWindow.__RARE_SHIFT_EV3E_CHAIN_RESONANCE__ === true;
     const productionRuntimeQualification = qualificationWindow.__RARE_SHIFT_EV3F_PRODUCTION_RUNTIME__ === true;
+    const cr3bQualification = qualificationWindow.__RARE_SHIFT_CR3B_RUNTIME__ === true;
     const controlledEvolutionQualification = reconstructionQualification || prismQualification || syncQualification || memoryQualification || chainQualification;
     const capturedGames: Phaser.Game[] = [];
     type QualificationGamePrototype = { boot: (...args: unknown[]) => unknown };
@@ -226,12 +230,14 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
 
     if (rank4Qualification) qualificationWindow.__RARE_SHIFT_B5_PHASER__ = { GAMES: capturedGames };
     if (productionRuntimeQualification) qualificationWindow.__RARE_SHIFT_EV3F_PHASER__ = { GAMES: capturedGames };
+    if (cr3bQualification) qualificationWindow.__RARE_SHIFT_CR3B_PHASER__ = { GAMES: capturedGames };
     gamePrototype.boot = function (this: Phaser.Game, ...args: unknown[]) {
       capturedGames.push(this);
       return originalBoot.apply(this, args);
     };
 
     let mounted: PhaserSurvivalController | null = null;
+    let cleanupCR3Runtime = () => {};
     let cleanupEvolutionRuntime = () => {};
     let cleanupReconstruction = () => {};
     let cleanupPrism = () => {};
@@ -247,14 +253,16 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
         familyName: prepared.familyName,
       });
       const capturedGame = capturedGames[0];
-      if (!capturedGame) throw new Error("Evolution runtime could not capture the mounted Phaser game.");
+      if (!capturedGame) throw new Error("Production runtime could not capture the mounted Phaser game.");
       if (!controlledEvolutionQualification) cleanupEvolutionRuntime = installEvolutionPhaserRuntime(capturedGame);
       if (reconstructionQualification) cleanupReconstruction = installReconstructionFieldQualification(capturedGame);
       if (prismQualification) cleanupPrism = installPrismLanceQualification(capturedGame);
       if (syncQualification) cleanupSync = installSyncHaloQualification(capturedGame);
       if (memoryQualification) cleanupMemory = installMemoryCollapseQualification(capturedGame);
       if (chainQualification) cleanupChain = installChainResonanceQualification(capturedGame);
+      cleanupCR3Runtime = installCR3DesyncPhaserRuntime(capturedGame);
     } catch (cause) {
+      cleanupCR3Runtime();
       cleanupEvolutionRuntime();
       mounted?.destroy();
       throw cause;
@@ -265,6 +273,7 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
     controller.current = mounted;
     mounted.setPaused(paused);
     return () => {
+      cleanupCR3Runtime();
       cleanupChain();
       cleanupMemory();
       cleanupSync();
@@ -274,6 +283,7 @@ export default function RareShiftV2({ friendId, client, paused }: GameComponentP
       mounted.destroy();
       if (rank4Qualification) delete qualificationWindow.__RARE_SHIFT_B5_PHASER__;
       if (productionRuntimeQualification) delete qualificationWindow.__RARE_SHIFT_EV3F_PHASER__;
+      if (cr3bQualification) delete qualificationWindow.__RARE_SHIFT_CR3B_PHASER__;
       if (controller.current === mounted) controller.current = null;
     };
   }, [stage, prepared]);
