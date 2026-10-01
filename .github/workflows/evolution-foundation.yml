@@ -6,8 +6,10 @@ on:
       - feature/evolution-runtime
     paths:
       - ".github/workflows/evolution-foundation.yml"
+      - "games/rare-shift/v2.tsx"
       - "games/rare-shift/src/evolution-*.ts"
       - "games/rare-shift/tests/evolution-*.test.ts"
+      - "scripts/evolution-*.mjs"
       - "games/rare-shift/src/phase-combat-core.ts"
       - "games/rare-shift/src/vector-core.ts"
       - "games/rare-shift/src/orbit-core.ts"
@@ -27,7 +29,7 @@ permissions:
 
 jobs:
   qualify-evolution-foundation:
-    name: EV-1/EV-2 deterministic Evolution foundation
+    name: EV-1/EV-2/EV-3A Evolution qualification
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
@@ -91,3 +93,13 @@ jobs:
         run: |
           npm run typecheck:core
           npm run typecheck
+
+      - name: Verify natural Evolution path remains blocked
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F 'buildCR2ProtocolDraftFromLive' games/rare-shift/src/phaser-survival.ts >/dev/null
+          grep -F 'Evolution projection reached Phaser before evolved combat runtime qualification.' games/rare-shift/src/phaser-survival.ts >/dev/null
+
+      - name: EV-3A RECONSTRUCTION FIELD controlled Phaser qualification
+        run: npm run test:evolution-reconstruction-browser
