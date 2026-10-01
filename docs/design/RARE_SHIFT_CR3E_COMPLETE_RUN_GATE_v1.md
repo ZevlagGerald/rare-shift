@@ -1,8 +1,8 @@
 # RARE//SHIFT CR-3E COMPLETE RUN QUALIFICATION GATE v1
 
-**Status:** IMPLEMENTATION CANDIDATE — OWNER AUTHORIZED  
-**Branch:** `feature/cr3e-complete-run`  
-**Base:** qualified CR-3D `52b1ad048f642b7e3e00bd3f3d19ced23e597f9e`  
+**Status:** IMPLEMENTATION CANDIDATE — OWNER AUTHORIZED
+**Branch:** `feature/cr3e-complete-run`
+**Base:** qualified CR-3D `52b1ad048f642b7e3e00bd3f3d19ced23e597f9e`
 **Scope:** qualification only; no production gameplay tuning
 
 ## 1. Purpose
