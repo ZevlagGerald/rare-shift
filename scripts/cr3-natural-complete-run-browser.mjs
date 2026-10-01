@@ -33,14 +33,14 @@ async function mount(game) {
 async function waitForShift(canvas, before, timeoutMs = 1_200) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const after = Number(await canvas.getAttribute("data-shifts"));
+    const after = Number(await canvas.getAttribute("data-shifts", { timeout: 350 }));
     if (after > before) return after;
     await new Promise(resolveWait => setTimeout(resolveWait, 45));
   }
-  return Number(await canvas.getAttribute("data-shifts"));
+  return Number(await canvas.getAttribute("data-shifts", { timeout: 350 }));
 }
 async function acceptedShift(canvas) {
-  const before = Number(await canvas.getAttribute("data-shifts"));
+  const before = Number(await canvas.getAttribute("data-shifts", { timeout: 350 }));
   await pressShift(canvas);
   return (await waitForShift(canvas, before)) > before;
 }
@@ -64,8 +64,8 @@ async function chooseNaturalDraft(canvas, data, page, healingBias = true) {
   assert.ok(count >= 1 && count <= 3, `unexpected draft count ${count}`);
   const hp = Number(await data("hp"));
   const prefer = healingBias && hp <= 70
-    ? ["FIELD_REPAIR", "EVOLUTION", "ORBIT_NODES", "ECHO_MINE", "SIGNAL_ARC", "ORBIT_RANK", "ECHO_RANK", "SIGNAL_RANK", "DELTA_RANK", "VECTOR_NEEDLE", "VECTOR_RANK", "SIGNAL_MAGNET"]
-    : ["EVOLUTION", "ORBIT_NODES", "ECHO_MINE", "SIGNAL_ARC", "ORBIT_RANK", "ECHO_RANK", "SIGNAL_RANK", "DELTA_RANK", "VECTOR_NEEDLE", "VECTOR_RANK", "FIELD_REPAIR", "SIGNAL_MAGNET"];
+    ? ["FIELD_REPAIR", "ORBIT_RANK", "ECHO_RANK", "SIGNAL_RANK", "DELTA_RANK", "VECTOR_RANK", "ORBIT_NODES", "ECHO_MINE", "SIGNAL_ARC", "VECTOR_NEEDLE", "EVOLUTION", "SIGNAL_MAGNET"]
+    : ["ORBIT_NODES", "ECHO_MINE", "SIGNAL_ARC", "ORBIT_RANK", "ECHO_RANK", "SIGNAL_RANK", "DELTA_RANK", "VECTOR_NEEDLE", "VECTOR_RANK", "EVOLUTION", "FIELD_REPAIR", "SIGNAL_MAGNET"];
   let index = -1;
   for (const token of prefer) {
     index = ids.findIndex(id => id === token || id.startsWith(`${token}:`));
@@ -125,7 +125,7 @@ async function naturalVictoryQualification() {
       const startingFrameA = Number(await scan.getAttribute("data-frame-a"));
       const startingFrameB = Number(await scan.getAttribute("data-frame-b"));
       const canvas = await mount(game);
-      const data = name => canvas.getAttribute(`data-${name}`);
+      const data = name => canvas.getAttribute(`data-${name}`, { timeout: 750 });
       const observedStages = new Set();
       const observedCheckpoints = new Set();
       const observedKinds = new Set();
@@ -139,6 +139,19 @@ async function naturalVictoryQualification() {
       let lastBossCycle = "";
       let lastSnapshot = null;
       const deadline = Date.now() + 700_000;
+
+      const terminalOutcome = async timeoutMs => {
+        const terminal = game.locator('[data-stage="results"]');
+        if (!(await terminal.count())) {
+          if (!timeoutMs) return null;
+          const visible = await terminal.waitFor({ state: "visible", timeout: timeoutMs }).then(() => true).catch(() => false);
+          if (!visible) return null;
+        }
+        return {
+          locator: terminal,
+          outcome: await terminal.getAttribute("data-outcome"),
+        };
+      };
 
       const record = async () => {
         const stage = String(await data("director-stage"));
@@ -164,8 +177,7 @@ async function naturalVictoryQualification() {
 
       const patrolStages = async () => {
         // Exact CR-1 natural Stage-IV survival navigation: a large inset rectangle
-        // with infrequent SHIFT. This route is already qualified against the same
-        // production gameplay and avoids the compact route's collision-heavy churn.
+        // with the same non-blocking SHIFT cadence used by the qualified CR-1 proof.
         const x = Number(await data("x"));
         const y = Number(await data("y"));
         let key;
@@ -181,8 +193,11 @@ async function naturalVictoryQualification() {
         movementTicks += 1;
         await page.waitForTimeout(80);
         if (movementTicks % 7 === 0 && !bool(await data("draft-open"))) {
-          if (await acceptedShift(canvas)) ordinaryShifts += 1;
+          const before = Number(await data("shifts"));
+          await pressShift(canvas);
           await page.waitForTimeout(70);
+          const after = Number(await data("shifts"));
+          if (after > before) ordinaryShifts += 1;
         }
         if (movementTicks % 60 === 0) console.log(`CR3E_NATURAL_STATE=${JSON.stringify(lastSnapshot)}`);
       };
@@ -244,20 +259,28 @@ async function naturalVictoryQualification() {
       };
 
       while (Date.now() < deadline) {
-        const terminal = game.locator('[data-stage="results"]');
-        if (await terminal.count()) {
-          const outcome = await terminal.getAttribute("data-outcome");
-          if (outcome === "VICTORY") break;
-          throw new Error(`natural CR-3E win route terminated as ${outcome}; last=${JSON.stringify(lastSnapshot)}; damageTaken=${await terminal.getAttribute("data-damage-taken")}; bossResult=${await terminal.getAttribute("data-boss-result")}`);
+        const terminal = await terminalOutcome(0);
+        if (terminal) {
+          if (terminal.outcome === "VICTORY") break;
+          throw new Error(`natural CR-3E win route terminated as ${terminal.outcome}; last=${JSON.stringify(lastSnapshot)}; damageTaken=${await terminal.locator.getAttribute("data-damage-taken")}; bossResult=${await terminal.locator.getAttribute("data-boss-result")}`);
         }
-        await record();
-        if (bool(await data("dead"))) throw new Error(`natural CR-3E win route died before result transition; last=${JSON.stringify(lastSnapshot)}`);
-        if (bool(await data("draft-open"))) {
-          await chooseNaturalDraft(canvas, data, page, true);
-          continue;
+        try {
+          await record();
+          if (bool(await data("dead"))) throw new Error(`natural CR-3E win route died before result transition; last=${JSON.stringify(lastSnapshot)}`);
+          if (bool(await data("draft-open"))) {
+            await chooseNaturalDraft(canvas, data, page, true);
+            continue;
+          }
+          if (await data("director-stage") === "BOSS_PENDING" || await data("cr3-boss-active") === "true") await fightBoss();
+          else await patrolStages();
+        } catch (cause) {
+          const terminalAfterRace = await terminalOutcome(1_500);
+          if (terminalAfterRace) {
+            if (terminalAfterRace.outcome === "VICTORY") break;
+            throw new Error(`natural CR-3E win route terminated as ${terminalAfterRace.outcome}; last=${JSON.stringify(lastSnapshot)}; damageTaken=${await terminalAfterRace.locator.getAttribute("data-damage-taken")}; bossResult=${await terminalAfterRace.locator.getAttribute("data-boss-result")}`);
+          }
+          throw cause;
         }
-        if (await data("director-stage") === "BOSS_PENDING" || await data("cr3-boss-active") === "true") await fightBoss();
-        else await patrolStages();
       }
 
       const victory = game.locator('[data-stage="results"][data-outcome="VICTORY"]');
