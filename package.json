@@ -20,7 +20,7 @@
     "test:v2-3b5-signal": "node --experimental-strip-types --test games/rare-shift/tests/v2-3b5-signal-ranks.test.ts games/rare-shift/tests/v2-3b5-signal-adapter.test.ts",
     "test:cr-1": "node --experimental-strip-types --test games/rare-shift/tests/cr-1-survival-director.test.ts",
     "test:cr-2a": "node --experimental-strip-types --test games/rare-shift/tests/cr-2-progression-core.test.ts games/rare-shift/tests/cr-2-protocol-runtime.test.ts games/rare-shift/tests/cr-2-draft-core.test.ts games/rare-shift/tests/cr-2-live-state-core.test.ts games/rare-shift/tests/cr-2-live-tranche-core.test.ts games/rare-shift/tests/cr-2-universal-live-passives.test.ts",
-    "test:evolution": "node --experimental-strip-types --test games/rare-shift/tests/evolution-runtime-core.test.ts",
+    "test:evolution": "node --experimental-strip-types --test games/rare-shift/tests/evolution-runtime-core.test.ts games/rare-shift/tests/evolution-live-state-core.test.ts",
     "test:cr-2-browser": "node --experimental-strip-types scripts/cr2-protocol-live-browser.mjs",
     "proof:v2-art": "node --experimental-strip-types scripts/v2-art00-generate.mjs",
     "test:v2-art-browser": "node scripts/v2-art00-browser.mjs",
