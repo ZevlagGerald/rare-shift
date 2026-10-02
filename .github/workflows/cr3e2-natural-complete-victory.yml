@@ -120,7 +120,7 @@ jobs:
           npm run check
           npm run build
 
-      - name: Apply bounded CR-3E.2 pressure-clear build strategy in workspace
+      - name: Apply bounded CR-3E.2 emergency-REFRACT strategy in workspace
         shell: bash
         run: |
           set -euo pipefail
@@ -135,19 +135,24 @@ jobs:
           if (source.split(clickNeedle).length !== 2) throw new Error("CR3E2 bounded draft-click patch anchor drifted");
           source = source.replace(clickNeedle, clickReplacement);
 
+          const refractNeedle = `  const criticalRefract = state.level >= 5\n    && state.hp <= 35\n    && state.cr2DraftActive\n    && state.refracts > 0\n    && !state.draftIds.includes("FIELD_REPAIR");`;
+          const refractReplacement = `  const criticalRefract = state.level >= 5\n    && state.hp <= 25\n    && state.cr2DraftActive\n    && state.refracts > 0\n    && !state.draftIds.includes("FIELD_REPAIR");`;
+          if (source.split(refractNeedle).length !== 2) throw new Error("CR3E2 emergency REFRACT anchor drifted");
+          source = source.replace(refractNeedle, refractReplacement);
+
           const refractPressNeedle = `    await canvas.press("r");`;
           const refractPressReplacement = `    await canvas.press("r", { timeout: 2_500 });`;
           if (source.split(refractPressNeedle).length !== 2) throw new Error("CR3E2 bounded REFRACT input anchor drifted");
           source = source.replace(refractPressNeedle, refractPressReplacement);
 
           const priorityNeedle = `  const lowHp = state.hp <= 72;\n  const priority = lowHp\n    ? [`;
-          const priorityReplacement = `  const pressureDraft = state.level >= 5 && (state.hp <= 60 || state.activeEnemies >= 32);\n  const lowHp = state.hp <= 72;\n  const priority = pressureDraft\n    ? [\n        "FIELD_REPAIR",\n        "ORBIT_RANK",\n        "SIGNAL_RANK",\n        "DELTA_RANK",\n        "ECHO_RANK",\n        "PROTOCOL_ORBIT_STABILIZER",\n        "PROTOCOL_VECTOR_LENS",\n        "PROTOCOL_COMMON_CORE",\n        "PROTOCOL_RESONANCE_COIL",\n        "PROTOCOL_MEMORY_FUSE",\n        "SIGNAL_MAGNET",\n        "EVOLUTION",\n        "VECTOR_RANK",\n        "ORBIT_NODES",\n        "ECHO_MINE",\n        "SIGNAL_ARC",\n        "VECTOR_NEEDLE",\n      ]\n    : lowHp\n    ? [`;
-          if (source.split(priorityNeedle).length !== 2) throw new Error("CR3E2 pressure-clear priority patch anchor drifted");
+          const priorityReplacement = `  const pressureDraft = state.level >= 5 && (state.hp <= 60 || state.activeEnemies >= 32);\n  const lowHp = state.hp <= 72;\n  const priority = pressureDraft\n    ? [\n        "FIELD_REPAIR",\n        "PROTOCOL_ORBIT_STABILIZER",\n        "PROTOCOL_VECTOR_LENS",\n        "PROTOCOL_COMMON_CORE",\n        "DELTA_RANK",\n        "SIGNAL_RANK",\n        "ORBIT_RANK",\n        "ECHO_RANK",\n        "PROTOCOL_RESONANCE_COIL",\n        "PROTOCOL_MEMORY_FUSE",\n        "SIGNAL_MAGNET",\n        "EVOLUTION",\n        "VECTOR_RANK",\n        "ORBIT_NODES",\n        "ECHO_MINE",\n        "SIGNAL_ARC",\n        "VECTOR_NEEDLE",\n      ]\n    : lowHp\n    ? [`;
+          if (source.split(priorityNeedle).length !== 2) throw new Error("CR3E2 pressure-priority patch anchor drifted");
           source = source.replace(priorityNeedle, priorityReplacement);
 
           const movementNeedle = `  await canvas.press(key, { delay: postStageOne ? 520 : 420 });\n  return { settle: postStageOne ? 80 : 0, shiftModulo: 7 };`;
-          const movementReplacement = `  await canvas.press(key, { delay: postStageOne ? 520 : 420, timeout: 2_500 });\n  return { settle: postStageOne ? 80 : 0, shiftModulo: 7 };`;
-          if (source.split(movementNeedle).length !== 2) throw new Error("CR3E2 proven outer-lane cadence anchor drifted");
+          const movementReplacement = `  await canvas.press(key, { delay: postStageOne ? 520 : 420, timeout: 2_500 });\n  const pressureShift = postStageOne && (state.activeEnemies >= 32 || state.hp <= 25);\n  return { settle: postStageOne ? 80 : 0, shiftModulo: pressureShift ? 5 : 7 };`;
+          if (source.split(movementNeedle).length !== 2) throw new Error("CR3E2 outer-lane pressure cadence anchor drifted");
           source = source.replace(movementNeedle, movementReplacement);
 
           const shiftNeedle = `      await canvas.press("Space");`;
@@ -171,7 +176,7 @@ jobs:
           git diff --check -- scripts/cr3e2-natural-complete-victory-browser.mjs
           git diff -- scripts/cr3e2-natural-complete-victory-browser.mjs
 
-      - name: CR-3E.2 natural complete-victory pressure-clear build probe
+      - name: CR-3E.2 natural complete-victory emergency-REFRACT probe
         run: node --experimental-strip-types scripts/cr3e2-natural-complete-victory-browser.mjs
 
       - name: Inherited baseline browser regression
@@ -227,6 +232,6 @@ jobs:
       - name: Report composed CR-3E.2 probe qualification
         shell: bash
         run: |
-          echo "RARE_SHIFT_CR3E2_PRESSURE_CLEAR_BUILD_PROBE=PASS"
+          echo "RARE_SHIFT_CR3E2_EMERGENCY_REFRACT_PROBE=PASS"
           echo "CR3E2_PROBE_HEAD=$(git rev-parse HEAD)"
           test -z "$(git diff --name-only -- games/rare-shift)"
