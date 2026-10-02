@@ -52,6 +52,9 @@ async function readState(canvas) {
     draftOpen: element.dataset.draftOpen === "true",
     draftIds: (element.dataset.draftIds ?? "").split(",").filter(Boolean),
     draftCount: Number(element.dataset.draftCount ?? "0"),
+    cr2DraftActive: element.dataset.cr2DraftActive === "true",
+    refracts: Number(element.dataset.refracts ?? "0"),
+    rerollNonce: Number(element.dataset.rerollNonce ?? "0"),
     activeEnemies: Number(element.dataset.activeEnemies ?? "0"),
     enemyKinds: (element.dataset.enemyKinds ?? "").split(",").filter(Boolean),
     elitesDefeated: Number(element.dataset.elitesDefeated ?? "0"),
@@ -99,6 +102,9 @@ async function readCombatState(canvas) {
     draftOpen: element.dataset.draftOpen === "true",
     draftIds: (element.dataset.draftIds ?? "").split(",").filter(Boolean),
     draftCount: Number(element.dataset.draftCount ?? "0"),
+    cr2DraftActive: element.dataset.cr2DraftActive === "true",
+    refracts: Number(element.dataset.refracts ?? "0"),
+    rerollNonce: Number(element.dataset.rerollNonce ?? "0"),
     activeEnemies: Number(element.dataset.activeEnemies ?? "0"),
     enemyKinds: (element.dataset.enemyKinds ?? "").split(",").filter(Boolean),
     elitesDefeated: Number(element.dataset.elitesDefeated ?? "0"),
@@ -174,6 +180,27 @@ async function chooseDraft(canvas, state, page, width) {
     }
   }
 
+  const criticalRefract = state.level >= 5
+    && state.hp <= 35
+    && state.cr2DraftActive
+    && state.refracts > 0
+    && !state.draftIds.includes("FIELD_REPAIR");
+  if (criticalRefract) {
+    const beforeRefracts = state.refracts;
+    const beforeNonce = state.rerollNonce;
+    const beforeIds = state.draftIds.join(",");
+    await canvas.press("r");
+    await page.waitForTimeout(110);
+    const replacement = await readState(canvas);
+    const accepted = replacement.draftOpen
+      && (replacement.rerollNonce > beforeNonce || replacement.refracts < beforeRefracts);
+    if (accepted) {
+      assert.equal(replacement.draftIds.length, replacement.draftCount, `REFRACT replacement ids/count mismatch at width ${width}`);
+      console.log(`CR3E2_REFRACT_${width}=L${state.level}:HP${state.hp}:R${beforeRefracts}->${replacement.refracts}:NONCE${beforeNonce}->${replacement.rerollNonce}:${beforeIds}=>${replacement.draftIds.join(",")}`);
+      state = replacement;
+    }
+  }
+
   const lowHp = state.hp <= 72;
   const priority = lowHp
     ? [
@@ -226,30 +253,17 @@ async function chooseDraft(canvas, state, page, width) {
 }
 
 async function moveNaturalSurvivalLane(canvas, state, tick) {
-  let baseKey;
-  if (state.y < 250 && state.x < 1500) baseKey = "ArrowRight";
-  else if (state.x >= 1500 && state.y < 950) baseKey = "ArrowDown";
-  else if (state.y >= 950 && state.x > 300) baseKey = "ArrowLeft";
-  else if (state.x <= 300 && state.y > 250) baseKey = "ArrowUp";
-  else baseKey = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"][Math.floor(tick / 10) % 4];
-
-  if (state.stage === "STAGE_I") {
-    await canvas.press(baseKey, { delay: 420 });
-    return { settle: 0, shiftModulo: 7 };
-  }
-
-  const jukePhase = tick % 4;
-  let key = baseKey;
-  if (jukePhase === 1 || jukePhase === 3) {
-    const firstJuke = jukePhase === 1;
-    if (baseKey === "ArrowRight") key = firstJuke ? "ArrowDown" : "ArrowUp";
-    else if (baseKey === "ArrowDown") key = firstJuke ? "ArrowLeft" : "ArrowRight";
-    else if (baseKey === "ArrowLeft") key = firstJuke ? "ArrowUp" : "ArrowDown";
-    else key = firstJuke ? "ArrowRight" : "ArrowLeft";
-  }
-
-  await canvas.press(key, { delay: 420 });
-  return { settle: 0, shiftModulo: 7 };
+  const x = state.x;
+  const y = state.y;
+  let key;
+  if (y < 250 && x < 1500) key = "ArrowRight";
+  else if (x >= 1500 && y < 950) key = "ArrowDown";
+  else if (y >= 950 && x > 300) key = "ArrowLeft";
+  else if (x <= 300 && y > 250) key = "ArrowUp";
+  else key = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"][Math.floor(tick / 10) % 4];
+  const postStageOne = state.stage !== "STAGE_I";
+  await canvas.press(key, { delay: postStageOne ? 520 : 420 });
+  return { settle: postStageOne ? 80 : 0, shiftModulo: 7 };
 }
 
 async function moveEliteCombatLane(canvas, state, tick) {
@@ -377,6 +391,7 @@ function qualification(width) {
           level: state.level,
           kills: state.kills,
           shifts: state.shifts,
+          refracts: state.refracts,
           bossPhase: state.bossPhase,
           bossHp: state.bossHp,
         })}`);
