@@ -226,15 +226,30 @@ async function chooseDraft(canvas, state, page, width) {
 }
 
 async function moveNaturalSurvivalLane(canvas, state, tick) {
-  let key;
-  if (state.y < 250 && state.x < 1500) key = "ArrowRight";
-  else if (state.x >= 1500 && state.y < 950) key = "ArrowDown";
-  else if (state.y >= 950 && state.x > 300) key = "ArrowLeft";
-  else if (state.x <= 300 && state.y > 250) key = "ArrowUp";
-  else key = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"][Math.floor(tick / 10) % 4];
-  const postStageOne = state.stage !== "STAGE_I";
-  await canvas.press(key, { delay: postStageOne ? 520 : 420 });
-  return { settle: postStageOne ? 80 : 0, shiftModulo: 7 };
+  let baseKey;
+  if (state.y < 250 && state.x < 1500) baseKey = "ArrowRight";
+  else if (state.x >= 1500 && state.y < 950) baseKey = "ArrowDown";
+  else if (state.y >= 950 && state.x > 300) baseKey = "ArrowLeft";
+  else if (state.x <= 300 && state.y > 250) baseKey = "ArrowUp";
+  else baseKey = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"][Math.floor(tick / 10) % 4];
+
+  if (state.stage === "STAGE_I") {
+    await canvas.press(baseKey, { delay: 420 });
+    return { settle: 0, shiftModulo: 7 };
+  }
+
+  const jukePhase = tick % 4;
+  let key = baseKey;
+  if (jukePhase === 1 || jukePhase === 3) {
+    const firstJuke = jukePhase === 1;
+    if (baseKey === "ArrowRight") key = firstJuke ? "ArrowDown" : "ArrowUp";
+    else if (baseKey === "ArrowDown") key = firstJuke ? "ArrowLeft" : "ArrowRight";
+    else if (baseKey === "ArrowLeft") key = firstJuke ? "ArrowUp" : "ArrowDown";
+    else key = firstJuke ? "ArrowRight" : "ArrowLeft";
+  }
+
+  await canvas.press(key, { delay: 420 });
+  return { settle: 0, shiftModulo: 7 };
 }
 
 async function moveEliteCombatLane(canvas, state, tick) {
