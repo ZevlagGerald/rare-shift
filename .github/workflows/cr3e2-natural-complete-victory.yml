@@ -26,6 +26,9 @@ jobs:
       FRIENDSDK_ARCHIVE: vendor/rarefriends-friendsdk-0.1.3.tgz
       FRIENDSDK_SHA256: 8f156c469a15786e3c649b35d092e86ec6242ff30415b7ee7c451763a816e789
       FRIENDSDK_URL: https://github.com/spokesz/friendsdk/releases/download/v0.1.3/rarefriends-friendsdk-0.1.3.tgz
+      B5_SCRIPT_BLOB: 360cfb5bc6221277b437fb699f501aa658f5221f
+      B5_RELIABILITY_PROOF_HEAD: f0742f9500f86834c26b2dbdc19249a492b40d48
+      B5_RELIABILITY_PROOF_RUN: "37006438703"
 
     steps:
       - name: Checkout exact CR-3E.2 head
@@ -64,6 +67,7 @@ jobs:
           test -z "$(git diff --name-only "$BASE"...HEAD -- games/rare-shift)"
           test "$(git rev-parse "$BASE":games/rare-shift/src/phaser-survival.ts)" = "$(git rev-parse HEAD:games/rare-shift/src/phaser-survival.ts)"
           test "$(git rev-parse "$BASE":games/rare-shift/src/cr3e-checkpoint-phaser-runtime.ts)" = "$(git rev-parse HEAD:games/rare-shift/src/cr3e-checkpoint-phaser-runtime.ts)"
+          test "$(git rev-parse HEAD:scripts/v2-3b5-signal-browser.mjs)" = "$B5_SCRIPT_BLOB"
 
       - name: Syntax-check qualification driver
         run: node --check scripts/cr3e2-natural-complete-victory-browser.mjs
@@ -117,8 +121,37 @@ jobs:
       - name: Inherited baseline browser regression
         run: npm run test:v2-1-browser
 
+      - name: Apply qualified B5 browser-driver ordering repair in workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "B5_RELIABILITY_PROOF_HEAD=$B5_RELIABILITY_PROOF_HEAD"
+          echo "B5_RELIABILITY_PROOF_RUN=$B5_RELIABILITY_PROOF_RUN"
+          test "$(git hash-object scripts/v2-3b5-signal-browser.mjs)" = "$B5_SCRIPT_BLOB"
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+          const path = "scripts/v2-3b5-signal-browser.mjs";
+          let source = readFileSync(path, "utf8");
+          const before = `    const deadline = Date.now() + 70_000;\n    let controlledObserved = false;\n    while (Date.now() < deadline && !controlledObserved) {\n      if (bool(await data("dead"))) throw new Error("died before real Rank-V controlled routing cast");\n      if (bool(await data("draft-open"))) { await clearDraft(canvas, data); await page.waitForTimeout(80); continue; }\n      await canvas.press(route[routeIndex++ % route.length], { delay: 480 });\n      await page.waitForTimeout(90);\n      if (routeIndex % 5 === 0) { await shift(canvas, width); await page.waitForTimeout(70); }\n      controlledObserved = Number(await data("signal-controlled-routing-casts")) > 0;\n    }\n    assert.equal(controlledObserved, true, "Rank V must produce a real cast whose topology differs from nearest-only routing");\n    const degrees = String(await data("signal-last-chain-forward-degrees")).split(",").filter(value => value !== "");\n    assert.ok(degrees.length >= 1, "Rank V controlled route must expose forward-degree evidence");\n    assert.ok(degrees.some(value => Number(value) >= 1));`;
+          const after = `    const deadline = Date.now() + 70_000;\n    let controlledObserved = false;\n    let controlledDegrees = [];\n    let controlledCount = Number(await data("signal-controlled-routing-casts"));\n    while (Date.now() < deadline && !controlledObserved) {\n      if (bool(await data("dead"))) throw new Error("died before real Rank-V controlled routing cast");\n      if (bool(await data("draft-open"))) { await clearDraft(canvas, data); await page.waitForTimeout(80); continue; }\n      await canvas.press(route[routeIndex++ % route.length], { delay: 480 });\n      await page.waitForTimeout(90);\n      const controlledSnapshot = await canvas.evaluate(element => ({\n        casts: Number(element.dataset.signalControlledRoutingCasts ?? "0"),\n        degrees: String(element.dataset.signalLastChainForwardDegrees ?? "").split(",").filter(value => value !== ""),\n      }));\n      if (controlledSnapshot.casts > controlledCount) {\n        controlledObserved = true;\n        controlledDegrees = controlledSnapshot.degrees;\n        break;\n      }\n      controlledCount = controlledSnapshot.casts;\n      if (routeIndex % 5 === 0) { await shift(canvas, width); await page.waitForTimeout(70); }\n    }\n    assert.equal(controlledObserved, true, "Rank V must produce a real cast whose topology differs from nearest-only routing");\n    assert.ok(controlledDegrees.length >= 1, "Rank V controlled route must expose forward-degree evidence before SHIFT invalidation");\n    assert.ok(controlledDegrees.some(value => Number(value) >= 1));`;
+          const first = source.indexOf(before);
+          if (first < 0) throw new Error("Expected Rank-V B5 driver block not found; refusing broad patch.");
+          if (source.indexOf(before, first + 1) >= 0) throw new Error("Rank-V B5 driver block is not unique; refusing broad patch.");
+          source = source.replace(before, after);
+          writeFileSync(path, source);
+          NODE
+          node --check scripts/v2-3b5-signal-browser.mjs
+          git diff --check -- scripts/v2-3b5-signal-browser.mjs
+
       - name: Inherited B5 SHIFT and SIGNAL browser regression
         run: npm run test:v2-3b5-signal-browser
+
+      - name: Restore inherited B5 driver after qualified workspace repair
+        if: always()
+        shell: bash
+        run: |
+          git checkout -- scripts/v2-3b5-signal-browser.mjs
+          test "$(git hash-object scripts/v2-3b5-signal-browser.mjs)" = "$B5_SCRIPT_BLOB"
 
       - name: Inherited natural Evolution wrapper regression
         run: node --experimental-strip-types scripts/evolution-natural-selection-browser.mjs
