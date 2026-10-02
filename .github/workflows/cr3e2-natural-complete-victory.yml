@@ -120,7 +120,7 @@ jobs:
           npm run check
           npm run build
 
-      - name: Apply bounded CR-3E.2 Stage-III hybrid strategy in workspace
+      - name: Apply bounded CR-3E.2 preserved-REFRACT Stage-III hybrid strategy in workspace
         shell: bash
         run: |
           set -euo pipefail
@@ -136,8 +136,8 @@ jobs:
           source = source.replace(clickNeedle, clickReplacement);
 
           const refractNeedle = `  const criticalRefract = state.level >= 5\n    && state.hp <= 35\n    && state.cr2DraftActive\n    && state.refracts > 0\n    && !state.draftIds.includes("FIELD_REPAIR");`;
-          const refractReplacement = `  const criticalRefract = state.level >= 5\n    && state.hp <= 25\n    && state.cr2DraftActive\n    && state.refracts > 0\n    && !state.draftIds.includes("FIELD_REPAIR");`;
-          if (source.split(refractNeedle).length !== 2) throw new Error("CR3E2 bounded REFRACT anchor drifted");
+          const refractReplacement = `  const criticalRefract = state.level >= 5\n    && state.stage === "STAGE_IV"\n    && state.gateResolvedCount >= 3\n    && state.hp <= 25\n    && state.cr2DraftActive\n    && state.refracts > 0\n    && !state.draftIds.includes("FIELD_REPAIR");`;
+          if (source.split(refractNeedle).length !== 2) throw new Error("CR3E2 preserved REFRACT anchor drifted");
           source = source.replace(refractNeedle, refractReplacement);
 
           const refractPressNeedle = `    await canvas.press("r");`;
@@ -176,7 +176,7 @@ jobs:
           git diff --check -- scripts/cr3e2-natural-complete-victory-browser.mjs
           git diff -- scripts/cr3e2-natural-complete-victory-browser.mjs
 
-      - name: CR-3E.2 natural complete-victory Stage-III hybrid probe
+      - name: CR-3E.2 natural complete-victory preserved-REFRACT Stage-III hybrid probe
         run: node --experimental-strip-types scripts/cr3e2-natural-complete-victory-browser.mjs
 
       - name: Inherited baseline browser regression
@@ -232,6 +232,6 @@ jobs:
       - name: Report composed CR-3E.2 probe qualification
         shell: bash
         run: |
-          echo "RARE_SHIFT_CR3E2_STAGE3_HYBRID_PROBE=PASS"
+          echo "RARE_SHIFT_CR3E2_PRESERVED_REFRACT_STAGE3_HYBRID_PROBE=PASS"
           echo "CR3E2_PROBE_HEAD=$(git rev-parse HEAD)"
           test -z "$(git diff --name-only -- games/rare-shift)"
