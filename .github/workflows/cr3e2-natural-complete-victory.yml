@@ -120,7 +120,7 @@ jobs:
           npm run check
           npm run build
 
-      - name: Apply bounded CR-3E.2 emergency-REFRACT strategy in workspace
+      - name: Apply bounded CR-3E.2 Stage-III hybrid strategy in workspace
         shell: bash
         run: |
           set -euo pipefail
@@ -137,7 +137,7 @@ jobs:
 
           const refractNeedle = `  const criticalRefract = state.level >= 5\n    && state.hp <= 35\n    && state.cr2DraftActive\n    && state.refracts > 0\n    && !state.draftIds.includes("FIELD_REPAIR");`;
           const refractReplacement = `  const criticalRefract = state.level >= 5\n    && state.hp <= 25\n    && state.cr2DraftActive\n    && state.refracts > 0\n    && !state.draftIds.includes("FIELD_REPAIR");`;
-          if (source.split(refractNeedle).length !== 2) throw new Error("CR3E2 emergency REFRACT anchor drifted");
+          if (source.split(refractNeedle).length !== 2) throw new Error("CR3E2 bounded REFRACT anchor drifted");
           source = source.replace(refractNeedle, refractReplacement);
 
           const refractPressNeedle = `    await canvas.press("r");`;
@@ -146,8 +146,8 @@ jobs:
           source = source.replace(refractPressNeedle, refractPressReplacement);
 
           const priorityNeedle = `  const lowHp = state.hp <= 72;\n  const priority = lowHp\n    ? [`;
-          const priorityReplacement = `  const pressureDraft = state.level >= 5 && (state.hp <= 60 || state.activeEnemies >= 32);\n  const lowHp = state.hp <= 72;\n  const priority = pressureDraft\n    ? [\n        "FIELD_REPAIR",\n        "PROTOCOL_ORBIT_STABILIZER",\n        "PROTOCOL_VECTOR_LENS",\n        "PROTOCOL_COMMON_CORE",\n        "DELTA_RANK",\n        "SIGNAL_RANK",\n        "ORBIT_RANK",\n        "ECHO_RANK",\n        "PROTOCOL_RESONANCE_COIL",\n        "PROTOCOL_MEMORY_FUSE",\n        "SIGNAL_MAGNET",\n        "EVOLUTION",\n        "VECTOR_RANK",\n        "ORBIT_NODES",\n        "ECHO_MINE",\n        "SIGNAL_ARC",\n        "VECTOR_NEEDLE",\n      ]\n    : lowHp\n    ? [`;
-          if (source.split(priorityNeedle).length !== 2) throw new Error("CR3E2 pressure-priority patch anchor drifted");
+          const priorityReplacement = `  const stageThreePressure = state.stage === "STAGE_III" && state.gateResolvedCount >= 2;\n  const pressureDraft = state.level >= 5 && (state.hp <= 60 || state.activeEnemies >= 32);\n  const lowHp = state.hp <= 72;\n  const priority = stageThreePressure\n    ? [\n        "FIELD_REPAIR",\n        "ORBIT_RANK",\n        "DELTA_RANK",\n        "SIGNAL_RANK",\n        "ECHO_RANK",\n        "PROTOCOL_ORBIT_STABILIZER",\n        "PROTOCOL_VECTOR_LENS",\n        "PROTOCOL_COMMON_CORE",\n        "PROTOCOL_RESONANCE_COIL",\n        "PROTOCOL_MEMORY_FUSE",\n        "SIGNAL_MAGNET",\n        "EVOLUTION",\n        "VECTOR_RANK",\n        "ORBIT_NODES",\n        "ECHO_MINE",\n        "SIGNAL_ARC",\n        "VECTOR_NEEDLE",\n      ]\n    : pressureDraft\n    ? [\n        "FIELD_REPAIR",\n        "PROTOCOL_ORBIT_STABILIZER",\n        "PROTOCOL_VECTOR_LENS",\n        "PROTOCOL_COMMON_CORE",\n        "DELTA_RANK",\n        "SIGNAL_RANK",\n        "ORBIT_RANK",\n        "ECHO_RANK",\n        "PROTOCOL_RESONANCE_COIL",\n        "PROTOCOL_MEMORY_FUSE",\n        "SIGNAL_MAGNET",\n        "EVOLUTION",\n        "VECTOR_RANK",\n        "ORBIT_NODES",\n        "ECHO_MINE",\n        "SIGNAL_ARC",\n        "VECTOR_NEEDLE",\n      ]\n    : lowHp\n    ? [`;
+          if (source.split(priorityNeedle).length !== 2) throw new Error("CR3E2 Stage-III hybrid priority anchor drifted");
           source = source.replace(priorityNeedle, priorityReplacement);
 
           const movementNeedle = `  await canvas.press(key, { delay: postStageOne ? 520 : 420 });\n  return { settle: postStageOne ? 80 : 0, shiftModulo: 7 };`;
@@ -176,7 +176,7 @@ jobs:
           git diff --check -- scripts/cr3e2-natural-complete-victory-browser.mjs
           git diff -- scripts/cr3e2-natural-complete-victory-browser.mjs
 
-      - name: CR-3E.2 natural complete-victory emergency-REFRACT probe
+      - name: CR-3E.2 natural complete-victory Stage-III hybrid probe
         run: node --experimental-strip-types scripts/cr3e2-natural-complete-victory-browser.mjs
 
       - name: Inherited baseline browser regression
@@ -232,6 +232,6 @@ jobs:
       - name: Report composed CR-3E.2 probe qualification
         shell: bash
         run: |
-          echo "RARE_SHIFT_CR3E2_EMERGENCY_REFRACT_PROBE=PASS"
+          echo "RARE_SHIFT_CR3E2_STAGE3_HYBRID_PROBE=PASS"
           echo "CR3E2_PROBE_HEAD=$(git rev-parse HEAD)"
           test -z "$(git diff --name-only -- games/rare-shift)"
