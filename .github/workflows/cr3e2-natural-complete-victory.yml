@@ -120,7 +120,7 @@ jobs:
           npm run check
           npm run build
 
-      - name: Apply bounded CR-3E.2 preserved-REFRACT Stage-III hybrid strategy in workspace
+      - name: Apply bounded CR-3E.2 Stage-IV phase-aware survival strategy in workspace
         shell: bash
         run: |
           set -euo pipefail
@@ -150,14 +150,24 @@ jobs:
           if (source.split(priorityNeedle).length !== 2) throw new Error("CR3E2 Stage-III hybrid priority anchor drifted");
           source = source.replace(priorityNeedle, priorityReplacement);
 
-          const movementNeedle = `  await canvas.press(key, { delay: postStageOne ? 520 : 420 });\n  return { settle: postStageOne ? 80 : 0, shiftModulo: 7 };`;
-          const movementReplacement = `  await canvas.press(key, { delay: postStageOne ? 520 : 420, timeout: 2_500 });\n  const pressureShift = postStageOne && (state.activeEnemies >= 32 || state.hp <= 25);\n  return { settle: postStageOne ? 80 : 0, shiftModulo: pressureShift ? 5 : 7 };`;
-          if (source.split(movementNeedle).length !== 2) throw new Error("CR3E2 outer-lane pressure cadence anchor drifted");
+          const movementNeedle = `async function moveNaturalSurvivalLane(canvas, state, tick) {\n  const x = state.x;`;
+          const movementReplacement = `function shouldPhaseAwareShift(state, periodicDue) {\n  const stageFourSurvival = state.stage === "STAGE_IV"\n    && state.gateResolvedCount >= 3\n    && state.gatePhase === "RUNNING"\n    && !state.bossActive\n    && !state.bossPending;\n  if (!stageFourSurvival) return periodicDue;\n  const aThreats = state.enemyKinds.filter(kind => kind === "SPLIT_A" || kind === "FLICKER_A").length;\n  const bThreats = state.enemyKinds.filter(kind => kind === "SPLIT_B" || kind === "FLICKER_B").length;\n  const current = state.phase === "A" ? aThreats : bThreats;\n  const alternate = state.phase === "A" ? bThreats : aThreats;\n  return alternate + 2 <= current;\n}\n\nasync function moveNaturalSurvivalLane(canvas, state, tick) {\n  const x = state.x;`;
+          if (source.split(movementNeedle).length !== 2) throw new Error("CR3E2 phase-aware helper anchor drifted");
           source = source.replace(movementNeedle, movementReplacement);
+
+          const cadenceNeedle = `  await canvas.press(key, { delay: postStageOne ? 520 : 420 });\n  return { settle: postStageOne ? 80 : 0, shiftModulo: 7 };`;
+          const cadenceReplacement = `  await canvas.press(key, { delay: postStageOne ? 520 : 420, timeout: 2_500 });\n  const pressureShift = postStageOne && (state.activeEnemies >= 32 || state.hp <= 25);\n  return { settle: postStageOne ? 80 : 0, shiftModulo: pressureShift ? 5 : 7 };`;
+          if (source.split(cadenceNeedle).length !== 2) throw new Error("CR3E2 outer-lane pressure cadence anchor drifted");
+          source = source.replace(cadenceNeedle, cadenceReplacement);
+
+          const periodicShiftNeedle = `if (moveTick % movement.shiftModulo === 0) await shiftAndObserve();`;
+          const periodicShiftReplacement = `if (shouldPhaseAwareShift(state, moveTick % movement.shiftModulo === 0)) await shiftAndObserve();`;
+          if (source.split(periodicShiftNeedle).length !== 3) throw new Error("CR3E2 periodic SHIFT anchors drifted");
+          source = source.replaceAll(periodicShiftNeedle, periodicShiftReplacement);
 
           const shiftNeedle = `      await canvas.press("Space");`;
           const shiftReplacement = `      await canvas.press("Space", { timeout: 2_500 });`;
-          if (source.split(shiftNeedle).length !== 2) throw new Error("CR3E2 bounded SHIFT patch anchor drifted");
+          if (source.split(shiftNeedle).length !== 2) throw new Error("CR3E2 bounded SHIFT input anchor drifted");
           source = source.replace(shiftNeedle, shiftReplacement);
 
           const watchNeedle = `    let bossReadyObserved = false;\n    let lastState = await readState(canvas);\n    const deadline = Date.now() + 720_000;`;
@@ -176,7 +186,7 @@ jobs:
           git diff --check -- scripts/cr3e2-natural-complete-victory-browser.mjs
           git diff -- scripts/cr3e2-natural-complete-victory-browser.mjs
 
-      - name: CR-3E.2 natural complete-victory preserved-REFRACT Stage-III hybrid probe
+      - name: CR-3E.2 natural complete-victory Stage-IV phase-aware survival probe
         run: node --experimental-strip-types scripts/cr3e2-natural-complete-victory-browser.mjs
 
       - name: Inherited baseline browser regression
@@ -232,6 +242,6 @@ jobs:
       - name: Report composed CR-3E.2 probe qualification
         shell: bash
         run: |
-          echo "RARE_SHIFT_CR3E2_PRESERVED_REFRACT_STAGE3_HYBRID_PROBE=PASS"
+          echo "RARE_SHIFT_CR3E2_STAGE4_PHASE_AWARE_SURVIVAL_PROBE=PASS"
           echo "CR3E2_PROBE_HEAD=$(git rev-parse HEAD)"
           test -z "$(git diff --name-only -- games/rare-shift)"
