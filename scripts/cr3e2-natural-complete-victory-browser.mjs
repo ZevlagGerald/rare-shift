@@ -52,6 +52,7 @@ async function readState(canvas) {
     draftOpen: element.dataset.draftOpen === "true",
     draftIds: (element.dataset.draftIds ?? "").split(",").filter(Boolean),
     draftCount: Number(element.dataset.draftCount ?? "0"),
+    activeEnemies: Number(element.dataset.activeEnemies ?? "0"),
     enemyKinds: (element.dataset.enemyKinds ?? "").split(",").filter(Boolean),
     elitesDefeated: Number(element.dataset.elitesDefeated ?? "0"),
     cores: Number(element.dataset.evolutionCores ?? "0"),
@@ -98,6 +99,7 @@ async function readCombatState(canvas) {
     draftOpen: element.dataset.draftOpen === "true",
     draftIds: (element.dataset.draftIds ?? "").split(",").filter(Boolean),
     draftCount: Number(element.dataset.draftCount ?? "0"),
+    activeEnemies: Number(element.dataset.activeEnemies ?? "0"),
     enemyKinds: (element.dataset.enemyKinds ?? "").split(",").filter(Boolean),
     elitesDefeated: Number(element.dataset.elitesDefeated ?? "0"),
     cores: Number(element.dataset.evolutionCores ?? "0"),
@@ -230,8 +232,9 @@ async function moveNaturalSurvivalLane(canvas, state, tick) {
   else if (state.y >= 950 && state.x > 300) key = "ArrowLeft";
   else if (state.x <= 300 && state.y > 250) key = "ArrowUp";
   else key = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"][Math.floor(tick / 10) % 4];
-  await canvas.press(key, { delay: 420 });
-  return { settle: 0, shiftModulo: 7 };
+  const postStageOne = state.stage !== "STAGE_I";
+  await canvas.press(key, { delay: postStageOne ? 520 : 420 });
+  return { settle: postStageOne ? 80 : 0, shiftModulo: 7 };
 }
 
 async function moveEliteCombatLane(canvas, state, tick) {
@@ -354,6 +357,7 @@ function qualification(width) {
           gate: state.gateActive,
           gatePhase: state.gatePhase,
           resolved: state.gateResolved,
+          activeEnemies: state.activeEnemies,
           hp: state.hp,
           level: state.level,
           kills: state.kills,
@@ -463,10 +467,22 @@ function qualification(width) {
         if (state.bossActive || state.stage === "BOSS_PENDING") {
           await fightBoss(state);
         } else if (state.gatePhase === "ELITE_ACTIVE") {
-          await moveEliteCombatLane(canvas, state, checkpointTick);
-          checkpointTick += 1;
-          if (checkpointTick % 6 === 0) await shiftAndObserve();
-          await page.waitForTimeout(35);
+          const thinLaterCheckpointField = state.gateActive !== "ELITE_I" && state.activeEnemies > 1;
+          if (thinLaterCheckpointField) {
+            const movement = await moveNaturalSurvivalLane(canvas, state, moveTick);
+            moveTick += 1;
+            await page.waitForTimeout(movement.settle);
+            if (moveTick % movement.shiftModulo === 0) await shiftAndObserve();
+            if (moveTick % 20 === 0) {
+              console.log(`CR3E2_GATE_THIN_${width}=${state.gateActive}:ACTIVE${state.activeEnemies}:HP${state.hp}:ELITE_HP${state.eliteHp}`);
+            }
+            await page.waitForTimeout(45);
+          } else {
+            await moveEliteCombatLane(canvas, state, checkpointTick);
+            checkpointTick += 1;
+            if (checkpointTick % 6 === 0) await shiftAndObserve();
+            await page.waitForTimeout(35);
+          }
         } else if (state.gatePhase === "REWARD_PENDING") {
           if (lastCheckpointPosition) await moveTowardPoint(canvas, state, lastCheckpointPosition);
           await page.waitForTimeout(80);
