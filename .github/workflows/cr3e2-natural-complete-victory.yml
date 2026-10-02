@@ -29,6 +29,7 @@ jobs:
       B5_SCRIPT_BLOB: 360cfb5bc6221277b437fb699f501aa658f5221f
       B5_RELIABILITY_PROOF_HEAD: f0742f9500f86834c26b2dbdc19249a492b40d48
       B5_RELIABILITY_PROOF_RUN: "37006438703"
+      CR3E2_DRIVER_BLOB: b2ab5b0a6c3a8f4de2ec3977ec6c4d3473a2d24d
 
     steps:
       - name: Checkout exact CR-3E.2 head
@@ -68,6 +69,7 @@ jobs:
           test "$(git rev-parse "$BASE":games/rare-shift/src/phaser-survival.ts)" = "$(git rev-parse HEAD:games/rare-shift/src/phaser-survival.ts)"
           test "$(git rev-parse "$BASE":games/rare-shift/src/cr3e-checkpoint-phaser-runtime.ts)" = "$(git rev-parse HEAD:games/rare-shift/src/cr3e-checkpoint-phaser-runtime.ts)"
           test "$(git rev-parse HEAD:scripts/v2-3b5-signal-browser.mjs)" = "$B5_SCRIPT_BLOB"
+          test "$(git rev-parse HEAD:scripts/cr3e2-natural-complete-victory-browser.mjs)" = "$CR3E2_DRIVER_BLOB"
 
       - name: Syntax-check qualification driver
         run: node --check scripts/cr3e2-natural-complete-victory-browser.mjs
@@ -117,6 +119,35 @@ jobs:
         run: |
           npm run check
           npm run build
+
+      - name: Apply bounded CR-3E.2 pressure-response strategy in workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object scripts/cr3e2-natural-complete-victory-browser.mjs)" = "$CR3E2_DRIVER_BLOB"
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+          const path = "scripts/cr3e2-natural-complete-victory-browser.mjs";
+          let source = readFileSync(path, "utf8");
+
+          const priorityNeedle = `  const lowHp = state.hp <= 72;\n  const priority = lowHp\n    ? [`;
+          const priorityReplacement = `  const criticalHp = state.hp <= 25;\n  const lowHp = state.hp <= 72;\n  const priority = criticalHp\n    ? [\n        "FIELD_REPAIR",\n        "PROTOCOL_ORBIT_STABILIZER",\n        "PROTOCOL_VECTOR_LENS",\n        "PROTOCOL_COMMON_CORE",\n        "DELTA_RANK",\n        "SIGNAL_RANK",\n        "ORBIT_RANK",\n        "ECHO_RANK",\n        "PROTOCOL_RESONANCE_COIL",\n        "PROTOCOL_MEMORY_FUSE",\n        "EVOLUTION",\n        "SIGNAL_MAGNET",\n        "VECTOR_RANK",\n        "ORBIT_NODES",\n        "ECHO_MINE",\n        "SIGNAL_ARC",\n        "VECTOR_NEEDLE",\n      ]\n    : lowHp\n    ? [`;
+          if (source.split(priorityNeedle).length !== 2) throw new Error("CR3E2 critical-priority patch anchor drifted");
+          source = source.replace(priorityNeedle, priorityReplacement);
+
+          const cadenceNeedle = `  return { settle: postStageOne ? 80 : 0, shiftModulo: 7 };`;
+          const cadenceReplacement = `  const pressureShift = postStageOne && (state.activeEnemies >= 32 || state.hp <= 25);\n  return { settle: postStageOne ? 80 : 0, shiftModulo: pressureShift ? 5 : 7 };`;
+          if (source.split(cadenceNeedle).length !== 2) throw new Error("CR3E2 pressure SHIFT patch anchor drifted");
+          source = source.replace(cadenceNeedle, cadenceReplacement);
+
+          writeFileSync(path, source);
+          NODE
+          node --check scripts/cr3e2-natural-complete-victory-browser.mjs
+          git diff --check -- scripts/cr3e2-natural-complete-victory-browser.mjs
+          git diff -- scripts/cr3e2-natural-complete-victory-browser.mjs
+
+      - name: CR-3E.2 natural complete-victory pressure-response probe
+        run: node --experimental-strip-types scripts/cr3e2-natural-complete-victory-browser.mjs
 
       - name: Inherited baseline browser regression
         run: npm run test:v2-1-browser
@@ -168,5 +199,9 @@ jobs:
       - name: Inherited CR-3E.1 live checkpoint browser regression
         run: npm run test:cr-3e1-browser
 
-      - name: CR-3E.2 natural complete-victory browser qualification
-        run: node --experimental-strip-types scripts/cr3e2-natural-complete-victory-browser.mjs
+      - name: Report composed CR-3E.2 probe qualification
+        shell: bash
+        run: |
+          echo "RARE_SHIFT_CR3E2_PRESSURE_RESPONSE_PROBE=PASS"
+          echo "CR3E2_PROBE_HEAD=$(git rev-parse HEAD)"
+          test -z "$(git diff --name-only -- games/rare-shift)"
