@@ -479,7 +479,14 @@ function qualification(width) {
       }
 
       observe(state);
-      assert.equal(state.gateRuntime, "ACTIVE", `checkpoint runtime lost authority on a live combat canvas at width ${width}`);
+      if (state.gateRuntime !== "ACTIVE") {
+        const transitioned = await resultState(game, 1_500);
+        if (transitioned?.outcome === "VICTORY") break;
+        if (transitioned) {
+          throw new Error(`CR-3E.2 natural victory route ended as ${transitioned.outcome} during checkpoint-runtime transition at width ${width}; last=${JSON.stringify(lastState)}`);
+        }
+        assert.equal(state.gateRuntime, "ACTIVE", `checkpoint runtime lost authority on a live combat canvas at width ${width}`);
+      }
       if (state.dead) throw new Error(`CR-3E.2 natural route died before results at width ${width}; last=${JSON.stringify(state)}`);
       if (state.draftOpen) {
         try {
