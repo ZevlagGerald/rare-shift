@@ -56,18 +56,34 @@ async function moveSafeLane(canvas, data, tick) {
   await canvas.press(key, { delay: 420 });
 }
 
-async function moveTowardElite(canvas, data) {
+async function moveEliteCombatLane(canvas, data, tick) {
   const x = Number(await data("x"));
   const y = Number(await data("y"));
   const eliteX = Number(await data("checkpoint-elite-x"));
   const eliteY = Number(await data("checkpoint-elite-y"));
   assert.ok(Number.isFinite(eliteX) && Number.isFinite(eliteY), "active checkpoint elite must expose deterministic diagnostics");
+
   const dx = eliteX - x;
   const dy = eliteY - y;
-  const key = Math.abs(dx) >= Math.abs(dy)
-    ? dx >= 0 ? "ArrowRight" : "ArrowLeft"
-    : dy >= 0 ? "ArrowDown" : "ArrowUp";
-  await canvas.press(key, { delay: 240 });
+  const distance = Math.hypot(dx, dy);
+  const horizontalDominant = Math.abs(dx) >= Math.abs(dy);
+  let key;
+
+  if (distance > 210) {
+    key = horizontalDominant
+      ? dx >= 0 ? "ArrowRight" : "ArrowLeft"
+      : dy >= 0 ? "ArrowDown" : "ArrowUp";
+  } else if (distance < 140) {
+    key = horizontalDominant
+      ? dx >= 0 ? "ArrowLeft" : "ArrowRight"
+      : dy >= 0 ? "ArrowUp" : "ArrowDown";
+  } else if (horizontalDominant) {
+    key = tick % 2 === 0 ? "ArrowUp" : "ArrowDown";
+  } else {
+    key = tick % 2 === 0 ? "ArrowLeft" : "ArrowRight";
+  }
+
+  await canvas.press(key, { delay: 180 });
 }
 
 async function assertCombatCanvas(game, canvas, width, context) {
@@ -153,7 +169,7 @@ function qualification(width) {
       }
       const gatePhase = String(await data("checkpoint-gate-phase"));
       if (gatePhase === "ELITE_ACTIVE") {
-        await moveTowardElite(canvas, data);
+        await moveEliteCombatLane(canvas, data, huntTicks);
         huntTicks += 1;
         await assertCombatCanvas(game, canvas, width, "post-movement ELITE_I resolution");
         if (huntTicks % 6 === 0) await shift(canvas);
