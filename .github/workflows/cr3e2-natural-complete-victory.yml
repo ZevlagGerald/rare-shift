@@ -120,7 +120,7 @@ jobs:
           npm run check
           npm run build
 
-      - name: Apply bounded CR-3E.2 pressure-response strategy in workspace
+      - name: Apply bounded CR-3E.2 saturated-field engagement strategy in workspace
         shell: bash
         run: |
           set -euo pipefail
@@ -130,15 +130,40 @@ jobs:
           const path = "scripts/cr3e2-natural-complete-victory-browser.mjs";
           let source = readFileSync(path, "utf8");
 
+          const clickNeedle = `  await canvas.click({ position: { x: box.width * centers(count)[index] / 960, y: box.height * 320 / 640 } });`;
+          const clickReplacement = `  await canvas.click({ position: { x: box.width * centers(count)[index] / 960, y: box.height * 320 / 640 }, timeout: 2_500 });`;
+          if (source.split(clickNeedle).length !== 2) throw new Error("CR3E2 bounded draft-click patch anchor drifted");
+          source = source.replace(clickNeedle, clickReplacement);
+
+          const refractNeedle = `    await canvas.press("r");`;
+          const refractReplacement = `    await canvas.press("r", { timeout: 2_500 });`;
+          if (source.split(refractNeedle).length !== 2) throw new Error("CR3E2 bounded REFRACT patch anchor drifted");
+          source = source.replace(refractNeedle, refractReplacement);
+
           const priorityNeedle = `  const lowHp = state.hp <= 72;\n  const priority = lowHp\n    ? [`;
           const priorityReplacement = `  const criticalHp = state.hp <= 25;\n  const lowHp = state.hp <= 72;\n  const priority = criticalHp\n    ? [\n        "FIELD_REPAIR",\n        "PROTOCOL_ORBIT_STABILIZER",\n        "PROTOCOL_VECTOR_LENS",\n        "PROTOCOL_COMMON_CORE",\n        "DELTA_RANK",\n        "SIGNAL_RANK",\n        "ORBIT_RANK",\n        "ECHO_RANK",\n        "PROTOCOL_RESONANCE_COIL",\n        "PROTOCOL_MEMORY_FUSE",\n        "EVOLUTION",\n        "SIGNAL_MAGNET",\n        "VECTOR_RANK",\n        "ORBIT_NODES",\n        "ECHO_MINE",\n        "SIGNAL_ARC",\n        "VECTOR_NEEDLE",\n      ]\n    : lowHp\n    ? [`;
           if (source.split(priorityNeedle).length !== 2) throw new Error("CR3E2 critical-priority patch anchor drifted");
           source = source.replace(priorityNeedle, priorityReplacement);
 
-          const cadenceNeedle = `  return { settle: postStageOne ? 80 : 0, shiftModulo: 7 };`;
-          const cadenceReplacement = `  const pressureShift = postStageOne && (state.activeEnemies >= 32 || state.hp <= 25);\n  return { settle: postStageOne ? 80 : 0, shiftModulo: pressureShift ? 5 : 7 };`;
-          if (source.split(cadenceNeedle).length !== 2) throw new Error("CR3E2 pressure SHIFT patch anchor drifted");
-          source = source.replace(cadenceNeedle, cadenceReplacement);
+          const movementNeedle = `async function moveNaturalSurvivalLane(canvas, state, tick) {\n  const x = state.x;\n  const y = state.y;\n  let key;\n  if (y < 250 && x < 1500) key = "ArrowRight";\n  else if (x >= 1500 && y < 950) key = "ArrowDown";\n  else if (y >= 950 && x > 300) key = "ArrowLeft";\n  else if (x <= 300 && y > 250) key = "ArrowUp";\n  else key = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"][Math.floor(tick / 10) % 4];\n  const postStageOne = state.stage !== "STAGE_I";\n  await canvas.press(key, { delay: postStageOne ? 520 : 420 });\n  return { settle: postStageOne ? 80 : 0, shiftModulo: 7 };\n}`;
+          const movementReplacement = `async function moveNaturalSurvivalLane(canvas, state, tick) {\n  const x = state.x;\n  const y = state.y;\n  const postStageOne = state.stage !== "STAGE_I";\n  const engagement = postStageOne && state.gatePhase === "RUNNING" && state.activeEnemies >= 32 && state.hp > 25;\n  const minX = engagement ? 520 : 300;\n  const maxX = engagement ? 1280 : 1500;\n  const minY = engagement ? 360 : 250;\n  const maxY = engagement ? 840 : 950;\n  let key;\n  if (y < minY && x < maxX) key = "ArrowRight";\n  else if (x >= maxX && y < maxY) key = "ArrowDown";\n  else if (y >= maxY && x > minX) key = "ArrowLeft";\n  else if (x <= minX && y > minY) key = "ArrowUp";\n  else key = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"][Math.floor(tick / 8) % 4];\n  await canvas.press(key, { delay: engagement ? 380 : postStageOne ? 520 : 420, timeout: 2_500 });\n  const pressureShift = postStageOne && (state.activeEnemies >= 32 || state.hp <= 25);\n  return { settle: engagement ? 35 : postStageOne ? 80 : 0, shiftModulo: pressureShift ? 5 : 7, engagement };\n}`;
+          if (source.split(movementNeedle).length !== 2) throw new Error("CR3E2 engagement-lane patch anchor drifted");
+          source = source.replace(movementNeedle, movementReplacement);
+
+          const shiftNeedle = `      await canvas.press("Space");`;
+          const shiftReplacement = `      await canvas.press("Space", { timeout: 2_500 });`;
+          if (source.split(shiftNeedle).length !== 2) throw new Error("CR3E2 bounded SHIFT patch anchor drifted");
+          source = source.replace(shiftNeedle, shiftReplacement);
+
+          const watchNeedle = `    let bossReadyObserved = false;\n    let lastState = await readState(canvas);\n    const deadline = Date.now() + 720_000;`;
+          const watchReplacement = `    let bossReadyObserved = false;\n    let lastState = await readState(canvas);\n    let runningProgress = lastState.progress;\n    let runningProgressAt = Date.now();\n    const deadline = Date.now() + 720_000;`;
+          if (source.split(watchNeedle).length !== 2) throw new Error("CR3E2 progress-watch initialization anchor drifted");
+          source = source.replace(watchNeedle, watchReplacement);
+
+          const observeNeedle = `      observe(state);\n      if (state.gateRuntime !== "ACTIVE") {`;
+          const observeReplacement = `      observe(state);\n      if (state.gatePhase === "RUNNING" && !state.draftOpen && !state.bossActive && state.stage !== "BOSS_PENDING") {\n        if (state.progress > runningProgress) {\n          runningProgress = state.progress;\n          runningProgressAt = Date.now();\n        } else if (Date.now() - runningProgressAt > 8_000) {\n          throw new Error(\`CR-3E.2 RUNNING progress stalled for >8s at width \${width}; last=\${JSON.stringify(state)}\`);\n        }\n      } else {\n        runningProgress = state.progress;\n        runningProgressAt = Date.now();\n      }\n      if (state.gateRuntime !== "ACTIVE") {`;
+          if (source.split(observeNeedle).length !== 2) throw new Error("CR3E2 progress-watch loop anchor drifted");
+          source = source.replace(observeNeedle, observeReplacement);
 
           writeFileSync(path, source);
           NODE
@@ -146,7 +171,7 @@ jobs:
           git diff --check -- scripts/cr3e2-natural-complete-victory-browser.mjs
           git diff -- scripts/cr3e2-natural-complete-victory-browser.mjs
 
-      - name: CR-3E.2 natural complete-victory pressure-response probe
+      - name: CR-3E.2 natural complete-victory saturated-field engagement probe
         run: node --experimental-strip-types scripts/cr3e2-natural-complete-victory-browser.mjs
 
       - name: Inherited baseline browser regression
@@ -202,6 +227,6 @@ jobs:
       - name: Report composed CR-3E.2 probe qualification
         shell: bash
         run: |
-          echo "RARE_SHIFT_CR3E2_PRESSURE_RESPONSE_PROBE=PASS"
+          echo "RARE_SHIFT_CR3E2_SATURATED_FIELD_ENGAGEMENT_PROBE=PASS"
           echo "CR3E2_PROBE_HEAD=$(git rev-parse HEAD)"
           test -z "$(git diff --name-only -- games/rare-shift)"
