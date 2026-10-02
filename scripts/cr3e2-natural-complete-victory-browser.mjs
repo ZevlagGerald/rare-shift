@@ -261,8 +261,9 @@ async function moveNaturalSurvivalLane(canvas, state, tick) {
   else if (y >= 950 && x > 300) key = "ArrowLeft";
   else if (x <= 300 && y > 250) key = "ArrowUp";
   else key = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"][Math.floor(tick / 10) % 4];
-  await canvas.press(key, { delay: 420 });
-  return { settle: 0, shiftModulo: 7 };
+  const postStageOne = state.stage !== "STAGE_I";
+  await canvas.press(key, { delay: postStageOne ? 520 : 420 });
+  return { settle: postStageOne ? 80 : 0, shiftModulo: 7 };
 }
 
 async function moveEliteCombatLane(canvas, state, tick) {
@@ -271,12 +272,15 @@ async function moveEliteCombatLane(canvas, state, tick) {
   const dy = state.eliteY - state.y;
   const distance = Math.hypot(dx, dy);
   const horizontalDominant = Math.abs(dx) >= Math.abs(dy);
+  const criticalLaterGate = state.gateActive !== "ELITE_I" && state.hp <= 25;
+  const minDistance = criticalLaterGate ? 220 : 140;
+  const maxDistance = criticalLaterGate ? 330 : 210;
   let key;
-  if (distance > 210) {
+  if (distance > maxDistance) {
     key = horizontalDominant
       ? dx >= 0 ? "ArrowRight" : "ArrowLeft"
       : dy >= 0 ? "ArrowDown" : "ArrowUp";
-  } else if (distance < 140) {
+  } else if (distance < minDistance) {
     key = horizontalDominant
       ? dx >= 0 ? "ArrowLeft" : "ArrowRight"
       : dy >= 0 ? "ArrowUp" : "ArrowDown";
@@ -399,7 +403,7 @@ function qualification(width) {
 
     const shiftAndObserve = async () => {
       await canvas.press("Space");
-      await page.waitForTimeout(35);
+      await page.waitForTimeout(105);
       const state = await readCombatState(canvas);
       if (state) observe(state);
       return state;
@@ -503,7 +507,7 @@ function qualification(width) {
         if (state.bossActive || state.stage === "BOSS_PENDING") {
           await fightBoss(state);
         } else if (state.gatePhase === "ELITE_ACTIVE") {
-          const thinLaterCheckpointField = state.gateActive !== "ELITE_I" && (state.activeEnemies > 1 || state.hp <= 25);
+          const thinLaterCheckpointField = state.gateActive !== "ELITE_I" && state.activeEnemies > 1;
           if (thinLaterCheckpointField) {
             const movement = await moveNaturalSurvivalLane(canvas, state, moveTick);
             moveTick += 1;
