@@ -13,10 +13,6 @@ const CHECKPOINT_BOUNDARIES = Object.freeze({
   ELITE_II: Object.freeze({ progress: 285_000, stage: "STAGE_III" }),
 });
 
-function list(value) {
-  return String(value ?? "").split(",").filter(Boolean);
-}
-
 function centers(count) {
   if (count === 1) return [480];
   if (count === 2) return [350, 610];
@@ -32,7 +28,9 @@ async function clickDraft(canvas, index, count) {
 
 async function mount(game) {
   await game.getByRole("button", { name: /ENTER SIGNAL DESCENT/i }).click();
-  const canvas = game.locator("canvas");
+  const anyCanvas = game.locator("canvas").first();
+  await anyCanvas.waitFor({ state: "visible" });
+  const canvas = game.locator("canvas[data-director-stage]").first();
   await canvas.waitFor({ state: "visible" });
   await canvas.focus();
   return canvas;
@@ -83,6 +81,52 @@ async function readState(canvas) {
   }));
 }
 
+async function readCombatState(canvas) {
+  if (!(await canvas.count())) return null;
+  return canvas.evaluate(element => ({
+    stage: element.dataset.directorStage ?? "",
+    elapsed: Number(element.dataset.directorElapsedMs ?? "0"),
+    progress: Number(element.dataset.directorProgressMs ?? "0"),
+    hp: Number(element.dataset.hp ?? "0"),
+    level: Number(element.dataset.level ?? "1"),
+    kills: Number(element.dataset.kills ?? "0"),
+    shifts: Number(element.dataset.shifts ?? "0"),
+    phase: element.dataset.phase ?? "",
+    x: Number(element.dataset.x ?? "0"),
+    y: Number(element.dataset.y ?? "0"),
+    dead: element.dataset.dead === "true",
+    draftOpen: element.dataset.draftOpen === "true",
+    draftIds: (element.dataset.draftIds ?? "").split(",").filter(Boolean),
+    draftCount: Number(element.dataset.draftCount ?? "0"),
+    enemyKinds: (element.dataset.enemyKinds ?? "").split(",").filter(Boolean),
+    elitesDefeated: Number(element.dataset.elitesDefeated ?? "0"),
+    cores: Number(element.dataset.evolutionCores ?? "0"),
+    gateRuntime: element.dataset.cr3e1CheckpointRuntime ?? "",
+    gatePhase: element.dataset.checkpointGatePhase ?? "",
+    gateActive: element.dataset.checkpointGateActive ?? "",
+    gatePendingRewards: (element.dataset.checkpointGatePendingRewards ?? "").split(",").filter(Boolean),
+    gateResolved: (element.dataset.checkpointGateResolved ?? "").split(",").filter(Boolean),
+    gateResolvedCount: Number(element.dataset.checkpointGateResolvedCount ?? "0"),
+    gateBossReady: element.dataset.checkpointGateBossReady === "true",
+    reservedActive: Number(element.dataset.checkpointReservedActive ?? "0"),
+    eliteX: Number(element.dataset.checkpointEliteX ?? "NaN"),
+    eliteY: Number(element.dataset.checkpointEliteY ?? "NaN"),
+    eliteHp: Number(element.dataset.checkpointEliteHp ?? "NaN"),
+    bossPending: element.dataset.bossPending === "true",
+    bossActive: element.dataset.cr3BossActive === "true",
+    bossPhase: element.dataset.cr3BossPhase ?? "",
+    bossHp: Number(element.dataset.cr3BossHp ?? "0"),
+    bossX: Number(element.dataset.cr3BossX ?? "0"),
+    bossY: Number(element.dataset.cr3BossY ?? "0"),
+    bossVulnerability: element.dataset.cr3BossVulnerability ?? "",
+    bossExpectedResponse: element.dataset.cr3BossExpectedResponse ?? "",
+    bossBreakOpen: element.dataset.cr3BossBreakOpen === "true",
+    bossCycleOrdinal: element.dataset.cr3BossCycleOrdinal ?? "",
+    bossDamageAccepted: Number(element.dataset.cr3BossDamageAccepted ?? "0"),
+    bossDefeatEvents: Number(element.dataset.cr3BossDefeatEvents ?? "0"),
+  })).catch(() => null);
+}
+
 async function resultState(game, timeout = 0) {
   const result = game.locator('[data-stage="results"]');
   if (!(await result.count())) {
@@ -111,9 +155,46 @@ async function waitForCheckpointRuntime(page, canvas, width) {
 
 async function chooseDraft(canvas, state, page, width) {
   assert.equal(state.draftIds.length, state.draftCount, `draft ids/count mismatch at width ${width}`);
-  const priority = state.hp <= 72
-    ? ["FIELD_REPAIR", "EVOLUTION", "ORBIT_RANK", "ECHO_RANK", "SIGNAL_RANK", "DELTA_RANK", "VECTOR_RANK", "SIGNAL_MAGNET", "ORBIT_NODES", "ECHO_MINE", "SIGNAL_ARC", "VECTOR_NEEDLE"]
-    : ["ORBIT_NODES", "ECHO_MINE", "SIGNAL_ARC", "EVOLUTION", "ORBIT_RANK", "ECHO_RANK", "SIGNAL_RANK", "DELTA_RANK", "VECTOR_RANK", "SIGNAL_MAGNET", "VECTOR_NEEDLE", "FIELD_REPAIR"];
+  const lowHp = state.hp <= 72;
+  const priority = lowHp
+    ? [
+        "FIELD_REPAIR",
+        "SIGNAL_MAGNET",
+        "EVOLUTION",
+        "ORBIT_RANK",
+        "ECHO_RANK",
+        "SIGNAL_RANK",
+        "DELTA_RANK",
+        "VECTOR_RANK",
+        "PROTOCOL_ORBIT_STABILIZER",
+        "PROTOCOL_MEMORY_FUSE",
+        "PROTOCOL_COMMON_CORE",
+        "PROTOCOL_RESONANCE_COIL",
+        "PROTOCOL_VECTOR_LENS",
+        "ORBIT_NODES",
+        "ECHO_MINE",
+        "SIGNAL_ARC",
+        "VECTOR_NEEDLE",
+      ]
+    : [
+        "ORBIT_NODES",
+        "ECHO_MINE",
+        "SIGNAL_ARC",
+        "EVOLUTION",
+        "SIGNAL_MAGNET",
+        "ORBIT_RANK",
+        "ECHO_RANK",
+        "SIGNAL_RANK",
+        "DELTA_RANK",
+        "VECTOR_RANK",
+        "PROTOCOL_ORBIT_STABILIZER",
+        "PROTOCOL_MEMORY_FUSE",
+        "PROTOCOL_COMMON_CORE",
+        "PROTOCOL_RESONANCE_COIL",
+        "PROTOCOL_VECTOR_LENS",
+        "VECTOR_NEEDLE",
+        "FIELD_REPAIR",
+      ];
   let index = -1;
   for (const token of priority) {
     index = state.draftIds.findIndex(id => id === token || id.startsWith(`${token}:`));
@@ -125,14 +206,32 @@ async function chooseDraft(canvas, state, page, width) {
   await page.waitForTimeout(90);
 }
 
-async function moveSafeLane(canvas, state, tick, delay = 420) {
+async function moveNaturalSurvivalLane(canvas, state, tick) {
+  const tightRoute = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
   let key;
-  if (state.y < 250 && state.x < 1500) key = "ArrowRight";
-  else if (state.x >= 1500 && state.y < 950) key = "ArrowDown";
-  else if (state.y >= 950 && state.x > 300) key = "ArrowLeft";
-  else if (state.x <= 300 && state.y > 250) key = "ArrowUp";
-  else key = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"][Math.floor(tick / 10) % 4];
+  let delay;
+  let settle;
+  let shiftModulo;
+
+  if (state.level < 4) {
+    key = tightRoute[tick % tightRoute.length];
+    delay = 520;
+    settle = 145;
+    shiftModulo = 5;
+  } else {
+    if (state.y < 250 && state.x < 1500) key = "ArrowRight";
+    else if (state.x >= 1500 && state.y < 950) key = "ArrowDown";
+    else if (state.y >= 950 && state.x > 300) key = "ArrowLeft";
+    else if (state.x <= 300 && state.y > 250) key = "ArrowUp";
+    else key = tightRoute[Math.floor(tick / 10) % tightRoute.length];
+
+    delay = state.hp <= 35 ? 620 : 520;
+    settle = 80;
+    shiftModulo = state.hp <= 35 ? 2 : state.hp <= 55 ? 4 : 7;
+  }
+
   await canvas.press(key, { delay });
+  return { settle, shiftModulo };
 }
 
 async function moveEliteCombatLane(canvas, state, tick) {
@@ -268,33 +367,43 @@ function qualification(width) {
     const shiftAndObserve = async () => {
       await canvas.press("Space");
       await page.waitForTimeout(105);
-      const state = await readState(canvas);
-      observe(state);
+      const state = await readCombatState(canvas);
+      if (state) observe(state);
       return state;
     };
 
     const alignBossPhase = async expected => {
-      if (expected !== "A" && expected !== "B") return await readState(canvas);
-      let state = await readState(canvas);
+      if (expected !== "A" && expected !== "B") return readCombatState(canvas);
+      let state = await readCombatState(canvas);
+      if (!state) return null;
       for (let attempt = 0; attempt < 5 && state.phase !== expected; attempt += 1) {
         state = await shiftAndObserve();
+        if (!state) return null;
       }
       return state;
     };
 
     const answerBreak = async state => {
+      if (!state) return null;
       const expected = state.bossExpectedResponse;
       if (expected !== "A" && expected !== "B") return state;
-      if (state.phase === expected) state = await shiftAndObserve();
+      if (state.phase === expected) {
+        state = await shiftAndObserve();
+        if (!state) return null;
+      }
       return alignBossPhase(expected);
     };
 
     const fightBoss = async state => {
-      if (!state.bossPhase || state.bossPhase === "DEFEATED") return;
+      if (!state || !state.bossPhase || state.bossPhase === "DEFEATED") return;
       assert.equal(state.gateResolvedCount, 3, `boss combat began before all checkpoint gates resolved at width ${width}`);
       assert.ok(state.progress >= 360_000, `boss combat began before director handoff at width ${width}`);
-      if (state.bossPhase === "BREAK_WINDOW" && !state.bossBreakOpen) state = await answerBreak(state);
+      if (state.bossPhase === "BREAK_WINDOW" && !state.bossBreakOpen) {
+        state = await answerBreak(state);
+        if (!state) return;
+      }
       state = await alignBossPhase(state.bossVulnerability);
+      if (!state) return;
       const cycle = `${state.bossPhase}:${state.bossCycleOrdinal}:${state.bossVulnerability}:${state.bossBreakOpen}`;
       if (cycle !== lastBossCycle) {
         lastBossCycle = cycle;
@@ -312,6 +421,16 @@ function qualification(width) {
       bossOffsetOrdinal += 1;
     };
 
+    const terminalOrThrow = async context => {
+      const terminal = await resultState(game, 1_500);
+      if (!terminal) {
+        throw new Error(`CR-3E.2 ${context} lost the combat canvas without a terminal Results state at width ${width}; last=${JSON.stringify(lastState)}`);
+      }
+      if (terminal.outcome === "VICTORY") return "VICTORY";
+      throw new Error(`CR-3E.2 natural victory route ended as ${terminal.outcome} at width ${width}; last=${JSON.stringify(lastState)}`);
+    };
+
+    runLoop:
     while (Date.now() < deadline) {
       const terminal = await resultState(game, 0);
       if (terminal) {
@@ -319,38 +438,52 @@ function qualification(width) {
         throw new Error(`CR-3E.2 natural victory route ended as ${terminal.outcome} at width ${width}; last=${JSON.stringify(lastState)}`);
       }
 
-      let state;
-      try {
-        state = await readState(canvas);
-      } catch (cause) {
-        const terminalAfterRace = await resultState(game, 1_500);
-        if (terminalAfterRace?.outcome === "VICTORY") break;
-        if (terminalAfterRace) throw new Error(`CR-3E.2 route ended as ${terminalAfterRace.outcome} at width ${width}; last=${JSON.stringify(lastState)}`);
-        throw cause;
+      const state = await readCombatState(canvas);
+      if (!state) {
+        const outcome = await terminalOrThrow("state-read transition");
+        if (outcome === "VICTORY") break;
       }
+
       observe(state);
-      assert.equal(state.gateRuntime, "ACTIVE", `checkpoint runtime lost authority at width ${width}`);
+      assert.equal(state.gateRuntime, "ACTIVE", `checkpoint runtime lost authority on a live combat canvas at width ${width}`);
       if (state.dead) throw new Error(`CR-3E.2 natural route died before results at width ${width}; last=${JSON.stringify(state)}`);
       if (state.draftOpen) {
-        await chooseDraft(canvas, state, page, width);
+        try {
+          await chooseDraft(canvas, state, page, width);
+        } catch (cause) {
+          const outcome = await resultState(game, 1_500);
+          if (outcome?.outcome === "VICTORY") break;
+          if (outcome) throw new Error(`CR-3E.2 route ended as ${outcome.outcome} during draft input at width ${width}; last=${JSON.stringify(lastState)}`, { cause });
+          throw cause;
+        }
         continue;
       }
 
-      if (state.bossActive || state.stage === "BOSS_PENDING") {
-        await fightBoss(state);
-      } else if (state.gatePhase === "ELITE_ACTIVE") {
-        await moveEliteCombatLane(canvas, state, checkpointTick);
-        checkpointTick += 1;
-        if (checkpointTick % 6 === 0) await shiftAndObserve();
-        await page.waitForTimeout(35);
-      } else if (state.gatePhase === "REWARD_PENDING") {
-        if (lastCheckpointPosition) await moveTowardPoint(canvas, state, lastCheckpointPosition);
-        await page.waitForTimeout(80);
-      } else {
-        await moveSafeLane(canvas, state, moveTick);
-        moveTick += 1;
-        if (moveTick % 7 === 0) await shiftAndObserve();
-        await page.waitForTimeout(45);
+      try {
+        if (state.bossActive || state.stage === "BOSS_PENDING") {
+          await fightBoss(state);
+        } else if (state.gatePhase === "ELITE_ACTIVE") {
+          await moveEliteCombatLane(canvas, state, checkpointTick);
+          checkpointTick += 1;
+          if (checkpointTick % 6 === 0) await shiftAndObserve();
+          await page.waitForTimeout(35);
+        } else if (state.gatePhase === "REWARD_PENDING") {
+          if (lastCheckpointPosition) await moveTowardPoint(canvas, state, lastCheckpointPosition);
+          await page.waitForTimeout(80);
+        } else {
+          const movement = await moveNaturalSurvivalLane(canvas, state, moveTick);
+          moveTick += 1;
+          await page.waitForTimeout(movement.settle);
+          if (moveTick % movement.shiftModulo === 0) await shiftAndObserve();
+          await page.waitForTimeout(45);
+        }
+      } catch (cause) {
+        const terminalAfterAction = await resultState(game, 1_500);
+        if (terminalAfterAction?.outcome === "VICTORY") break runLoop;
+        if (terminalAfterAction) {
+          throw new Error(`CR-3E.2 natural victory route ended as ${terminalAfterAction.outcome} during combat input at width ${width}; last=${JSON.stringify(lastState)}`, { cause });
+        }
+        throw cause;
       }
     }
 
@@ -388,7 +521,7 @@ function qualification(width) {
 
     await page.locator(".rf-game-frame").screenshot({ path: resolve(`artifacts/rare-shift-cr3e2-natural-victory-results-${width}.png`) });
     await game.getByRole("button", { name: /RUN AGAIN/i }).click();
-    const retry = game.locator("canvas");
+    const retry = game.locator("canvas[data-director-stage]").first();
     await retry.waitFor({ state: "visible" });
     assert.equal(await retry.getAttribute("data-dead"), "false");
     assert.equal(Number(await retry.getAttribute("data-hp")), 100);
