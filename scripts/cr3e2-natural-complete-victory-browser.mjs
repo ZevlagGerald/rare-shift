@@ -155,6 +155,23 @@ async function waitForCheckpointRuntime(page, canvas, width) {
 
 async function chooseDraft(canvas, state, page, width) {
   assert.equal(state.draftIds.length, state.draftCount, `draft ids/count mismatch at width ${width}`);
+
+  const qualifiedOnboarding = new Map([
+    [2, "ORBIT_NODES"],
+    [3, "ECHO_MINE"],
+    [4, "SIGNAL_ARC"],
+  ]);
+  const onboardingChoice = qualifiedOnboarding.get(state.level);
+  if (onboardingChoice) {
+    const onboardingIndex = state.draftIds.indexOf(onboardingChoice);
+    if (onboardingIndex >= 0) {
+      console.log(`CR3E2_DRAFT_${width}=L${state.level}:HP${state.hp}:${state.draftIds.join(",")}=>${state.draftIds[onboardingIndex]}`);
+      await clickDraft(canvas, onboardingIndex, state.draftCount);
+      await page.waitForTimeout(90);
+      return;
+    }
+  }
+
   const lowHp = state.hp <= 72;
   const priority = lowHp
     ? [
