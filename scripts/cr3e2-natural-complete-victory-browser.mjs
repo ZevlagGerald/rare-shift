@@ -224,31 +224,14 @@ async function chooseDraft(canvas, state, page, width) {
 }
 
 async function moveNaturalSurvivalLane(canvas, state, tick) {
-  const tightRoute = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
   let key;
-  let delay;
-  let settle;
-  let shiftModulo;
-
-  if (state.level < 4) {
-    key = tightRoute[tick % tightRoute.length];
-    delay = 520;
-    settle = 145;
-    shiftModulo = 5;
-  } else {
-    if (state.y < 250 && state.x < 1500) key = "ArrowRight";
-    else if (state.x >= 1500 && state.y < 950) key = "ArrowDown";
-    else if (state.y >= 950 && state.x > 300) key = "ArrowLeft";
-    else if (state.x <= 300 && state.y > 250) key = "ArrowUp";
-    else key = tightRoute[Math.floor(tick / 10) % tightRoute.length];
-
-    delay = state.hp <= 35 ? 620 : 520;
-    settle = 80;
-    shiftModulo = state.hp <= 35 ? 2 : state.hp <= 55 ? 4 : 7;
-  }
-
-  await canvas.press(key, { delay });
-  return { settle, shiftModulo };
+  if (state.y < 250 && state.x < 1500) key = "ArrowRight";
+  else if (state.x >= 1500 && state.y < 950) key = "ArrowDown";
+  else if (state.y >= 950 && state.x > 300) key = "ArrowLeft";
+  else if (state.x <= 300 && state.y > 250) key = "ArrowUp";
+  else key = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"][Math.floor(tick / 10) % 4];
+  await canvas.press(key, { delay: 420 });
+  return { settle: 0, shiftModulo: 7 };
 }
 
 async function moveEliteCombatLane(canvas, state, tick) {
