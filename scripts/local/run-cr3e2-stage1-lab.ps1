@@ -7,6 +7,14 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+try {
+    [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+    $OutputEncoding = [Console]::OutputEncoding
+}
+catch {
+    # Cosmetic only; do not block the lab if host encoding cannot be changed.
+}
+
 $repo = (Get-Location).Path
 $branch = (& git -C $repo branch --show-current).Trim()
 if ($branch -ne "lab/cr3e2-local-driver") {
@@ -121,6 +129,14 @@ if ($Prepare -or -not (Test-Path -LiteralPath (Join-Path $repo "node_modules") -
     Ensure-FriendSdkArchive
 
     Invoke-NativeChecked -FilePath "npm.cmd" -Arguments @("install", "--no-audit", "--no-fund")
+
+    # FriendSDK testGame uses Playwright Chromium. A fresh Windows worktree can
+    # have node_modules installed while the matching Playwright browser binary
+    # is still absent, so make browser installation part of local preparation.
+    Write-Host "PLAYWRIGHT_BROWSER_INSTALL=START"
+    Invoke-NativeChecked -FilePath "npx.cmd" -Arguments @("playwright", "install", "chromium")
+    Write-Host "PLAYWRIGHT_BROWSER_INSTALL=PASS"
+
     Invoke-NativeChecked -FilePath "npm.cmd" -Arguments @("run", "typecheck:core")
     Invoke-NativeChecked -FilePath "npm.cmd" -Arguments @("run", "typecheck")
     Invoke-NativeChecked -FilePath "npm.cmd" -Arguments @("run", "check")
