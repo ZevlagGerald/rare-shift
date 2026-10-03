@@ -54,7 +54,7 @@ jobs:
           git merge-base --is-ancestor "$BASE" HEAD
           git merge-base --is-ancestor "$FOCUSED_PRECERT_HEAD" HEAD
           git diff --name-only "$BASE"...HEAD | tee /tmp/cr3e2-director-time-files.txt
-          if grep -Ev '^(\.github/workflows/cr3e2-natural-complete-victory\.yml|\.github/workflows/cr3e2-active-time-certification\.yml|\.github/workflows/cr3e2-active-time-certification-v2\.yml|docs/design/RARE_SHIFT_CR3E2_NATURAL_COMPLETE_VICTORY_GATE_v1\.md|scripts/cr3e2-natural-complete-victory-browser\.mjs|scripts/cr3e2-stage4-boss-scenario\.mjs)$' /tmp/cr3e2-director-time-files.txt; then
+          if grep -Ev '^(\.github/workflows/cr3e2-natural-complete-victory\.yml|\.github/workflows/cr3e2-active-time-certification\.yml|\.github/workflows/cr3e2-active-time-certification-v2\.yml|\.github/workflows/cr3e2-spatial-final-certification\.yml|docs/design/RARE_SHIFT_CR3E2_NATURAL_COMPLETE_VICTORY_GATE_v1\.md|scripts/cr3e2-natural-complete-victory-browser\.mjs|scripts/cr3e2-stage4-boss-scenario\.mjs)$' /tmp/cr3e2-director-time-files.txt; then
             echo "Unexpected file in CR-3E.2 qualification diff" >&2
             exit 1
           fi
