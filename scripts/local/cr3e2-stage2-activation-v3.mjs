@@ -24,7 +24,7 @@ function replaceRegexOnce(input, pattern, replacement, label) {
 source = replaceRegexOnce(
   source,
   /const ELITE_MOVE_SLICE_MS = 140;\r?\n/,
-  `const ELITE_MOVE_SLICE_MS = 140;\nconst STAGE2_SHIFT_INTERVAL_MS = 5_400;\nconst STAGE2_MOVE_HOLD_MS = 520;\nconst STAGE2_SETTLE_MS = 80;\nconst SHIFT_BUTTON_GAME_X = 842;\nconst SHIFT_BUTTON_GAME_Y = 530;\nconst GAME_VIEW_W = 960;\nconst GAME_VIEW_H = 640;\n`,
+  `const ELITE_MOVE_SLICE_MS = 140;\nconst STAGE2_SHIFT_INTERVAL_MS = 5_400;\nconst STAGE2_MOVE_HOLD_MS = 520;\nconst STAGE2_SETTLE_MS = 80;\nconst STAGE2_MIN_FINAL_HP = 25;\nconst SHIFT_BUTTON_GAME_X = 842;\nconst SHIFT_BUTTON_GAME_Y = 530;\nconst GAME_VIEW_W = 960;\nconst GAME_VIEW_H = 640;\n`,
   "stage2 constants",
 );
 
@@ -89,6 +89,13 @@ tail = replaceRegexOnce(
   "Run-17 Stage-II movement loop",
 );
 
+tail = replaceExactOnce(
+  tail,
+  "    (result.final?.hp ?? 0) > 0",
+  "    (result.final?.hp ?? 0) > STAGE2_MIN_FINAL_HP",
+  "Stage-II final HP safety margin",
+);
+
 source = prefix + tail;
 
 await writeFile(generatedPath, source, "utf8");
@@ -97,6 +104,7 @@ console.log("CR3E2_STAGE2_V3_SHIFT_INPUT=RENDERED_POINTER_842_530");
 console.log("CR3E2_STAGE2_V3_SHIFT_INTERVAL_MS=5400");
 console.log("CR3E2_STAGE2_V3_MOVE_HOLD_MS=520");
 console.log("CR3E2_STAGE2_V3_SETTLE_MS=80");
+console.log("CR3E2_STAGE2_V3_FINAL_HP_MIN_EXCLUSIVE=25");
 console.log("CR3E2_STAGE2_V3_ROUTE=RUN17_COARSE_OUTER_LANE");
 console.log("CR3E2_STAGE2_V3_DRAFT_POLICY=RUN17_PRESSURE_LOWHP_REFRACT");
 
