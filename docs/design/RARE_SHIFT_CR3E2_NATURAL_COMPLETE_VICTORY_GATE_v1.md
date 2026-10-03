@@ -1,107 +1,110 @@
 # RARE//SHIFT CR-3E.2 NATURAL COMPLETE VICTORY GATE v1
 
-**Status:** FOCUSED PRE-CERTIFICATION ACTIVE — FINAL NATURAL CERTIFICATION HOLD  
+**Status:** LAYERS A/B/C QUALIFIED — LAYER D FINAL NATURAL CERTIFICATION ACTIVE  
 **Parent:** exact qualified CR-3E.1 head `644f7900966412570d5bdd7b43b278b30b4e49de`  
-**Scope:** qualification assets only; no production gameplay mutation, balance tuning, merge, or deployment authority.
+**Focused pre-certification proof:** head `434a04f6caae2f299e7ba60c66a71b6870febb0b`, Run `37092976921`, Job `111117046260`  
+**Scope:** qualification assets only; no production gameplay mutation, balance tuning, merge, deployment, or CR-4 authority.
 
-## Purpose
+## Decision
 
-CR-3E.1 proved the checkpoint progression repair. CR-3E.2 still requires one genuine ordinary-player complete victory, but the complete natural browser run is no longer used as the primary debugger.
+The focused qualification reset is complete.
 
-The qualification method is now layered so failures are isolated before the expensive end-to-end certification:
+Layers A, B, and C are **PROVEN PASS** on the exact focused head above:
 
-- **Layer A — deterministic authority:** checkpoint, progression, boss, pressure, Results, Evolution and inherited deterministic contracts.
-- **Layer B — focused Stage-IV scenario:** production checkpoint core is composed directly with production THE DESYNC and Results cores to prove `285000 → 360000 → boss phases → DEFEATED → VICTORY result` without changing production state or balance.
-- **Layer C — focused browser integration:** existing bounded CR-3B, CR-3C, CR-3D and CR-3E.1 browser qualifiers prove live boss legality/pressure, Results/reconstruction/retry/reduced-motion, and checkpoint runtime integration.
-- **Layer D — final natural certification:** exactly one complete ordinary-player browser run from the beginning after Layers A/B/C are green.
+- Layer A — deterministic checkpoint, progression, boss, pressure, Results, Evolution and inherited authority;
+- Layer B — production-core composition proving Stage IV `359999` fail-close, exact `360000` THE DESYNC handoff, `ALIGNMENT → CROSS_SPLIT → BREAK_WINDOW → DEFEATED`, exactly-once defeat and a production CR-3D Victory result;
+- Layer C — live browser boss legality, boss pressure, Victory Results, reconstruction A/B, Run Again, narrow/reduced-motion behavior, and CR-3E.1 checkpoint runtime.
 
-A Layer A/B/C PASS is **not** a CR-3E.2 PASS. It only authorizes the final natural certification attempt on an exact reviewed head.
+Those focused proofs do **not** themselves qualify CR-3E.2. They authorize Layer D only.
 
-## Prior natural evidence retained
+## Retained natural evidence
 
-Run #17 (`37016309804`, head `051c95e86c56e12852fd21debf31d1f2be7288de`) naturally demonstrated all three checkpoint activations and defeats, three resolved gates, three Cores, and entry into Stage IV. That evidence is retained as route evidence, not as complete-victory qualification.
+Run #17 (`37016309804`, head `051c95e86c56e12852fd21debf31d1f2be7288de`) remains the strongest natural route evidence. It naturally demonstrated:
 
-The pre-Stage-IV route is therefore treated as frozen evidence. Focused work must not retune Stage I–III gameplay merely to satisfy automation.
+1. `ELITE_I` at `80000 ms`;
+2. `CHECKPOINT_ELITE` at `180000 ms`;
+3. `ELITE_II` at `285000 ms`;
+4. all three checkpoint elites defeated;
+5. all three checkpoint gates resolved;
+6. three Evolution Cores collected;
+7. entry into Stage IV with no injected progression authority.
 
-## Canonical run order
+Therefore the Stage I–III qualification strategy is frozen to the Run #17 behavior for Layer D. It must not be retuned merely to help automation.
 
-The final Layer D certification must observe, without injected authority:
+## Layer D final certification strategy
 
-`STAGE I → ELITE I / rewards → STAGE II → CHECKPOINT ELITE / rewards → STAGE III → ELITE II / rewards → STAGE IV → THE DESYNC → VICTORY RESULTS`.
+Layer D is one complete ordinary-player browser certification from the beginning at `960 px` and `390 px` with Reduce motion enabled on the narrow run.
 
-Boundaries remain unchanged:
+The workspace driver must reproduce the Run #17 pre-Stage-IV behavior exactly:
 
-- `ELITE_I`: `80000 ms` director progress;
-- `CHECKPOINT_ELITE`: `180000 ms`;
-- `ELITE_II`: `285000 ms`;
-- THE DESYNC handoff: `360000 ms`.
+- qualified Level 2–4 onboarding;
+- normal rendered draft-card clicks only;
+- critical REFRACT only through normal `R` input when HP is at most 25 and no `FIELD_REPAIR` is offered;
+- pressure-aware legal draft preference;
+- the proven outer survival lane;
+- post-Stage-I movement cadence from Run #17;
+- pressure SHIFT cadence from Run #17;
+- bounded input timeouts and progression watchdog only for test-driver reliability.
 
-## Layer B focused scenario contract
+The sole additional survival policy is restricted to Stage IV after all three checkpoint gates are resolved and before THE DESYNC becomes pending or active. In that interval the driver may use published enemy-kind diagnostics to remain in the phase with materially fewer `SPLIT_A`/`FLICKER_A` versus `SPLIT_B`/`FLICKER_B` threats. This only decides whether to press the normal SHIFT key. It does not write phase, enemy state, HP, damage, time, progression, rewards, or boss state.
 
-`scripts/cr3e2-stage4-boss-scenario.mjs` may call exported production core functions directly because it is a deterministic scenario qualifier, not the natural browser proof. It must prove:
+Before Stage IV, that helper must reduce exactly to the Run #17 periodic SHIFT decision.
 
-1. all three checkpoints resolve in canonical order using declared checkpoint reward packages;
-2. Stage IV at `359999 ms` remains boss-fail-closed;
-3. exactly `360000 ms` enters `BOSS_PENDING` with all gates resolved;
-4. THE DESYNC starts in `ALIGNMENT`;
-5. legal phase-matching weapon damage reaches `CROSS_SPLIT`;
-6. legal phase-matching weapon damage reaches `BREAK_WINDOW`;
-7. a correct SHIFT response opens BREAK;
-8. legal BREAK damage records one defeat;
-9. post-defeat damage is rejected as `BOSS_DEFEATED` and cannot fabricate a second defeat;
-10. the production Results core recognizes `VICTORY`, positive HP, boss `DEFEATED`, one terminal pause event, three elite defeats and a valid `CR3D-*` fingerprint.
+## Natural driver authority
 
-This scenario must not modify any file under `games/rare-shift`.
-
-## Layer C focused browser contract
-
-The exact focused head must pass the inherited bounded browser qualifiers:
-
-- `test:cr-3b-browser` — boss legality and real runtime phase interaction;
-- `test:cr-3c-browser` — boss pressure integration;
-- `test:cr-3d-browser` — Victory Results, fingerprint, reconstruction A/B, Run Again, failure Results and 390px Reduce motion;
-- `test:cr-3e1-browser` — checkpoint runtime integration.
-
-Controlled fixture operations already owned by those inherited qualifiers remain limited to Layer C and **do not count as natural-run evidence**.
-
-## Layer D natural driver authority
-
-The final natural driver may only behave like a player and observer. It may:
+The Layer D driver may only behave like a player and observer. It may:
 
 - move with normal movement inputs;
 - SHIFT with normal player input;
+- use REFRACT through its normal player input;
 - choose a currently rendered legal draft card;
 - read published canvas diagnostics;
-- take screenshots and assert observable results.
+- take screenshots and assert observable Results.
 
 It must not:
 
-- write HP, XP, level, damage, cooldowns, enemy HP, boss HP, checkpoint state, timers, rewards, weapon ranks, Protocols, Evolution state, or director progress;
-- invoke internal scene methods to fabricate progression, kills, rewards, boss phases, or victory;
-- set controlled CR-3B/CR-3D fixture flags during Layer D;
-- tune gameplay constants to help the driver pass.
+- write HP, XP, level, damage, cooldowns, enemy HP, boss HP, checkpoint state, timers, rewards, weapon ranks, Protocols, Evolution state, phase, or director progress;
+- invoke internal scene methods to fabricate progression, kills, rewards, boss phases, damage, or victory;
+- set controlled CR-3B/CR-3D fixture flags;
+- change production gameplay or balance constants;
+- bypass a checkpoint, reward, THE DESYNC phase, Results transition, reconstruction, or retry.
 
 ## Final natural evidence required
 
-For desktop `960 px` and narrow `390 px`/Reduce motion:
+For both certification widths:
 
 1. CR-3E.1 runtime reports `ACTIVE`.
-2. All three checkpoint gates activate in exact order at their exact boundaries.
-3. THE DESYNC remains fail-closed before all three gates resolve and before `360000 ms`.
+2. Checkpoints activate in exact order at `80000`, `180000`, and `285000`.
+3. THE DESYNC stays fail-closed before all three gates resolve and before `360000`.
 4. Final resolved gates are exactly `ELITE_I,CHECKPOINT_ELITE,ELITE_II`.
 5. At least three natural checkpoint elite defeats and at least one natural Evolution Core are recorded.
 6. Stage IV is naturally reached.
-7. Boss handoff occurs only after all gates and `360000 ms`.
-8. THE DESYNC naturally exposes ALIGNMENT, CROSS_SPLIT and BREAK_WINDOW.
-9. Production auto-fire records accepted legal boss damage.
+7. THE DESYNC handoff occurs only after all gates and `360000`.
+8. Natural boss combat observes `ALIGNMENT`, `CROSS_SPLIT`, and `BREAK_WINDOW`.
+9. Production auto-fire records accepted phase-legal boss damage.
 10. Exactly one boss defeat event is recorded.
-11. Genuine `VICTORY` Results appear with positive final HP, one terminal pause event and valid CR-3D fingerprint.
+11. Genuine `VICTORY` Results appear with positive final HP, exactly one terminal pause event, and a valid CR-3D fingerprint.
 12. Reconstruction A/B render.
 13. RUN AGAIN restores a live run with HP 100 and `dead=false`.
-14. 390px keeps Reduce motion enabled throughout.
+14. The 390px certification retains Reduce motion throughout.
 
-## Regression and exit rule
+## Same-head regressions
 
-The final Layer D head must additionally pass all inherited deterministic, TypeScript, FriendSDK and browser regression gates, including the separately qualified B5 browser-driver ordering repair.
+A Layer D PASS is valid only if the exact final head also passes:
 
-Passing Layers A/B/C does **not** authorize CR-3 closeout. Only a final Layer D natural complete-victory PASS may mark CR-3E.2 qualified. After that, perform the CR-3 closeout audit and stop for Owner review. No merge, deployment, or CR-4 transition is authorized by this document.
+- inherited deterministic suites;
+- TypeScript;
+- FriendSDK v0.1.3 check/build;
+- baseline browser regression;
+- the separately qualified B5 browser-driver ordering repair and B5 browser regression;
+- natural Evolution browser regression;
+- CR-3B boss legality browser regression;
+- CR-3C pressure browser regression;
+- CR-3D Results browser regression;
+- CR-3E.1 checkpoint browser regression.
+
+## Exit rule
+
+If Layer D passes, CR-3E.2 may be marked **QUALIFIED / PROVEN** and the next action is a CR-3 closeout audit. Stop before merge, deployment, or CR-4 and present the exact qualified head and evidence to the Owner.
+
+If Layer D fails, do not blindly rerun and do not reopen broad Stage I–III strategy experimentation. Classify the exact failure against the already-qualified Layers A/B/C and the retained Run #17 route evidence. Any further change must be a separately justified bounded repair.
