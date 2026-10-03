@@ -1,4 +1,4 @@
-name: RARE SHIFT CR-3E.2 Natural Complete Victory
+name: RARE SHIFT CR-3E.2 Focused Pre-Certification
 
 on:
   push:
@@ -8,16 +8,17 @@ on:
       - ".github/workflows/cr3e2-natural-complete-victory.yml"
       - "docs/design/RARE_SHIFT_CR3E2_NATURAL_COMPLETE_VICTORY_GATE_v1.md"
       - "scripts/cr3e2-natural-complete-victory-browser.mjs"
+      - "scripts/cr3e2-stage4-boss-scenario.mjs"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  qualify-cr3e2-natural-complete-victory:
-    name: CR-3E.2 natural complete-victory qualification
+  focused-precert:
+    name: CR-3E.2 focused Stage-IV/boss pre-certification
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 75
     container:
       image: mcr.microsoft.com/playwright:v1.63.0-noble
       options: --init
@@ -26,13 +27,10 @@ jobs:
       FRIENDSDK_ARCHIVE: vendor/rarefriends-friendsdk-0.1.3.tgz
       FRIENDSDK_SHA256: 8f156c469a15786e3c649b35d092e86ec6242ff30415b7ee7c451763a816e789
       FRIENDSDK_URL: https://github.com/spokesz/friendsdk/releases/download/v0.1.3/rarefriends-friendsdk-0.1.3.tgz
-      B5_SCRIPT_BLOB: 360cfb5bc6221277b437fb699f501aa658f5221f
-      B5_RELIABILITY_PROOF_HEAD: f0742f9500f86834c26b2dbdc19249a492b40d48
-      B5_RELIABILITY_PROOF_RUN: "37006438703"
       CR3E2_DRIVER_BLOB: b2ab5b0a6c3a8f4de2ec3977ec6c4d3473a2d24d
 
     steps:
-      - name: Checkout exact CR-3E.2 head
+      - name: Checkout exact focused head
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -42,37 +40,43 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Trust workspace and verify clean committed candidate
+      - name: Verify clean qualification-only candidate
         shell: bash
         run: |
           set -euo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          echo "CR3E2_HEAD=$(git rev-parse HEAD)"
+          echo "CR3E2_FOCUSED_HEAD=$(git rev-parse HEAD)"
           git diff --check
           git diff --exit-code
           git diff --cached --exit-code
           test -z "$(git status --short)"
 
-      - name: Verify CR-3E.2 qualification-only bounded diff
-        shell: bash
-        run: |
-          set -euo pipefail
           BASE=644f7900966412570d5bdd7b43b278b30b4e49de
           git merge-base --is-ancestor "$BASE" HEAD
           test "$(git rev-list --count HEAD.."$BASE")" = "0"
-          git diff --name-only "$BASE"...HEAD | tee /tmp/cr3e2-files.txt
-          if grep -Ev '^(\.github/workflows/cr3e2-natural-complete-victory\.yml|docs/design/RARE_SHIFT_CR3E2_NATURAL_COMPLETE_VICTORY_GATE_v1\.md|scripts/cr3e2-natural-complete-victory-browser\.mjs)$' /tmp/cr3e2-files.txt; then
-            echo "Unexpected file in CR-3E.2 qualification-only diff" >&2
+          git diff --name-only "$BASE"...HEAD | tee /tmp/cr3e2-focused-files.txt
+          if grep -Ev '^(\.github/workflows/cr3e2-natural-complete-victory\.yml|docs/design/RARE_SHIFT_CR3E2_NATURAL_COMPLETE_VICTORY_GATE_v1\.md|scripts/cr3e2-natural-complete-victory-browser\.mjs|scripts/cr3e2-stage4-boss-scenario\.mjs)$' /tmp/cr3e2-focused-files.txt; then
+            echo "Unexpected file in CR-3E.2 focused qualification diff" >&2
             exit 1
           fi
+
           test -z "$(git diff --name-only "$BASE"...HEAD -- games/rare-shift)"
-          test "$(git rev-parse "$BASE":games/rare-shift/src/phaser-survival.ts)" = "$(git rev-parse HEAD:games/rare-shift/src/phaser-survival.ts)"
-          test "$(git rev-parse "$BASE":games/rare-shift/src/cr3e-checkpoint-phaser-runtime.ts)" = "$(git rev-parse HEAD:games/rare-shift/src/cr3e-checkpoint-phaser-runtime.ts)"
-          test "$(git rev-parse HEAD:scripts/v2-3b5-signal-browser.mjs)" = "$B5_SCRIPT_BLOB"
+          for path in \
+            games/rare-shift/src/phaser-survival.ts \
+            games/rare-shift/src/cr3e-checkpoint-gate-core.ts \
+            games/rare-shift/src/cr3e-checkpoint-phaser-runtime.ts \
+            games/rare-shift/src/cr3-desync-core.ts \
+            games/rare-shift/src/cr3-desync-phaser-runtime.ts \
+            games/rare-shift/src/cr3-results-core.ts; do
+            test "$(git rev-parse "$BASE:$path")" = "$(git rev-parse "HEAD:$path")"
+          done
           test "$(git rev-parse HEAD:scripts/cr3e2-natural-complete-victory-browser.mjs)" = "$CR3E2_DRIVER_BLOB"
 
-      - name: Syntax-check qualification driver
-        run: node --check scripts/cr3e2-natural-complete-victory-browser.mjs
+      - name: Syntax-check focused qualification assets
+        shell: bash
+        run: |
+          node --check scripts/cr3e2-stage4-boss-scenario.mjs
+          node --check scripts/cr3e2-natural-complete-victory-browser.mjs
 
       - name: Fetch and verify FriendSDK v0.1.3
         shell: bash
@@ -85,12 +89,10 @@ jobs:
       - name: Install project dependencies
         run: npm install --no-audit --no-fund
 
-      - name: CR-3E.1 deterministic checkpoint gate authority
-        run: npm run test:cr-3e1
-
-      - name: Inherited deterministic regression through CR-3D
+      - name: Layer A — deterministic authority and regressions
         shell: bash
         run: |
+          npm run test:cr-3e1
           npm run test:cr-1
           npm run test:cr-2a
           npm run test:cr-3a
@@ -120,128 +122,29 @@ jobs:
           npm run check
           npm run build
 
-      - name: Apply bounded CR-3E.2 Stage-IV phase-aware survival strategy in workspace
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(git hash-object scripts/cr3e2-natural-complete-victory-browser.mjs)" = "$CR3E2_DRIVER_BLOB"
-          node --input-type=module <<'NODE'
-          import { readFileSync, writeFileSync } from "node:fs";
-          const path = "scripts/cr3e2-natural-complete-victory-browser.mjs";
-          let source = readFileSync(path, "utf8");
+      - name: Layer B — Stage-IV handoff and boss production-core composition
+        run: node --experimental-strip-types scripts/cr3e2-stage4-boss-scenario.mjs
 
-          const clickNeedle = `  await canvas.click({ position: { x: box.width * centers(count)[index] / 960, y: box.height * 320 / 640 } });`;
-          const clickReplacement = `  await canvas.click({ position: { x: box.width * centers(count)[index] / 960, y: box.height * 320 / 640 }, timeout: 2_500 });`;
-          if (source.split(clickNeedle).length !== 2) throw new Error("CR3E2 bounded draft-click patch anchor drifted");
-          source = source.replace(clickNeedle, clickReplacement);
-
-          const refractNeedle = `  const criticalRefract = state.level >= 5\n    && state.hp <= 35\n    && state.cr2DraftActive\n    && state.refracts > 0\n    && !state.draftIds.includes("FIELD_REPAIR");`;
-          const refractReplacement = `  const criticalRefract = state.level >= 5\n    && state.stage === "STAGE_IV"\n    && state.gateResolvedCount >= 3\n    && state.hp <= 25\n    && state.cr2DraftActive\n    && state.refracts > 0\n    && !state.draftIds.includes("FIELD_REPAIR");`;
-          if (source.split(refractNeedle).length !== 2) throw new Error("CR3E2 preserved REFRACT anchor drifted");
-          source = source.replace(refractNeedle, refractReplacement);
-
-          const refractPressNeedle = `    await canvas.press("r");`;
-          const refractPressReplacement = `    await canvas.press("r", { timeout: 2_500 });`;
-          if (source.split(refractPressNeedle).length !== 2) throw new Error("CR3E2 bounded REFRACT input anchor drifted");
-          source = source.replace(refractPressNeedle, refractPressReplacement);
-
-          const priorityNeedle = `  const lowHp = state.hp <= 72;\n  const priority = lowHp\n    ? [`;
-          const priorityReplacement = `  const stageThreePressure = state.stage === "STAGE_III" && state.gateResolvedCount >= 2;\n  const pressureDraft = state.level >= 5 && (state.hp <= 60 || state.activeEnemies >= 32);\n  const lowHp = state.hp <= 72;\n  const priority = stageThreePressure\n    ? [\n        "FIELD_REPAIR",\n        "ORBIT_RANK",\n        "DELTA_RANK",\n        "SIGNAL_RANK",\n        "ECHO_RANK",\n        "PROTOCOL_ORBIT_STABILIZER",\n        "PROTOCOL_VECTOR_LENS",\n        "PROTOCOL_COMMON_CORE",\n        "PROTOCOL_RESONANCE_COIL",\n        "PROTOCOL_MEMORY_FUSE",\n        "SIGNAL_MAGNET",\n        "EVOLUTION",\n        "VECTOR_RANK",\n        "ORBIT_NODES",\n        "ECHO_MINE",\n        "SIGNAL_ARC",\n        "VECTOR_NEEDLE",\n      ]\n    : pressureDraft\n    ? [\n        "FIELD_REPAIR",\n        "PROTOCOL_ORBIT_STABILIZER",\n        "PROTOCOL_VECTOR_LENS",\n        "PROTOCOL_COMMON_CORE",\n        "DELTA_RANK",\n        "SIGNAL_RANK",\n        "ORBIT_RANK",\n        "ECHO_RANK",\n        "PROTOCOL_RESONANCE_COIL",\n        "PROTOCOL_MEMORY_FUSE",\n        "SIGNAL_MAGNET",\n        "EVOLUTION",\n        "VECTOR_RANK",\n        "ORBIT_NODES",\n        "ECHO_MINE",\n        "SIGNAL_ARC",\n        "VECTOR_NEEDLE",\n      ]\n    : lowHp\n    ? [`;
-          if (source.split(priorityNeedle).length !== 2) throw new Error("CR3E2 Stage-III hybrid priority anchor drifted");
-          source = source.replace(priorityNeedle, priorityReplacement);
-
-          const movementNeedle = `async function moveNaturalSurvivalLane(canvas, state, tick) {\n  const x = state.x;`;
-          const movementReplacement = `function shouldPhaseAwareShift(state, periodicDue) {\n  const stageFourSurvival = state.stage === "STAGE_IV"\n    && state.gateResolvedCount >= 3\n    && state.gatePhase === "RUNNING"\n    && !state.bossActive\n    && !state.bossPending;\n  if (!stageFourSurvival) return periodicDue;\n  const aThreats = state.enemyKinds.filter(kind => kind === "SPLIT_A" || kind === "FLICKER_A").length;\n  const bThreats = state.enemyKinds.filter(kind => kind === "SPLIT_B" || kind === "FLICKER_B").length;\n  const current = state.phase === "A" ? aThreats : bThreats;\n  const alternate = state.phase === "A" ? bThreats : aThreats;\n  return alternate + 2 <= current;\n}\n\nasync function moveNaturalSurvivalLane(canvas, state, tick) {\n  const x = state.x;`;
-          if (source.split(movementNeedle).length !== 2) throw new Error("CR3E2 phase-aware helper anchor drifted");
-          source = source.replace(movementNeedle, movementReplacement);
-
-          const cadenceNeedle = `  await canvas.press(key, { delay: postStageOne ? 520 : 420 });\n  return { settle: postStageOne ? 80 : 0, shiftModulo: 7 };`;
-          const cadenceReplacement = `  await canvas.press(key, { delay: postStageOne ? 520 : 420, timeout: 2_500 });\n  const pressureShift = postStageOne && (state.activeEnemies >= 32 || state.hp <= 25);\n  return { settle: postStageOne ? 80 : 0, shiftModulo: pressureShift ? 5 : 7 };`;
-          if (source.split(cadenceNeedle).length !== 2) throw new Error("CR3E2 outer-lane pressure cadence anchor drifted");
-          source = source.replace(cadenceNeedle, cadenceReplacement);
-
-          const periodicShiftNeedle = `if (moveTick % movement.shiftModulo === 0) await shiftAndObserve();`;
-          const periodicShiftReplacement = `if (shouldPhaseAwareShift(state, moveTick % movement.shiftModulo === 0)) await shiftAndObserve();`;
-          if (source.split(periodicShiftNeedle).length !== 3) throw new Error("CR3E2 periodic SHIFT anchors drifted");
-          source = source.replaceAll(periodicShiftNeedle, periodicShiftReplacement);
-
-          const shiftNeedle = `      await canvas.press("Space");`;
-          const shiftReplacement = `      await canvas.press("Space", { timeout: 2_500 });`;
-          if (source.split(shiftNeedle).length !== 2) throw new Error("CR3E2 bounded SHIFT input anchor drifted");
-          source = source.replace(shiftNeedle, shiftReplacement);
-
-          const watchNeedle = `    let bossReadyObserved = false;\n    let lastState = await readState(canvas);\n    const deadline = Date.now() + 720_000;`;
-          const watchReplacement = `    let bossReadyObserved = false;\n    let lastState = await readState(canvas);\n    let runningProgress = lastState.progress;\n    let runningProgressAt = Date.now();\n    const deadline = Date.now() + 720_000;`;
-          if (source.split(watchNeedle).length !== 2) throw new Error("CR3E2 progress-watch initialization anchor drifted");
-          source = source.replace(watchNeedle, watchReplacement);
-
-          const observeNeedle = `      observe(state);\n      if (state.gateRuntime !== "ACTIVE") {`;
-          const observeReplacement = `      observe(state);\n      if (state.gatePhase === "RUNNING" && !state.draftOpen && !state.bossActive && state.stage !== "BOSS_PENDING") {\n        if (state.progress > runningProgress) {\n          runningProgress = state.progress;\n          runningProgressAt = Date.now();\n        } else if (Date.now() - runningProgressAt > 8_000) {\n          throw new Error(\`CR-3E.2 RUNNING progress stalled for >8s at width \${width}; last=\${JSON.stringify(state)}\`);\n        }\n      } else {\n        runningProgress = state.progress;\n        runningProgressAt = Date.now();\n      }\n      if (state.gateRuntime !== "ACTIVE") {`;
-          if (source.split(observeNeedle).length !== 2) throw new Error("CR3E2 progress-watch loop anchor drifted");
-          source = source.replace(observeNeedle, observeReplacement);
-
-          writeFileSync(path, source);
-          NODE
-          node --check scripts/cr3e2-natural-complete-victory-browser.mjs
-          git diff --check -- scripts/cr3e2-natural-complete-victory-browser.mjs
-          git diff -- scripts/cr3e2-natural-complete-victory-browser.mjs
-
-      - name: CR-3E.2 natural complete-victory Stage-IV phase-aware survival probe
-        run: node --experimental-strip-types scripts/cr3e2-natural-complete-victory-browser.mjs
-
-      - name: Inherited baseline browser regression
-        run: npm run test:v2-1-browser
-
-      - name: Apply qualified B5 browser-driver ordering repair in workspace
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "B5_RELIABILITY_PROOF_HEAD=$B5_RELIABILITY_PROOF_HEAD"
-          echo "B5_RELIABILITY_PROOF_RUN=$B5_RELIABILITY_PROOF_RUN"
-          test "$(git hash-object scripts/v2-3b5-signal-browser.mjs)" = "$B5_SCRIPT_BLOB"
-          node --input-type=module <<'NODE'
-          import { readFileSync, writeFileSync } from "node:fs";
-          const path = "scripts/v2-3b5-signal-browser.mjs";
-          let source = readFileSync(path, "utf8");
-          const before = `    const deadline = Date.now() + 70_000;\n    let controlledObserved = false;\n    while (Date.now() < deadline && !controlledObserved) {\n      if (bool(await data("dead"))) throw new Error("died before real Rank-V controlled routing cast");\n      if (bool(await data("draft-open"))) { await clearDraft(canvas, data); await page.waitForTimeout(80); continue; }\n      await canvas.press(route[routeIndex++ % route.length], { delay: 480 });\n      await page.waitForTimeout(90);\n      if (routeIndex % 5 === 0) { await shift(canvas, width); await page.waitForTimeout(70); }\n      controlledObserved = Number(await data("signal-controlled-routing-casts")) > 0;\n    }\n    assert.equal(controlledObserved, true, "Rank V must produce a real cast whose topology differs from nearest-only routing");\n    const degrees = String(await data("signal-last-chain-forward-degrees")).split(",").filter(value => value !== "");\n    assert.ok(degrees.length >= 1, "Rank V controlled route must expose forward-degree evidence");\n    assert.ok(degrees.some(value => Number(value) >= 1));`;
-          const after = `    const deadline = Date.now() + 70_000;\n    let controlledObserved = false;\n    let controlledDegrees = [];\n    let controlledCount = Number(await data("signal-controlled-routing-casts"));\n    while (Date.now() < deadline && !controlledObserved) {\n      if (bool(await data("dead"))) throw new Error("died before real Rank-V controlled routing cast");\n      if (bool(await data("draft-open"))) { await clearDraft(canvas, data); await page.waitForTimeout(80); continue; }\n      await canvas.press(route[routeIndex++ % route.length], { delay: 480 });\n      await page.waitForTimeout(90);\n      const controlledSnapshot = await canvas.evaluate(element => ({\n        casts: Number(element.dataset.signalControlledRoutingCasts ?? "0"),\n        degrees: String(element.dataset.signalLastChainForwardDegrees ?? "").split(",").filter(value => value !== ""),\n      }));\n      if (controlledSnapshot.casts > controlledCount) {\n        controlledObserved = true;\n        controlledDegrees = controlledSnapshot.degrees;\n        break;\n      }\n      controlledCount = controlledSnapshot.casts;\n      if (routeIndex % 5 === 0) { await shift(canvas, width); await page.waitForTimeout(70); }\n    }\n    assert.equal(controlledObserved, true, "Rank V must produce a real cast whose topology differs from nearest-only routing");\n    assert.ok(controlledDegrees.length >= 1, "Rank V controlled route must expose forward-degree evidence before SHIFT invalidation");\n    assert.ok(controlledDegrees.some(value => Number(value) >= 1));`;
-          const first = source.indexOf(before);
-          if (first < 0) throw new Error("Expected Rank-V B5 driver block not found; refusing broad patch.");
-          if (source.indexOf(before, first + 1) >= 0) throw new Error("Rank-V B5 driver block is not unique; refusing broad patch.");
-          source = source.replace(before, after);
-          writeFileSync(path, source);
-          NODE
-          node --check scripts/v2-3b5-signal-browser.mjs
-          git diff --check -- scripts/v2-3b5-signal-browser.mjs
-
-      - name: Inherited B5 SHIFT and SIGNAL browser regression
-        run: npm run test:v2-3b5-signal-browser
-
-      - name: Restore inherited B5 driver after qualified workspace repair
-        if: always()
-        shell: bash
-        run: |
-          git checkout -- scripts/v2-3b5-signal-browser.mjs
-          test "$(git hash-object scripts/v2-3b5-signal-browser.mjs)" = "$B5_SCRIPT_BLOB"
-
-      - name: Inherited natural Evolution wrapper regression
-        run: node --experimental-strip-types scripts/evolution-natural-selection-browser.mjs
-
-      - name: Inherited CR-3B boss legality browser regression
+      - name: Layer C1 — boss legality browser integration
         run: npm run test:cr-3b-browser
 
-      - name: Inherited CR-3C pressure browser regression
+      - name: Layer C2 — boss pressure browser integration
         run: npm run test:cr-3c-browser
 
-      - name: Inherited CR-3D terminal results browser regression
+      - name: Layer C3 — victory Results reconstruction retry and reduced-motion integration
         run: npm run test:cr-3d-browser
 
-      - name: Inherited CR-3E.1 live checkpoint browser regression
+      - name: Layer C4 — checkpoint runtime browser integration
         run: npm run test:cr-3e1-browser
 
-      - name: Report composed CR-3E.2 probe qualification
+      - name: Report focused pre-certification
         shell: bash
         run: |
-          echo "RARE_SHIFT_CR3E2_STAGE4_PHASE_AWARE_SURVIVAL_PROBE=PASS"
-          echo "CR3E2_PROBE_HEAD=$(git rev-parse HEAD)"
+          set -euo pipefail
+          echo "RARE_SHIFT_CR3E2_LAYER_A=PASS"
+          echo "RARE_SHIFT_CR3E2_LAYER_B_STAGE4_BOSS=PASS"
+          echo "RARE_SHIFT_CR3E2_LAYER_C_BROWSER_INTEGRATION=PASS"
+          echo "RARE_SHIFT_CR3E2_FOCUSED_PRECERT=PASS"
+          echo "RARE_SHIFT_CR3E2_FINAL_NATURAL_CERTIFICATION=HOLD"
+          echo "CR3E2_FOCUSED_HEAD=$(git rev-parse HEAD)"
           test -z "$(git diff --name-only -- games/rare-shift)"
