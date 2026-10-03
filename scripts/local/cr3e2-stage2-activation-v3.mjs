@@ -96,6 +96,13 @@ tail = replaceExactOnce(
   "Stage-II final HP safety margin",
 );
 
+tail = replaceExactOnce(
+  tail,
+  "console.log(`RARE_SHIFT_CR3E2_STAGE2=${summary.reliable ? \"CANDIDATE_PASS\" : \"ITERATE\"}`);",
+  "console.log(`RARE_SHIFT_CR3E2_STAGE2=${summary.reliable ? \"CANDIDATE_PASS\" : \"ITERATE\"}`);\nassert.ok(summary.reliable, `Stage-II V3 reliability gate failed: ${JSON.stringify(summary)}`);",
+  "Stage-II strict reliability gate",
+);
+
 source = prefix + tail;
 
 await writeFile(generatedPath, source, "utf8");
@@ -105,6 +112,7 @@ console.log("CR3E2_STAGE2_V3_SHIFT_INTERVAL_MS=5400");
 console.log("CR3E2_STAGE2_V3_MOVE_HOLD_MS=520");
 console.log("CR3E2_STAGE2_V3_SETTLE_MS=80");
 console.log("CR3E2_STAGE2_V3_FINAL_HP_MIN_EXCLUSIVE=25");
+console.log("CR3E2_STAGE2_V3_RELIABILITY_GATE=STRICT");
 console.log("CR3E2_STAGE2_V3_ROUTE=RUN17_COARSE_OUTER_LANE");
 console.log("CR3E2_STAGE2_V3_DRAFT_POLICY=RUN17_PRESSURE_LOWHP_REFRACT");
 
