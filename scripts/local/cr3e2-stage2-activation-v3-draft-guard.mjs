@@ -12,12 +12,20 @@ const insertAt = source.indexOf(marker);
 assert.ok(insertAt >= 0, "Stage-II V3 insertion marker not found");
 assert.equal(source.indexOf(marker, insertAt + marker.length), -1, "Stage-II V3 insertion marker is not unique");
 
-const injection = `source = replaceExactOnce(\n  source,\n  \"          if (!moved) break;\\n          state = moved;\\n\\n          if (huntTick % 6 === 0 && state.gatePhase === \\\"ELITE_ACTIVE\\\") {\",\n  \"          if (!moved) break;\\n          state = moved;\\n\\n          if (state.draftOpen) {\\n            await chooseDraft(page, canvas, state, trial);\\n            continue;\\n          }\\n\\n          if (huntTick % 6 === 0 && state.gatePhase === \\\"ELITE_ACTIVE\\\") {\",\n  \"ELITE_I post-move draft guard\",\n);\n\n`;
+const injection = String.raw`source = replaceRegexOnce(
+  source,
+  /          if \(!moved\) break;\r?\n          state = moved;\r?\n\r?\n          if \(huntTick % 6 === 0 && state\.gatePhase === "ELITE_ACTIVE"\) \{/,
+  "          if (!moved) break;\n          state = moved;\n\n          if (state.draftOpen) {\n            await chooseDraft(page, canvas, state, trial);\n            continue;\n          }\n\n          if (huntTick % 6 === 0 && state.gatePhase === \"ELITE_ACTIVE\") {",
+  "ELITE_I post-move draft guard",
+);
+
+`;
 
 source = source.slice(0, insertAt) + injection + source.slice(insertAt);
 await writeFile(runnerPath, source, "utf8");
 console.log("CR3E2_STAGE2_V3_ELITE_DRAFT_GUARD=PASS");
 console.log("CR3E2_STAGE2_V3_ELITE_DRAFT_GUARD_SCOPE=LOCAL_DRIVER_ONLY");
+console.log("CR3E2_STAGE2_V3_ELITE_DRAFT_GUARD_MATCH=CRLF_TOLERANT");
 
 try {
   await import(`${pathToFileURL(runnerPath).href}?v=${Date.now()}`);
