@@ -109,8 +109,26 @@ jobs:
             gateActive: element.dataset.checkpointGateActive ?? "",
           }));
 
-          async function moveToward(page, canvas, target) {
+          async function acknowledgedShift(page, canvas, expectedBefore, label, scheduledAt) {
+            const before = await read(canvas);
+            assert.equal(before.shifts, expectedBefore, `${label} unsolicited SHIFT before scheduled ${scheduledAt}: ${JSON.stringify(before)}`);
+            await page.keyboard.down("Space");
+            await page.waitForTimeout(18);
+            await page.keyboard.up("Space");
+            const deadline = Date.now() + 1_500;
+            let after = await read(canvas);
+            while (Date.now() < deadline && after.shifts === before.shifts) {
+              await page.waitForTimeout(10);
+              after = await read(canvas);
+            }
+            assert.equal(after.shifts, before.shifts + 1, `${label} scheduled SHIFT must increment exactly once at ${scheduledAt}: before=${JSON.stringify(before)} after=${JSON.stringify(after)}`);
+            assert.notEqual(after.phase, before.phase, `${label} scheduled SHIFT must toggle phase at ${scheduledAt}`);
+            return after.shifts;
+          }
+
+          async function moveToward(page, canvas, target, expectedShifts, label) {
             const start = await read(canvas);
+            assert.equal(start.shifts, expectedShifts, `${label} unsolicited SHIFT before movement`);
             const dx = target.x - start.x;
             const dy = target.y - start.y;
             if (Math.abs(dx) <= 12 && Math.abs(dy) <= 12) return true;
@@ -123,6 +141,7 @@ jobs:
               while (Date.now() < deadline) {
                 await page.waitForTimeout(8);
                 const state = await read(canvas);
+                assert.equal(state.shifts, expectedShifts, `${label} unsolicited SHIFT during movement: ${JSON.stringify(state)}`);
                 if (state.dead || state.draftOpen) return false;
                 const reached = horizontal
                   ? (dx > 0 ? state.x >= target.x - 8 : state.x <= target.x + 8)
@@ -148,24 +167,28 @@ jobs:
 
               let waypointIndex = 0;
               let nextShiftAt = SHIFT_PERIOD;
+              let expectedShifts = 0;
+              const initial = await read(canvas);
+              assert.equal(initial.shifts, 0, `${label} must begin with zero SHIFTs`);
               const deadline = Date.now() + 120_000;
               while (Date.now() < deadline) {
                 const state = await read(canvas);
+                assert.equal(state.shifts, expectedShifts, `${label} unsolicited SHIFT in outer loop: ${JSON.stringify(state)}`);
                 if (state.dead) throw new Error(`${label} died before ELITE_I: ${JSON.stringify(state)}`);
                 if (state.progress >= 80_000 || state.gateActive === "ELITE_I") {
-                  const snap = { label, frameA, frameB, waypointIndex, nextShiftAt, ...state };
+                  const snap = { label, frameA, frameB, waypointIndex, nextShiftAt, expectedShifts, ...state };
                   snapshots.push(snap);
-                  console.log(`CR3E2_WAYPOINT_${label}=${JSON.stringify(snap)}`);
+                  console.log(`CR3E2_WAYPOINT_ACK_${label}=${JSON.stringify(snap)}`);
                   return;
                 }
                 if (state.draftOpen) throw new Error(`${label} unexpectedly drafted before ELITE_I`);
 
                 while (state.elapsed >= nextShiftAt) {
-                  await canvas.press("Space", { timeout: 2_500 });
+                  expectedShifts = await acknowledgedShift(page, canvas, expectedShifts, label, nextShiftAt);
                   nextShiftAt += SHIFT_PERIOD;
                 }
 
-                const reached = await moveToward(page, canvas, WAYPOINTS[waypointIndex]);
+                const reached = await moveToward(page, canvas, WAYPOINTS[waypointIndex], expectedShifts, label);
                 if (reached) {
                   waypointIndex = waypointIndex === WAYPOINTS.length - 1 ? 1 : waypointIndex + 1;
                 }
@@ -185,9 +208,13 @@ jobs:
           assert.equal(a.progress, 80_000);
           assert.equal(b.progress, 80_000);
           assert.equal(a.enemyKinds, b.enemyKinds, "enemy-kind multiset drift");
-          assert.equal(a.shifts, b.shifts, `SHIFT drift ${a.shifts}/${b.shifts}`);
+          assert.equal(a.expectedShifts, 27, `A expected scheduled SHIFT count drift ${a.expectedShifts}`);
+          assert.equal(b.expectedShifts, 27, `B expected scheduled SHIFT count drift ${b.expectedShifts}`);
+          assert.equal(a.shifts, 27, `A actual SHIFT count drift ${a.shifts}`);
+          assert.equal(b.shifts, 27, `B actual SHIFT count drift ${b.shifts}`);
+          assert.equal(a.phase, b.phase, `phase drift ${a.phase}/${b.phase}`);
           assert.ok(Math.hypot(a.x - b.x, a.y - b.y) <= 40, `position variance (${a.x},${a.y})/(${b.x},${b.y})`);
           assert.ok(Math.abs(a.hp - b.hp) <= 10, `HP variance ${a.hp}/${b.hp}`);
           assert.ok(Math.abs(a.activeEnemies - b.activeEnemies) <= 2, `enemy variance ${a.activeEnemies}/${b.activeEnemies}`);
-          console.log("RARE_SHIFT_CR3E2_WAYPOINT_REPRO=PASS");
+          console.log("RARE_SHIFT_CR3E2_WAYPOINT_ACK_REPRO=PASS");
           NODE
