@@ -1,0 +1,280 @@
+name: RARE SHIFT CR-3E.2 Active-Time Natural Certification V2
+
+on:
+  push:
+    branches:
+      - qualification/cr3e-complete-victory-post-cr3e1
+    paths:
+      - ".github/workflows/cr3e2-active-time-certification-v2.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  active-time-certification-v2:
+    name: CR-3E.2 director-time natural complete-victory certification
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --init
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      FRIENDSDK_ARCHIVE: vendor/rarefriends-friendsdk-0.1.3.tgz
+      FRIENDSDK_SHA256: 8f156c469a15786e3c649b35d092e86ec6242ff30415b7ee7c451763a816e789
+      FRIENDSDK_URL: https://github.com/spokesz/friendsdk/releases/download/v0.1.3/rarefriends-friendsdk-0.1.3.tgz
+      CR3E2_DRIVER_BLOB: b2ab5b0a6c3a8f4de2ec3977ec6c4d3473a2d24d
+      CR3E2_STAGE4_SCENARIO_BLOB: a9a752a2ce2c35f48a1c4fabc0f3dbf29a032ebf
+      FOCUSED_PRECERT_HEAD: 434a04f6caae2f299e7ba60c66a71b6870febb0b
+      B5_SCRIPT_BLOB: 360cfb5bc6221277b437fb699f501aa658f5221f
+
+    steps:
+      - name: Checkout exact director-time head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Verify qualification-only boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          echo "CR3E2_DIRECTOR_TIME_HEAD=$(git rev-parse HEAD)"
+          git diff --check
+          git diff --exit-code
+          git diff --cached --exit-code
+          test -z "$(git status --short)"
+          BASE=644f7900966412570d5bdd7b43b278b30b4e49de
+          git merge-base --is-ancestor "$BASE" HEAD
+          git merge-base --is-ancestor "$FOCUSED_PRECERT_HEAD" HEAD
+          git diff --name-only "$BASE"...HEAD | tee /tmp/cr3e2-director-time-files.txt
+          if grep -Ev '^(\.github/workflows/cr3e2-natural-complete-victory\.yml|\.github/workflows/cr3e2-active-time-certification\.yml|\.github/workflows/cr3e2-active-time-certification-v2\.yml|docs/design/RARE_SHIFT_CR3E2_NATURAL_COMPLETE_VICTORY_GATE_v1\.md|scripts/cr3e2-natural-complete-victory-browser\.mjs|scripts/cr3e2-stage4-boss-scenario\.mjs)$' /tmp/cr3e2-director-time-files.txt; then
+            echo "Unexpected file in CR-3E.2 qualification diff" >&2
+            exit 1
+          fi
+          test -z "$(git diff --name-only "$BASE"...HEAD -- games/rare-shift)"
+          for path in \
+            games/rare-shift/src/phaser-survival.ts \
+            games/rare-shift/src/phaser-survival-base.ts \
+            games/rare-shift/src/cr1-director-core.ts \
+            games/rare-shift/src/cr3e-checkpoint-gate-core.ts \
+            games/rare-shift/src/cr3e-checkpoint-phaser-runtime.ts \
+            games/rare-shift/src/cr3-desync-core.ts \
+            games/rare-shift/src/cr3-desync-phaser-runtime.ts \
+            games/rare-shift/src/cr3-results-core.ts; do
+            test "$(git rev-parse "$BASE:$path")" = "$(git rev-parse "HEAD:$path")"
+          done
+          test "$(git rev-parse HEAD:scripts/cr3e2-natural-complete-victory-browser.mjs)" = "$CR3E2_DRIVER_BLOB"
+          test "$(git rev-parse HEAD:scripts/cr3e2-stage4-boss-scenario.mjs)" = "$CR3E2_STAGE4_SCENARIO_BLOB"
+          test "$(git rev-parse HEAD:scripts/v2-3b5-signal-browser.mjs)" = "$B5_SCRIPT_BLOB"
+
+      - name: Fetch and verify FriendSDK v0.1.3
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p vendor
+          curl --fail --location --retry 5 --retry-all-errors --connect-timeout 20 --max-time 180 --output "$FRIENDSDK_ARCHIVE" "$FRIENDSDK_URL"
+          printf '%s  %s\n' "$FRIENDSDK_SHA256" "$FRIENDSDK_ARCHIVE" | sha256sum --check --strict
+
+      - name: Install project dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Deterministic authority and build
+        shell: bash
+        run: |
+          npm run test:cr-3e1
+          npm run test:cr-1
+          npm run test:cr-2a
+          npm run test:cr-3a
+          npm run test:cr-3c
+          npm run test:cr-3d
+          npm run test:evolution
+          npm run typecheck:core
+          npm run typecheck
+          npm run check
+          npm run build
+          node --experimental-strip-types scripts/cr3e2-stage4-boss-scenario.mjs
+
+      - name: Stage-I absolute director-time reproducibility gate
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { resolve } from "node:path";
+          import { testGame } from "@rarefriends/friendsdk/testing";
+          const gameDirectory = resolve("games/rare-shift");
+          const snapshots = [];
+          const read = canvas => canvas.evaluate(element => ({
+            elapsed: Number(element.dataset.directorElapsedMs ?? "0"),
+            progress: Number(element.dataset.directorProgressMs ?? "0"),
+            hp: Number(element.dataset.hp ?? "0"),
+            kills: Number(element.dataset.kills ?? "0"),
+            shifts: Number(element.dataset.shifts ?? "0"),
+            x: Number(element.dataset.x ?? "0"),
+            y: Number(element.dataset.y ?? "0"),
+            dead: element.dataset.dead === "true",
+            draftOpen: element.dataset.draftOpen === "true",
+            activeEnemies: Number(element.dataset.activeEnemies ?? "0"),
+            gateActive: element.dataset.checkpointGateActive ?? "",
+          }));
+          async function holdToGrid(page, canvas, key, quantum) {
+            const start = await read(canvas);
+            const target = (Math.floor(start.elapsed / quantum) + 1) * quantum;
+            await page.keyboard.down(key);
+            try {
+              const deadline = Date.now() + 4_000;
+              while (Date.now() < deadline) {
+                await page.waitForTimeout(12);
+                const state = await read(canvas);
+                if (state.elapsed >= target || state.dead || state.draftOpen) return;
+              }
+              throw new Error(`director-time hold stalled key=${key} target=${target}`);
+            } finally {
+              await page.keyboard.up(key);
+            }
+          }
+          function attempt(label) {
+            return async ({ page, game }) => {
+              const scan = game.locator('[data-stage="scan"]');
+              await scan.waitFor({ state: "visible" });
+              const frameA = Number(await scan.getAttribute("data-frame-a"));
+              const frameB = Number(await scan.getAttribute("data-frame-b"));
+              await game.getByRole("button", { name: /ENTER SIGNAL DESCENT/i }).click();
+              const canvas = game.locator("canvas[data-director-stage]").first();
+              await canvas.waitFor({ state: "visible" });
+              await canvas.focus();
+              let tick = 0;
+              const deadline = Date.now() + 120_000;
+              while (Date.now() < deadline) {
+                const state = await read(canvas);
+                if (state.dead) throw new Error(`${label} died before ELITE_I: ${JSON.stringify(state)}`);
+                if (state.progress >= 80_000 || state.gateActive === "ELITE_I") {
+                  const snap = { label, frameA, frameB, ...state };
+                  snapshots.push(snap);
+                  console.log(`CR3E2_DIRECTOR_TIME_${label}=${JSON.stringify(snap)}`);
+                  return;
+                }
+                if (state.draftOpen) throw new Error(`${label} unexpectedly drafted before ELITE_I`);
+                let key;
+                if (state.y < 250 && state.x < 1500) key = "ArrowRight";
+                else if (state.x >= 1500 && state.y < 950) key = "ArrowDown";
+                else if (state.y >= 950 && state.x > 300) key = "ArrowLeft";
+                else if (state.x <= 300 && state.y > 250) key = "ArrowUp";
+                else key = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"][Math.floor(tick / 10) % 4];
+                await holdToGrid(page, canvas, key, 420);
+                tick += 1;
+                if (tick % 7 === 0) await canvas.press("Space", { timeout: 2_500 });
+              }
+              throw new Error(`${label} did not reach ELITE_I`);
+            };
+          }
+          for (const label of ["A", "B"]) {
+            await testGame(gameDirectory, { width: 960, height: 800, timeout: 135_000, check: attempt(label) });
+          }
+          const [a, b] = snapshots;
+          assert.equal(snapshots.length, 2);
+          assert.equal(a.frameA, b.frameA);
+          assert.equal(a.frameB, b.frameB);
+          assert.equal(a.progress, 80_000);
+          assert.equal(b.progress, 80_000);
+          assert.ok(Math.abs(a.hp - b.hp) <= 10, `HP variance ${a.hp}/${b.hp}`);
+          assert.ok(Math.abs(a.kills - b.kills) <= 6, `kill variance ${a.kills}/${b.kills}`);
+          assert.ok(Math.abs(a.activeEnemies - b.activeEnemies) <= 6, `enemy variance ${a.activeEnemies}/${b.activeEnemies}`);
+          assert.ok(Math.abs(a.shifts - b.shifts) <= 1, `SHIFT variance ${a.shifts}/${b.shifts}`);
+          assert.ok(Math.hypot(a.x - b.x, a.y - b.y) <= 120, `position variance (${a.x},${a.y})/(${b.x},${b.y})`);
+          console.log("RARE_SHIFT_CR3E2_DIRECTOR_TIME_REPRO=PASS");
+          NODE
+
+      - name: Apply frozen Run-17 policy with director-time movement
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object scripts/cr3e2-natural-complete-victory-browser.mjs)" = "$CR3E2_DRIVER_BLOB"
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+          const path = "scripts/cr3e2-natural-complete-victory-browser.mjs";
+          let source = readFileSync(path, "utf8");
+          const replaceOne = (before, after, label) => {
+            if (source.split(before).length !== 2) throw new Error(`${label} anchor drifted`);
+            source = source.replace(before, after);
+          };
+          replaceOne(
+            `  await canvas.click({ position: { x: box.width * centers(count)[index] / 960, y: box.height * 320 / 640 } });`,
+            `  await canvas.click({ position: { x: box.width * centers(count)[index] / 960, y: box.height * 320 / 640 }, timeout: 2_500 });`,
+            "draft click",
+          );
+          replaceOne(
+            `  const criticalRefract = state.level >= 5\n    && state.hp <= 35\n    && state.cr2DraftActive\n    && state.refracts > 0\n    && !state.draftIds.includes("FIELD_REPAIR");`,
+            `  const criticalRefract = state.level >= 5\n    && state.hp <= 25\n    && state.cr2DraftActive\n    && state.refracts > 0\n    && !state.draftIds.includes("FIELD_REPAIR");`,
+            "REFRACT",
+          );
+          replaceOne(`    await canvas.press("r");`, `    await canvas.press("r", { timeout: 2_500 });`, "REFRACT input");
+          replaceOne(
+            `  const lowHp = state.hp <= 72;\n  const priority = lowHp\n    ? [`,
+            `  const pressureDraft = state.level >= 5 && (state.hp <= 60 || state.activeEnemies >= 32);\n  const lowHp = state.hp <= 72;\n  const priority = pressureDraft\n    ? [\n        "FIELD_REPAIR",\n        "PROTOCOL_ORBIT_STABILIZER",\n        "PROTOCOL_VECTOR_LENS",\n        "PROTOCOL_COMMON_CORE",\n        "DELTA_RANK",\n        "SIGNAL_RANK",\n        "ORBIT_RANK",\n        "ECHO_RANK",\n        "PROTOCOL_RESONANCE_COIL",\n        "PROTOCOL_MEMORY_FUSE",\n        "SIGNAL_MAGNET",\n        "EVOLUTION",\n        "VECTOR_RANK",\n        "ORBIT_NODES",\n        "ECHO_MINE",\n        "SIGNAL_ARC",\n        "VECTOR_NEEDLE",\n      ]\n    : lowHp\n    ? [`,
+            "pressure priority",
+          );
+          replaceOne(
+            `async function moveNaturalSurvivalLane(canvas, state, tick) {`,
+            `async function holdKeyToDirectorGrid(page, canvas, key, quantum) {\n  const start = await readState(canvas);\n  const target = (Math.floor(start.elapsed / quantum) + 1) * quantum;\n  await page.keyboard.down(key);\n  try {\n    const deadline = Date.now() + 4_000;\n    while (Date.now() < deadline) {\n      await page.waitForTimeout(12);\n      const current = await readCombatState(canvas);\n      if (!current || current.dead || current.draftOpen || current.elapsed >= target) return;\n    }\n    throw new Error(\`director-time movement stalled \${key} target=\${target}\`);\n  } finally {\n    await page.keyboard.up(key);\n  }\n}\n\nfunction shouldStageFourShift(state, periodicDue) {\n  const active = state.stage === "STAGE_IV" && state.gateResolvedCount >= 3 && state.gatePhase === "RUNNING" && !state.bossActive && !state.bossPending;\n  if (!active) return periodicDue;\n  const a = state.enemyKinds.filter(kind => kind === "SPLIT_A" || kind === "FLICKER_A").length;\n  const b = state.enemyKinds.filter(kind => kind === "SPLIT_B" || kind === "FLICKER_B").length;\n  const current = state.phase === "A" ? a : b;\n  const alternate = state.phase === "A" ? b : a;\n  return alternate + 2 <= current;\n}\n\nasync function moveNaturalSurvivalLane(page, canvas, state, tick) {`,
+            "movement helper",
+          );
+          replaceOne(
+            `  await canvas.press(key, { delay: postStageOne ? 520 : 420 });\n  return { settle: postStageOne ? 80 : 0, shiftModulo: 7 };`,
+            `  await holdKeyToDirectorGrid(page, canvas, key, postStageOne ? 520 : 420);\n  const pressureShift = postStageOne && (state.activeEnemies >= 32 || state.hp <= 25);\n  return { settle: 0, shiftModulo: pressureShift ? 5 : 7 };`,
+            "natural movement",
+          );
+          replaceOne(`async function moveEliteCombatLane(canvas, state, tick) {`, `async function moveEliteCombatLane(page, canvas, state, tick) {`, "elite signature");
+          replaceOne(`  await canvas.press(key, { delay: 180 });\n}\n\nasync function moveTowardPoint(canvas, state, point) {`, `  await holdKeyToDirectorGrid(page, canvas, key, 180);\n}\n\nasync function moveTowardPoint(page, canvas, state, point) {`, "elite movement");
+          source = source.replace(`    await canvas.press("ArrowRight", { delay: 80 });`, `    await holdKeyToDirectorGrid(page, canvas, "ArrowRight", 80);`);
+          source = source.replace(`  await canvas.press(key, { delay: 150 });`, `  await holdKeyToDirectorGrid(page, canvas, key, 150);`);
+          source = source.replaceAll(`await moveNaturalSurvivalLane(canvas, state, moveTick)`, `await moveNaturalSurvivalLane(page, canvas, state, moveTick)`);
+          source = source.replace(`await moveEliteCombatLane(canvas, state, checkpointTick)`, `await moveEliteCombatLane(page, canvas, state, checkpointTick)`);
+          source = source.replace(`await moveTowardPoint(canvas, state, lastCheckpointPosition)`, `await moveTowardPoint(page, canvas, state, lastCheckpointPosition)`);
+          const periodic = `if (moveTick % movement.shiftModulo === 0) await shiftAndObserve();`;
+          if (source.split(periodic).length !== 3) throw new Error("periodic SHIFT anchors drifted");
+          source = source.replaceAll(periodic, `if (shouldStageFourShift(state, moveTick % movement.shiftModulo === 0)) await shiftAndObserve();`);
+          replaceOne(`      await canvas.press("Space");`, `      await canvas.press("Space", { timeout: 2_500 });`, "SHIFT");
+          writeFileSync(path, source);
+          NODE
+          node --check scripts/cr3e2-natural-complete-victory-browser.mjs
+          git diff --check -- scripts/cr3e2-natural-complete-victory-browser.mjs
+          test -z "$(git diff --name-only -- games/rare-shift)"
+          echo "RARE_SHIFT_CR3E2_RUN17_POLICY=FROZEN"
+          echo "RARE_SHIFT_CR3E2_DIRECTOR_TIME_MOVEMENT=YES"
+
+      - name: Layer D — director-time final natural complete-victory certification
+        run: node --experimental-strip-types scripts/cr3e2-natural-complete-victory-browser.mjs
+
+      - name: Restore committed natural driver
+        if: always()
+        shell: bash
+        run: |
+          git checkout -- scripts/cr3e2-natural-complete-victory-browser.mjs
+          test "$(git hash-object scripts/cr3e2-natural-complete-victory-browser.mjs)" = "$CR3E2_DRIVER_BLOB"
+
+      - name: Inherited regression closeout
+        shell: bash
+        run: |
+          npm run test:v2-1-browser
+          node --experimental-strip-types scripts/evolution-natural-selection-browser.mjs
+          npm run test:cr-3b-browser
+          npm run test:cr-3c-browser
+          npm run test:cr-3d-browser
+          npm run test:cr-3e1-browser
+
+      - name: Report final qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "RARE_SHIFT_CR3E2_DIRECTOR_TIME_REPRO=PASS"
+          echo "RARE_SHIFT_CR3E2_LAYER_D_NATURAL_COMPLETE_VICTORY=PASS"
+          echo "RARE_SHIFT_CR3E2_FINAL_NATURAL_CERTIFICATION=PASS"
+          echo "CR3E2_FINAL_HEAD=$(git rev-parse HEAD)"
+          test -z "$(git diff --name-only -- games/rare-shift)"
