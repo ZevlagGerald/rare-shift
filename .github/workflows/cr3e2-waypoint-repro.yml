@@ -1,0 +1,193 @@
+name: RARE SHIFT CR-3E.2 Waypoint Repro
+
+on:
+  push:
+    branches:
+      - qualification/cr3e-complete-victory-post-cr3e1
+    paths:
+      - ".github/workflows/cr3e2-waypoint-repro.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  waypoint-repro:
+    name: CR-3E.2 waypoint reproducibility diagnosis
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --init
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      FRIENDSDK_ARCHIVE: vendor/rarefriends-friendsdk-0.1.3.tgz
+      FRIENDSDK_SHA256: 8f156c469a15786e3c649b35d092e86ec6242ff30415b7ee7c451763a816e789
+      FRIENDSDK_URL: https://github.com/spokesz/friendsdk/releases/download/v0.1.3/rarefriends-friendsdk-0.1.3.tgz
+
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Verify qualification-only boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          BASE=644f7900966412570d5bdd7b43b278b30b4e49de
+          git merge-base --is-ancestor "$BASE" HEAD
+          test -z "$(git diff --name-only "$BASE"...HEAD -- games/rare-shift)"
+          for path in \
+            games/rare-shift/src/phaser-survival.ts \
+            games/rare-shift/src/phaser-survival-base.ts \
+            games/rare-shift/src/cr1-director-core.ts \
+            games/rare-shift/src/cr3e-checkpoint-gate-core.ts \
+            games/rare-shift/src/cr3e-checkpoint-phaser-runtime.ts \
+            games/rare-shift/src/cr3-desync-core.ts \
+            games/rare-shift/src/cr3-desync-phaser-runtime.ts \
+            games/rare-shift/src/cr3-results-core.ts; do
+            test "$(git rev-parse "$BASE:$path")" = "$(git rev-parse "HEAD:$path")"
+          done
+          echo "CR3E2_WAYPOINT_HEAD=$(git rev-parse HEAD)"
+
+      - name: Fetch and verify FriendSDK v0.1.3
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p vendor
+          curl --fail --location --retry 5 --retry-all-errors --connect-timeout 20 --max-time 180 --output "$FRIENDSDK_ARCHIVE" "$FRIENDSDK_URL"
+          printf '%s  %s\n' "$FRIENDSDK_SHA256" "$FRIENDSDK_ARCHIVE" | sha256sum --check --strict
+
+      - name: Install and build
+        shell: bash
+        run: |
+          npm install --no-audit --no-fund
+          npm run typecheck:core
+          npm run typecheck
+          npm run check
+          npm run build
+
+      - name: Two-pass Stage-I waypoint reproducibility
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { resolve } from "node:path";
+          import { testGame } from "@rarefriends/friendsdk/testing";
+
+          const gameDirectory = resolve("games/rare-shift");
+          const snapshots = [];
+          const WAYPOINTS = [
+            { x: 900, y: 250 },
+            { x: 1500, y: 250 },
+            { x: 1500, y: 950 },
+            { x: 300, y: 950 },
+            { x: 300, y: 250 },
+          ];
+          const SHIFT_PERIOD = 2940;
+
+          const read = canvas => canvas.evaluate(element => ({
+            elapsed: Number(element.dataset.directorElapsedMs ?? "0"),
+            progress: Number(element.dataset.directorProgressMs ?? "0"),
+            hp: Number(element.dataset.hp ?? "0"),
+            kills: Number(element.dataset.kills ?? "0"),
+            shifts: Number(element.dataset.shifts ?? "0"),
+            x: Number(element.dataset.x ?? "0"),
+            y: Number(element.dataset.y ?? "0"),
+            phase: element.dataset.phase ?? "",
+            dead: element.dataset.dead === "true",
+            draftOpen: element.dataset.draftOpen === "true",
+            activeEnemies: Number(element.dataset.activeEnemies ?? "0"),
+            enemyKinds: element.dataset.enemyKinds ?? "",
+            gateActive: element.dataset.checkpointGateActive ?? "",
+          }));
+
+          async function moveToward(page, canvas, target) {
+            const start = await read(canvas);
+            const dx = target.x - start.x;
+            const dy = target.y - start.y;
+            if (Math.abs(dx) <= 12 && Math.abs(dy) <= 12) return true;
+            const horizontal = Math.abs(dx) >= Math.abs(dy);
+            const key = horizontal ? (dx > 0 ? "ArrowRight" : "ArrowLeft") : (dy > 0 ? "ArrowDown" : "ArrowUp");
+            const deadline = Date.now() + 1500;
+            const activeDeadline = start.elapsed + 140;
+            await page.keyboard.down(key);
+            try {
+              while (Date.now() < deadline) {
+                await page.waitForTimeout(8);
+                const state = await read(canvas);
+                if (state.dead || state.draftOpen) return false;
+                const reached = horizontal
+                  ? (dx > 0 ? state.x >= target.x - 8 : state.x <= target.x + 8)
+                  : (dy > 0 ? state.y >= target.y - 8 : state.y <= target.y + 8);
+                if (reached || state.elapsed >= activeDeadline) return reached;
+              }
+              throw new Error(`waypoint movement stalled target=${JSON.stringify(target)}`);
+            } finally {
+              await page.keyboard.up(key);
+            }
+          }
+
+          function attempt(label) {
+            return async ({ page, game }) => {
+              const scan = game.locator('[data-stage="scan"]');
+              await scan.waitFor({ state: "visible" });
+              const frameA = Number(await scan.getAttribute("data-frame-a"));
+              const frameB = Number(await scan.getAttribute("data-frame-b"));
+              await game.getByRole("button", { name: /ENTER SIGNAL DESCENT/i }).click();
+              const canvas = game.locator("canvas[data-director-stage]").first();
+              await canvas.waitFor({ state: "visible" });
+              await canvas.focus();
+
+              let waypointIndex = 0;
+              let nextShiftAt = SHIFT_PERIOD;
+              const deadline = Date.now() + 120_000;
+              while (Date.now() < deadline) {
+                const state = await read(canvas);
+                if (state.dead) throw new Error(`${label} died before ELITE_I: ${JSON.stringify(state)}`);
+                if (state.progress >= 80_000 || state.gateActive === "ELITE_I") {
+                  const snap = { label, frameA, frameB, waypointIndex, nextShiftAt, ...state };
+                  snapshots.push(snap);
+                  console.log(`CR3E2_WAYPOINT_${label}=${JSON.stringify(snap)}`);
+                  return;
+                }
+                if (state.draftOpen) throw new Error(`${label} unexpectedly drafted before ELITE_I`);
+
+                while (state.elapsed >= nextShiftAt) {
+                  await canvas.press("Space", { timeout: 2_500 });
+                  nextShiftAt += SHIFT_PERIOD;
+                }
+
+                const reached = await moveToward(page, canvas, WAYPOINTS[waypointIndex]);
+                if (reached) {
+                  waypointIndex = waypointIndex === WAYPOINTS.length - 1 ? 1 : waypointIndex + 1;
+                }
+              }
+              throw new Error(`${label} did not reach ELITE_I`);
+            };
+          }
+
+          for (const label of ["A", "B"]) {
+            await testGame(gameDirectory, { width: 960, height: 800, timeout: 135_000, check: attempt(label) });
+          }
+
+          assert.equal(snapshots.length, 2);
+          const [a, b] = snapshots;
+          assert.equal(a.frameA, b.frameA, "frame A drift");
+          assert.equal(a.frameB, b.frameB, "frame B drift");
+          assert.equal(a.progress, 80_000);
+          assert.equal(b.progress, 80_000);
+          assert.equal(a.enemyKinds, b.enemyKinds, "enemy-kind multiset drift");
+          assert.equal(a.shifts, b.shifts, `SHIFT drift ${a.shifts}/${b.shifts}`);
+          assert.ok(Math.hypot(a.x - b.x, a.y - b.y) <= 40, `position variance (${a.x},${a.y})/(${b.x},${b.y})`);
+          assert.ok(Math.abs(a.hp - b.hp) <= 10, `HP variance ${a.hp}/${b.hp}`);
+          assert.ok(Math.abs(a.activeEnemies - b.activeEnemies) <= 2, `enemy variance ${a.activeEnemies}/${b.activeEnemies}`);
+          console.log("RARE_SHIFT_CR3E2_WAYPOINT_REPRO=PASS");
+          NODE
