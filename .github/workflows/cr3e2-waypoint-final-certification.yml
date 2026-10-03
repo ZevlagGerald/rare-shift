@@ -1,0 +1,254 @@
+name: RARE SHIFT CR-3E.2 Waypoint Final Certification
+
+on:
+  push:
+    branches:
+      - qualification/cr3e-complete-victory-post-cr3e1
+    paths:
+      - ".github/workflows/cr3e2-waypoint-final-certification.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  waypoint-final:
+    name: CR-3E.2 waypoint-stable natural complete-victory certification
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --init
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      FRIENDSDK_ARCHIVE: vendor/rarefriends-friendsdk-0.1.3.tgz
+      FRIENDSDK_SHA256: 8f156c469a15786e3c649b35d092e86ec6242ff30415b7ee7c451763a816e789
+      FRIENDSDK_URL: https://github.com/spokesz/friendsdk/releases/download/v0.1.3/rarefriends-friendsdk-0.1.3.tgz
+      BASE: 644f7900966412570d5bdd7b43b278b30b4e49de
+      CR3E2_DRIVER_BLOB: b2ab5b0a6c3a8f4de2ec3977ec6c4d3473a2d24d
+      CR3E2_STAGE4_SCENARIO_BLOB: a9a752a2ce2c35f48a1c4fabc0f3dbf29a032ebf
+      FOCUSED_PRECERT_HEAD: 434a04f6caae2f299e7ba60c66a71b6870febb0b
+      FOCUSED_PRECERT_RUN: "37092976921"
+      B5_RELIABILITY_PROOF_HEAD: f0742f9500f86834c26b2dbdc19249a492b40d48
+      B5_RELIABILITY_PROOF_RUN: "37006438703"
+      WAYPOINT_REPRO_HEAD: 243fff7af68234c3d66c517ee4b01f2bced9698d
+      WAYPOINT_REPRO_RUN: "37107895199"
+      SHIFT_ACK_HEAD: c20986a56d99647a80ece66a821e9f420c4a63f3
+      SHIFT_ACK_RUN: "37107745863"
+
+    steps:
+      - name: Checkout exact final head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Verify qualification-only boundary and locked proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          echo "CR3E2_WAYPOINT_FINAL_HEAD=$(git rev-parse HEAD)"
+          git diff --check
+          git diff --exit-code
+          git diff --cached --exit-code
+          test -z "$(git status --short)"
+
+          git merge-base --is-ancestor "$BASE" HEAD
+          git merge-base --is-ancestor "$FOCUSED_PRECERT_HEAD" HEAD
+          git merge-base --is-ancestor "$WAYPOINT_REPRO_HEAD" HEAD
+          git merge-base --is-ancestor "$SHIFT_ACK_HEAD" HEAD
+
+          git diff --name-only "$BASE"...HEAD | tee /tmp/cr3e2-final-files.txt
+          if grep -Ev '^(\.github/workflows/cr3e2-active-time-certification-v2\.yml|\.github/workflows/cr3e2-active-time-certification\.yml|\.github/workflows/cr3e2-natural-complete-victory\.yml|\.github/workflows/cr3e2-spatial-final-certification\.yml|\.github/workflows/cr3e2-waypoint-repro\.yml|\.github/workflows/cr3e2-shift-input-ack\.yml|\.github/workflows/cr3e2-waypoint-final-certification\.yml|docs/design/RARE_SHIFT_CR3E2_NATURAL_COMPLETE_VICTORY_GATE_v1\.md|scripts/cr3e2-natural-complete-victory-browser\.mjs|scripts/cr3e2-stage4-boss-scenario\.mjs)$' /tmp/cr3e2-final-files.txt; then
+            echo "Unexpected file in CR-3E.2 final qualification diff" >&2
+            exit 1
+          fi
+
+          test -z "$(git diff --name-only "$BASE"...HEAD -- games/rare-shift)"
+          for path in \
+            games/rare-shift/src/phaser-survival.ts \
+            games/rare-shift/src/phaser-survival-base.ts \
+            games/rare-shift/src/cr1-director-core.ts \
+            games/rare-shift/src/cr3e-checkpoint-gate-core.ts \
+            games/rare-shift/src/cr3e-checkpoint-phaser-runtime.ts \
+            games/rare-shift/src/cr3-desync-core.ts \
+            games/rare-shift/src/cr3-desync-phaser-runtime.ts \
+            games/rare-shift/src/cr3-results-core.ts; do
+            test "$(git rev-parse "$BASE:$path")" = "$(git rev-parse "HEAD:$path")"
+          done
+          test "$(git rev-parse HEAD:scripts/cr3e2-natural-complete-victory-browser.mjs)" = "$CR3E2_DRIVER_BLOB"
+          test "$(git rev-parse HEAD:scripts/cr3e2-stage4-boss-scenario.mjs)" = "$CR3E2_STAGE4_SCENARIO_BLOB"
+          echo "CR3E2_LOCKED_FOCUSED_PRECERT_RUN=$FOCUSED_PRECERT_RUN"
+          echo "CR3E2_LOCKED_B5_RELIABILITY_RUN=$B5_RELIABILITY_PROOF_RUN"
+          echo "CR3E2_LOCKED_WAYPOINT_REPRO_RUN=$WAYPOINT_REPRO_RUN"
+          echo "CR3E2_LOCKED_SHIFT_ACK_RUN=$SHIFT_ACK_RUN"
+
+      - name: Fetch and verify FriendSDK v0.1.3
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p vendor
+          curl --fail --location --retry 5 --retry-all-errors --connect-timeout 20 --max-time 180 --output "$FRIENDSDK_ARCHIVE" "$FRIENDSDK_URL"
+          printf '%s  %s\n' "$FRIENDSDK_SHA256" "$FRIENDSDK_ARCHIVE" | sha256sum --check --strict
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Reconfirm deterministic authority and focused Stage-IV composition
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run test:cr-3e1
+          npm run test:cr-1
+          npm run test:cr-2a
+          npm run test:cr-3a
+          npm run test:cr-3c
+          npm run test:cr-3d
+          npm run test:evolution
+          npm run typecheck:core
+          npm run typecheck
+          npm run check
+          npm run build
+          node --experimental-strip-types scripts/cr3e2-stage4-boss-scenario.mjs
+
+      - name: Apply waypoint-stable Run-17 policy with acknowledged input
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object scripts/cr3e2-natural-complete-victory-browser.mjs)" = "$CR3E2_DRIVER_BLOB"
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+          const path = "scripts/cr3e2-natural-complete-victory-browser.mjs";
+          let source = readFileSync(path, "utf8");
+          const replaceOne = (before, after, label) => {
+            if (source.split(before).length !== 2) throw new Error(`${label} anchor drifted`);
+            source = source.replace(before, after);
+          };
+
+          replaceOne(
+            `  await canvas.click({ position: { x: box.width * centers(count)[index] / 960, y: box.height * 320 / 640 } });`,
+            `  await canvas.click({ position: { x: box.width * centers(count)[index] / 960, y: box.height * 320 / 640 }, timeout: 2_500 });`,
+            "draft click",
+          );
+
+          replaceOne(
+            `  const criticalRefract = state.level >= 5\n    && state.hp <= 35\n    && state.cr2DraftActive\n    && state.refracts > 0\n    && !state.draftIds.includes("FIELD_REPAIR");`,
+            `  const criticalRefract = state.level >= 5\n    && state.hp <= 25\n    && state.cr2DraftActive\n    && state.refracts > 0\n    && !state.draftIds.includes("FIELD_REPAIR");`,
+            "critical REFRACT",
+          );
+
+          replaceOne(
+            `    await canvas.press("r");`,
+            `    await page.keyboard.down("r");\n    await page.waitForTimeout(18);\n    await page.keyboard.up("r");`,
+            "REFRACT input",
+          );
+
+          replaceOne(
+            `  const lowHp = state.hp <= 72;\n  const priority = lowHp\n    ? [`,
+            `  const pressureDraft = state.level >= 5 && (state.hp <= 60 || state.activeEnemies >= 32);\n  const lowHp = state.hp <= 72;\n  const priority = pressureDraft\n    ? [\n        "FIELD_REPAIR",\n        "PROTOCOL_ORBIT_STABILIZER",\n        "PROTOCOL_VECTOR_LENS",\n        "PROTOCOL_COMMON_CORE",\n        "DELTA_RANK",\n        "SIGNAL_RANK",\n        "ORBIT_RANK",\n        "ECHO_RANK",\n        "PROTOCOL_RESONANCE_COIL",\n        "PROTOCOL_MEMORY_FUSE",\n        "SIGNAL_MAGNET",\n        "EVOLUTION",\n        "VECTOR_RANK",\n        "ORBIT_NODES",\n        "ECHO_MINE",\n        "SIGNAL_ARC",\n        "VECTOR_NEEDLE",\n      ]\n    : lowHp\n    ? [`,
+            "Run-17 pressure draft priority",
+          );
+
+          const laneBefore = `async function moveNaturalSurvivalLane(canvas, state, tick) {\n  const x = state.x;\n  const y = state.y;\n  let key;\n  if (y < 250 && x < 1500) key = "ArrowRight";\n  else if (x >= 1500 && y < 950) key = "ArrowDown";\n  else if (y >= 950 && x > 300) key = "ArrowLeft";\n  else if (x <= 300 && y > 250) key = "ArrowUp";\n  else key = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"][Math.floor(tick / 10) % 4];\n  const postStageOne = state.stage !== "STAGE_I";\n  await canvas.press(key, { delay: postStageOne ? 520 : 420 });\n  return { settle: postStageOne ? 80 : 0, shiftModulo: 7 };\n}`;
+          const laneAfter = `const CR3E2_STAGE_ONE_WAYPOINTS = Object.freeze([\n  Object.freeze({ x: 900, y: 250 }),\n  Object.freeze({ x: 1500, y: 250 }),\n  Object.freeze({ x: 1500, y: 950 }),\n  Object.freeze({ x: 300, y: 950 }),\n  Object.freeze({ x: 300, y: 250 }),\n]);\n\nasync function holdKeyForActiveMs(page, canvas, key, activeMs) {\n  const start = await readState(canvas);\n  const targetElapsed = start.elapsed + activeMs;\n  const wallDeadline = Date.now() + 4_000;\n  await page.keyboard.down(key);\n  try {\n    while (Date.now() < wallDeadline) {\n      await page.waitForTimeout(8);\n      const current = await readCombatState(canvas);\n      if (!current || current.dead || current.draftOpen || current.elapsed >= targetElapsed) return current;\n    }\n    throw new Error(\`active-time movement stalled key=\${key} target=\${targetElapsed}\`);\n  } finally {\n    await page.keyboard.up(key);\n  }\n}\n\nfunction shouldStageFourShift(state, periodicDue) {\n  const stageFourSurvival = state.stage === "STAGE_IV"\n    && state.gateResolvedCount >= 3\n    && state.gatePhase === "RUNNING"\n    && !state.bossActive\n    && !state.bossPending;\n  if (!stageFourSurvival) return periodicDue;\n  const aThreats = state.enemyKinds.filter(kind => kind === "SPLIT_A" || kind === "FLICKER_A").length;\n  const bThreats = state.enemyKinds.filter(kind => kind === "SPLIT_B" || kind === "FLICKER_B").length;\n  const current = state.phase === "A" ? aThreats : bThreats;\n  const alternate = state.phase === "A" ? bThreats : aThreats;\n  return periodicDue || alternate + 2 <= current;\n}\n\nasync function moveNaturalSurvivalLane(page, canvas, state, waypointIndex) {\n  if (state.stage === "STAGE_I") {\n    const target = CR3E2_STAGE_ONE_WAYPOINTS[waypointIndex];\n    const dx = target.x - state.x;\n    const dy = target.y - state.y;\n    let nextWaypointIndex = waypointIndex;\n    if (Math.abs(dx) <= 12 && Math.abs(dy) <= 12) {\n      nextWaypointIndex = waypointIndex === CR3E2_STAGE_ONE_WAYPOINTS.length - 1 ? 1 : waypointIndex + 1;\n      return { settle: 0, shiftModulo: 7, waypointIndex: nextWaypointIndex };\n    }\n    const horizontal = Math.abs(dx) >= Math.abs(dy);\n    const key = horizontal ? (dx > 0 ? "ArrowRight" : "ArrowLeft") : (dy > 0 ? "ArrowDown" : "ArrowUp");\n    const updated = await holdKeyForActiveMs(page, canvas, key, 140);\n    if (updated) {\n      const reached = horizontal\n        ? (dx > 0 ? updated.x >= target.x - 8 : updated.x <= target.x + 8)\n        : (dy > 0 ? updated.y >= target.y - 8 : updated.y <= target.y + 8);\n      if (reached) nextWaypointIndex = waypointIndex === CR3E2_STAGE_ONE_WAYPOINTS.length - 1 ? 1 : waypointIndex + 1;\n    }\n    return { settle: 0, shiftModulo: 7, waypointIndex: nextWaypointIndex };\n  }\n\n  const x = state.x;\n  const y = state.y;\n  let key;\n  if (y < 250 && x < 1500) key = "ArrowRight";\n  else if (x >= 1500 && y < 950) key = "ArrowDown";\n  else if (y >= 950 && x > 300) key = "ArrowLeft";\n  else if (x <= 300 && y > 250) key = "ArrowUp";\n  else key = "ArrowUp";\n  await holdKeyForActiveMs(page, canvas, key, 520);\n  const pressureShift = state.activeEnemies >= 32 || state.hp <= 25;\n  return { settle: 80, shiftModulo: pressureShift ? 5 : 7, waypointIndex };\n}`;
+          replaceOne(laneBefore, laneAfter, "natural survival lane");
+
+          replaceOne(
+            `async function moveEliteCombatLane(canvas, state, tick) {`,
+            `async function moveEliteCombatLane(page, canvas, state, tick) {`,
+            "elite lane signature",
+          );
+          replaceOne(
+            `  await canvas.press(key, { delay: 180 });\n}\n\nasync function moveTowardPoint(canvas, state, point) {`,
+            `  await holdKeyForActiveMs(page, canvas, key, 180);\n}\n\nasync function moveTowardPoint(page, canvas, state, point) {`,
+            "elite/reward movement",
+          );
+          replaceOne(
+            `    await canvas.press("ArrowRight", { delay: 80 });`,
+            `    await holdKeyForActiveMs(page, canvas, "ArrowRight", 80);`,
+            "reward nudge",
+          );
+          replaceOne(
+            `  await canvas.press(key, { delay: 150 });`,
+            `  await holdKeyForActiveMs(page, canvas, key, 150);`,
+            "reward movement",
+          );
+
+          replaceOne(
+            `    let maxShifts = 0;\n    let moveTick = 0;`,
+            `    let maxShifts = 0;\n    let moveTick = 0;\n    let survivalWaypointIndex = 0;\n    let nextStageOneShiftAt = 2_940;`,
+            "qualification route state",
+          );
+
+          const shiftBefore = `    const shiftAndObserve = async () => {\n      await canvas.press("Space");\n      await page.waitForTimeout(105);\n      const state = await readCombatState(canvas);\n      if (state) observe(state);\n      return state;\n    };`;
+          const shiftAfter = `    const shiftAndObserve = async () => {\n      const before = await readCombatState(canvas);\n      assert.ok(before, \`SHIFT requires a live combat canvas at width \${width}\`);\n      await page.keyboard.down("Space");\n      await page.waitForTimeout(18);\n      await page.keyboard.up("Space");\n      const ackDeadline = Date.now() + 1_500;\n      let state = await readCombatState(canvas);\n      while (Date.now() < ackDeadline && state && state.shifts === before.shifts) {\n        await page.waitForTimeout(10);\n        state = await readCombatState(canvas);\n      }\n      if (!state) return null;\n      assert.equal(state.shifts, before.shifts + 1, \`SHIFT input must increment exactly once at width \${width}\`);\n      assert.notEqual(state.phase, before.phase, \`SHIFT input must toggle phase at width \${width}\`);\n      await page.waitForTimeout(87);\n      const settled = await readCombatState(canvas);\n      if (settled) {\n        assert.equal(settled.shifts, state.shifts, \`duplicate/unsolicited SHIFT after acknowledged input at width \${width}\`);\n        state = settled;\n        observe(state);\n      }\n      return state;\n    };`;
+          replaceOne(shiftBefore, shiftAfter, "acknowledged SHIFT helper");
+
+          const bossMove = `      await canvas.press(key, { delay: 180 });\n      await page.waitForTimeout(60);`;
+          replaceOne(bossMove, `      await holdKeyForActiveMs(page, canvas, key, 180);\n      await page.waitForTimeout(60);`, "boss movement");
+
+          const gateThinBefore = `            const movement = await moveNaturalSurvivalLane(canvas, state, moveTick);\n            moveTick += 1;\n            await page.waitForTimeout(movement.settle);\n            if (moveTick % movement.shiftModulo === 0) await shiftAndObserve();`;
+          const gateThinAfter = `            const movement = await moveNaturalSurvivalLane(page, canvas, state, survivalWaypointIndex);\n            survivalWaypointIndex = movement.waypointIndex;\n            moveTick += 1;\n            await page.waitForTimeout(movement.settle);\n            if (moveTick % movement.shiftModulo === 0) await shiftAndObserve();`;
+          replaceOne(gateThinBefore, gateThinAfter, "gate thinning route");
+
+          replaceOne(
+            `            await moveEliteCombatLane(canvas, state, checkpointTick);`,
+            `            await moveEliteCombatLane(page, canvas, state, checkpointTick);`,
+            "elite lane call",
+          );
+          replaceOne(
+            `          if (lastCheckpointPosition) await moveTowardPoint(canvas, state, lastCheckpointPosition);`,
+            `          if (lastCheckpointPosition) await moveTowardPoint(page, canvas, state, lastCheckpointPosition);`,
+            "reward movement call",
+          );
+
+          const normalBefore = `        } else {\n          const movement = await moveNaturalSurvivalLane(canvas, state, moveTick);\n          moveTick += 1;\n          await page.waitForTimeout(movement.settle);\n          if (moveTick % movement.shiftModulo === 0) await shiftAndObserve();\n          await page.waitForTimeout(45);\n        }`;
+          const normalAfter = `        } else {\n          if (state.stage === "STAGE_I") {\n            while (state.progress >= nextStageOneShiftAt) {\n              await shiftAndObserve();\n              nextStageOneShiftAt += 2_940;\n            }\n          }\n          const movement = await moveNaturalSurvivalLane(page, canvas, state, survivalWaypointIndex);\n          survivalWaypointIndex = movement.waypointIndex;\n          moveTick += 1;\n          await page.waitForTimeout(movement.settle);\n          if (state.stage !== "STAGE_I") {\n            const refreshed = await readCombatState(canvas);\n            if (refreshed && shouldStageFourShift(refreshed, moveTick % movement.shiftModulo === 0)) {\n              await shiftAndObserve();\n            }\n          }\n          await page.waitForTimeout(45);\n        }`;
+          replaceOne(normalBefore, normalAfter, "normal survival route");
+
+          writeFileSync(path, source);
+          NODE
+
+          node --check scripts/cr3e2-natural-complete-victory-browser.mjs
+          git diff --check -- scripts/cr3e2-natural-complete-victory-browser.mjs
+          test -z "$(git diff --name-only -- games/rare-shift)"
+          echo "RARE_SHIFT_CR3E2_STAGE1_WAYPOINT_ROUTE=YES"
+          echo "RARE_SHIFT_CR3E2_ACKNOWLEDGED_SHIFT_INPUT=YES"
+          echo "RARE_SHIFT_CR3E2_RUN17_POST_STAGE1_POLICY=YES"
+          echo "RARE_SHIFT_CR3E2_STAGE4_PHASE_AWARE_ONLY=YES"
+
+      - name: Layer D — waypoint-stable final natural complete-victory certification
+        run: node --experimental-strip-types scripts/cr3e2-natural-complete-victory-browser.mjs
+
+      - name: Restore committed qualification driver
+        if: always()
+        shell: bash
+        run: |
+          git checkout -- scripts/cr3e2-natural-complete-victory-browser.mjs
+          test "$(git hash-object scripts/cr3e2-natural-complete-victory-browser.mjs)" = "$CR3E2_DRIVER_BLOB"
+          test -z "$(git diff --name-only -- games/rare-shift)"
+
+      - name: CR-3 closeout smoke regressions
+        run: |
+          npm run test:cr-3b-browser
+          npm run test:cr-3c-browser
+          npm run test:cr-3d-browser
+          npm run test:cr-3e1-browser
+
+      - name: Report CR-3E.2 final qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git diff --name-only -- games/rare-shift)"
+          test "$(git hash-object scripts/cr3e2-natural-complete-victory-browser.mjs)" = "$CR3E2_DRIVER_BLOB"
+          echo "RARE_SHIFT_CR3E2_WAYPOINT_REPRO_PROOF=$WAYPOINT_REPRO_RUN"
+          echo "RARE_SHIFT_CR3E2_SHIFT_ACK_PROOF=$SHIFT_ACK_RUN"
+          echo "RARE_SHIFT_CR3E2_FOCUSED_PRECERT_PROOF=$FOCUSED_PRECERT_RUN"
+          echo "RARE_SHIFT_CR3E2_NATURAL_COMPLETE_VICTORY=PASS"
+          echo "RARE_SHIFT_CR3E2_FINAL_QUALIFICATION=PASS"
+          echo "CR3E2_FINAL_HEAD=$(git rev-parse HEAD)"
