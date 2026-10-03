@@ -1,0 +1,174 @@
+name: RARE SHIFT CR-3E.2 SHIFT Input Ack
+
+on:
+  push:
+    branches:
+      - qualification/cr3e-complete-victory-post-cr3e1
+    paths:
+      - ".github/workflows/cr3e2-shift-input-ack.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shift-input-ack:
+    name: CR-3E.2 explicit SHIFT input acknowledgement
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --init
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      FRIENDSDK_ARCHIVE: vendor/rarefriends-friendsdk-0.1.3.tgz
+      FRIENDSDK_SHA256: 8f156c469a15786e3c649b35d092e86ec6242ff30415b7ee7c451763a816e789
+      FRIENDSDK_URL: https://github.com/spokesz/friendsdk/releases/download/v0.1.3/rarefriends-friendsdk-0.1.3.tgz
+
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Verify production boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          BASE=644f7900966412570d5bdd7b43b278b30b4e49de
+          git merge-base --is-ancestor "$BASE" HEAD
+          test -z "$(git diff --name-only "$BASE"...HEAD -- games/rare-shift)"
+          for path in \
+            games/rare-shift/src/phaser-survival.ts \
+            games/rare-shift/src/phaser-survival-base.ts \
+            games/rare-shift/src/cr1-director-core.ts \
+            games/rare-shift/src/cr3e-checkpoint-gate-core.ts \
+            games/rare-shift/src/cr3e-checkpoint-phaser-runtime.ts; do
+            test "$(git rev-parse "$BASE:$path")" = "$(git rev-parse "HEAD:$path")"
+          done
+          echo "CR3E2_SHIFT_ACK_HEAD=$(git rev-parse HEAD)"
+
+      - name: Fetch and verify FriendSDK v0.1.3
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p vendor
+          curl --fail --location --retry 5 --retry-all-errors --connect-timeout 20 --max-time 180 --output "$FRIENDSDK_ARCHIVE" "$FRIENDSDK_URL"
+          printf '%s  %s\n' "$FRIENDSDK_SHA256" "$FRIENDSDK_ARCHIVE" | sha256sum --check --strict
+
+      - name: Install and build
+        shell: bash
+        run: |
+          npm install --no-audit --no-fund
+          npm run typecheck:core
+          npm run typecheck
+          npm run check
+          npm run build
+
+      - name: Two-pass explicit SHIFT acknowledgement
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { resolve } from "node:path";
+          import { testGame } from "@rarefriends/friendsdk/testing";
+
+          const gameDirectory = resolve("games/rare-shift");
+          const TARGETS = [2_000, 4_000, 6_000, 8_000, 10_000];
+          const results = [];
+
+          const read = canvas => canvas.evaluate(element => ({
+            elapsed: Number(element.dataset.directorElapsedMs ?? "0"),
+            progress: Number(element.dataset.directorProgressMs ?? "0"),
+            shifts: Number(element.dataset.shifts ?? "0"),
+            phase: element.dataset.phase ?? "",
+            hp: Number(element.dataset.hp ?? "0"),
+            dead: element.dataset.dead === "true",
+            runtime: element.dataset.cr3e1CheckpointRuntime ?? "",
+          }));
+
+          async function waitForElapsed(page, canvas, target, expectedShifts, label) {
+            const deadline = Date.now() + 6_000;
+            while (Date.now() < deadline) {
+              const state = await read(canvas);
+              if (state.dead) throw new Error(`${label} died during SHIFT diagnostic: ${JSON.stringify(state)}`);
+              assert.equal(state.shifts, expectedShifts, `${label} unsolicited SHIFT before target ${target}: ${JSON.stringify(state)}`);
+              if (state.elapsed >= target) return state;
+              await page.waitForTimeout(12);
+            }
+            throw new Error(`${label} elapsed stalled before ${target}`);
+          }
+
+          async function acknowledgedShift(page, canvas, expectedBefore, label, ordinal) {
+            const before = await read(canvas);
+            assert.equal(before.shifts, expectedBefore, `${label} pre-SHIFT count drift at #${ordinal}`);
+            await page.keyboard.down("Space");
+            await page.waitForTimeout(18);
+            await page.keyboard.up("Space");
+
+            const deadline = Date.now() + 1_500;
+            let after = await read(canvas);
+            while (Date.now() < deadline && after.shifts === before.shifts) {
+              await page.waitForTimeout(10);
+              after = await read(canvas);
+            }
+            assert.equal(after.shifts, before.shifts + 1, `${label} SHIFT #${ordinal} must increment exactly once: before=${JSON.stringify(before)} after=${JSON.stringify(after)}`);
+            assert.notEqual(after.phase, before.phase, `${label} SHIFT #${ordinal} must toggle phase`);
+
+            await page.waitForTimeout(160);
+            const settled = await read(canvas);
+            assert.equal(settled.shifts, after.shifts, `${label} duplicate/unsolicited SHIFT after #${ordinal}: ${JSON.stringify(settled)}`);
+            console.log(`CR3E2_SHIFT_ACK_${label}_${ordinal}=${JSON.stringify({ before, after, settled })}`);
+            return settled.shifts;
+          }
+
+          function attempt(label) {
+            return async ({ page, game }) => {
+              const scan = game.locator('[data-stage="scan"]');
+              await scan.waitFor({ state: "visible" });
+              const frameA = Number(await scan.getAttribute("data-frame-a"));
+              const frameB = Number(await scan.getAttribute("data-frame-b"));
+              await game.getByRole("button", { name: /ENTER SIGNAL DESCENT/i }).click();
+              const canvas = game.locator("canvas[data-director-stage]").first();
+              await canvas.waitFor({ state: "visible" });
+              await canvas.focus();
+
+              const runtimeDeadline = Date.now() + 10_000;
+              while (Date.now() < runtimeDeadline) {
+                if ((await read(canvas)).runtime === "ACTIVE") break;
+                await page.waitForTimeout(25);
+              }
+              const initial = await read(canvas);
+              assert.equal(initial.runtime, "ACTIVE");
+              assert.equal(initial.shifts, 0, `${label} must start with zero SHIFTs`);
+
+              let expected = 0;
+              for (let i = 0; i < TARGETS.length; i += 1) {
+                await waitForElapsed(page, canvas, TARGETS[i], expected, label);
+                expected = await acknowledgedShift(page, canvas, expected, label, i + 1);
+              }
+
+              const finalState = await read(canvas);
+              assert.equal(finalState.shifts, TARGETS.length);
+              results.push({ label, frameA, frameB, finalState });
+              console.log(`CR3E2_SHIFT_ACK_${label}_FINAL=${JSON.stringify(results.at(-1))}`);
+            };
+          }
+
+          for (const label of ["A", "B"]) {
+            await testGame(gameDirectory, { width: 960, height: 800, timeout: 30_000, check: attempt(label) });
+          }
+
+          assert.equal(results.length, 2);
+          assert.equal(results[0].frameA, results[1].frameA);
+          assert.equal(results[0].frameB, results[1].frameB);
+          assert.equal(results[0].finalState.shifts, 5);
+          assert.equal(results[1].finalState.shifts, 5);
+          console.log("RARE_SHIFT_CR3E2_EXPLICIT_SHIFT_ACK=PASS");
+          NODE
