@@ -105,10 +105,10 @@ Patch-FriendSdkTestLauncher -ExecutablePath $systemBrowser
 $env:CR3E2_STAGE2_TRIALS = [string]$Trials
 
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$log = Join-Path $env:TEMP "rare-shift-cr3e2-stage2-lab-$stamp.log"
+$log = Join-Path $env:TEMP "rare-shift-cr3e2-stage2-v2-lab-$stamp.log"
 
 Write-Host "=============================================="
-Write-Host "RARE_SHIFT_CR3E2_STAGE2_LAB=START"
+Write-Host "RARE_SHIFT_CR3E2_STAGE2_V2_LAB=START"
 Write-Host "REPO=$repo"
 Write-Host "BRANCH=$branch"
 Write-Host "HEAD=$((& git -C $repo rev-parse HEAD).Trim())"
@@ -116,6 +116,9 @@ Write-Host "TRIALS=$Trials"
 Write-Host "BROWSER=$systemBrowser"
 Write-Host "LOG=$log"
 Write-Host "TARGET=STAGE_II_TO_CHECKPOINT_ELITE_180000"
+Write-Host "STAGE2_ROUTE=WIDE_PERIMETER"
+Write-Host "STAGE2_SHIFT_INTERVAL_MS=5400"
+Write-Host "SHIFT_ZERO_DELIVERY_RETRY=ONE"
 Write-Host "SECOND_CHECKPOINT_COMBAT=OUT_OF_SCOPE"
 Write-Host "PRODUCTION_MUTATION=FORBIDDEN"
 Write-Host "GITHUB_ACTIONS=NO"
@@ -124,7 +127,7 @@ Write-Host "=============================================="
 $previousPreference = $ErrorActionPreference
 try {
     $ErrorActionPreference = "Continue"
-    & node "scripts/local/cr3e2-stage2-activation-lab.mjs" 2>&1 | Tee-Object -FilePath $log
+    & node "scripts/local/cr3e2-stage2-activation-v2.mjs" 2>&1 | Tee-Object -FilePath $log
     $exitCode = $LASTEXITCODE
 }
 finally {
@@ -132,7 +135,7 @@ finally {
 }
 
 Write-Host "=============================================="
-Write-Host "RARE_SHIFT_CR3E2_STAGE2_LAB=END"
+Write-Host "RARE_SHIFT_CR3E2_STAGE2_V2_LAB=END"
 Write-Host "EXIT_CODE=$exitCode"
 Write-Host "LOG=$log"
 Write-Host "=============================================="
