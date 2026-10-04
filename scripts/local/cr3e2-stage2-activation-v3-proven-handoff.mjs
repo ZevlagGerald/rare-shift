@@ -7,38 +7,12 @@ const sourcePath = resolve("scripts/local/cr3e2-stage2-activation-v3.mjs");
 const runnerPath = resolve("scripts/local/.cr3e2-stage2-activation-v3-proven-handoff.runner.mjs");
 let source = await readFile(sourcePath, "utf8");
 
-const marker = "source = prefix + tail;";
-const markerAt = source.indexOf(marker);
-assert.ok(markerAt >= 0, "Stage-II V3 final-source marker not found");
-assert.equal(source.indexOf(marker, markerAt + marker.length), -1, "Stage-II V3 final-source marker is not unique");
-const insertAt = markerAt + marker.length;
-
-const injection = String.raw`
-
-source = replaceRegexOnce(
-  source,
-  /          if \(!moved\) break;\r?\n          state = moved;\r?\n\r?\n          if \(huntTick % 6 === 0 && state\.gatePhase === "ELITE_ACTIVE"\) \{/,
-  "          if (!moved) break;\n          state = moved;\n\n          if (state.draftOpen) {\n            await chooseDraft(page, canvas, state, trial);\n            continue;\n          }\n\n          if (huntTick % 6 === 0 && state.gatePhase === \"ELITE_ACTIVE\") {",
-  "ELITE_I post-move draft guard",
-);
-
-source = replaceRegexOnce(
-  source,
-  /async function chooseDraft\(page, canvas, state, trial\) \{/,
-  "async function chooseDraftStage2Policy(page, canvas, state, trial) {",
-  "rename Stage-II draft policy",
-);
-
-source = replaceRegexOnce(
-  source,
-  /\nfunction phaseThreats\(state\) \{/,
-  `
-async function chooseDraft(page, canvas, state, trial) {
+async function provenChooseDraft(page, canvas, state, trial) {
   if (state.stage !== "STAGE_I") {
     return chooseDraftStage2Policy(page, canvas, state, trial);
   }
 
-  assert.equal(state.draftIds.length, state.draftCount, \`trial \${trial} draft ids/count mismatch\`);
+  assert.equal(state.draftIds.length, state.draftCount, `trial ${trial} draft ids/count mismatch`);
   const onboarding = new Map([[2, "ORBIT_NODES"], [3, "ECHO_MINE"], [4, "SIGNAL_ARC"]]);
   const required = onboarding.get(state.level);
   let index = required ? state.draftIds.indexOf(required) : -1;
@@ -78,18 +52,77 @@ async function chooseDraft(page, canvas, state, trial) {
           "SIGNAL_MAGNET",
         ];
     for (const token of priority) {
-      index = state.draftIds.findIndex(id => id === token || id.startsWith(\`\${token}:\`));
+      index = state.draftIds.findIndex(id => id === token || id.startsWith(`${token}:`));
       if (index >= 0) break;
     }
   }
 
   if (index < 0) index = 0;
-  console.log(\`CR3E2_PROVEN_HANDOFF_DRAFT_T\${trial}=L\${state.level}:HP\${state.hp}:\${state.draftIds.join(",")}=>\${state.draftIds[index]}\`);
+  console.log(`CR3E2_PROVEN_HANDOFF_DRAFT_T${trial}=L${state.level}:HP${state.hp}:${state.draftIds.join(",")}=>${state.draftIds[index]}`);
   await clickDraft(canvas, index, state.draftCount);
   await page.waitForTimeout(75);
 }
 
-function phaseThreats(state) {`,
+async function provenAcknowledgedShift(page, canvas, state, trial) {
+  const before = state ?? await readState(canvas);
+  assert.ok(before, `trial ${trial} SHIFT requires live canvas`);
+  assert.equal(before.draftOpen, false, `trial ${trial} SHIFT cannot be issued during draft`);
+
+  if (before.stage !== "STAGE_I") {
+    return acknowledgedPointerShift(page, canvas, before, trial);
+  }
+
+  await canvas.focus().catch(() => {});
+  await page.keyboard.down("Space");
+  await page.waitForTimeout(18);
+  await page.keyboard.up("Space");
+
+  const deadline = Date.now() + 1_500;
+  let after = await readState(canvas);
+  while (Date.now() < deadline && after && after.shifts === before.shifts) {
+    await page.waitForTimeout(10);
+    after = await readState(canvas);
+  }
+  if (!after) return null;
+  assert.equal(after.shifts, before.shifts + 1, `trial ${trial} proven-handoff SHIFT must increment exactly once`);
+  assert.notEqual(after.phase, before.phase, `trial ${trial} proven-handoff SHIFT must toggle phase`);
+  await page.waitForTimeout(30);
+  const settled = await readState(canvas);
+  if (settled) assert.equal(settled.shifts, after.shifts, `trial ${trial} unsolicited duplicate proven-handoff SHIFT`);
+  return settled ?? after;
+}
+
+const draftFunctionSource = provenChooseDraft.toString().replace("provenChooseDraft", "chooseDraft");
+const shiftFunctionSource = provenAcknowledgedShift.toString().replace("provenAcknowledgedShift", "acknowledgedShift");
+const draftFunctionLiteral = JSON.stringify(`${draftFunctionSource}\n\nfunction phaseThreats(state) {`);
+const shiftFunctionLiteral = JSON.stringify(`${shiftFunctionSource}\n\nfunction progressionBehind(state) {`);
+
+const marker = "source = prefix + tail;";
+const markerAt = source.indexOf(marker);
+assert.ok(markerAt >= 0, "Stage-II V3 final-source marker not found");
+assert.equal(source.indexOf(marker, markerAt + marker.length), -1, "Stage-II V3 final-source marker is not unique");
+const insertAt = markerAt + marker.length;
+
+const injection = String.raw`
+
+source = replaceRegexOnce(
+  source,
+  /          if \(!moved\) break;\r?\n          state = moved;\r?\n\r?\n          if \(huntTick % 6 === 0 && state\.gatePhase === "ELITE_ACTIVE"\) \{/,
+  "          if (!moved) break;\n          state = moved;\n\n          if (state.draftOpen) {\n            await chooseDraft(page, canvas, state, trial);\n            continue;\n          }\n\n          if (huntTick % 6 === 0 && state.gatePhase === \"ELITE_ACTIVE\") {",
+  "ELITE_I post-move draft guard",
+);
+
+source = replaceRegexOnce(
+  source,
+  /async function chooseDraft\(page, canvas, state, trial\) \{/,
+  "async function chooseDraftStage2Policy(page, canvas, state, trial) {",
+  "rename Stage-II draft policy",
+);
+
+source = replaceRegexOnce(
+  source,
+  /\nfunction phaseThreats\(state\) \{/,
+  ${draftFunctionLiteral},
   "proven Stage-I/ELITE_I draft policy",
 );
 
@@ -110,37 +143,7 @@ source = replaceRegexOnce(
 source = replaceRegexOnce(
   source,
   /\nfunction progressionBehind\(state\) \{/,
-  `
-async function acknowledgedShift(page, canvas, state, trial) {
-  const before = state ?? await readState(canvas);
-  assert.ok(before, \`trial \${trial} SHIFT requires live canvas\`);
-  assert.equal(before.draftOpen, false, \`trial \${trial} SHIFT cannot be issued during draft\`);
-
-  if (before.stage !== "STAGE_I") {
-    return acknowledgedPointerShift(page, canvas, before, trial);
-  }
-
-  await canvas.focus().catch(() => {});
-  await page.keyboard.down("Space");
-  await page.waitForTimeout(18);
-  await page.keyboard.up("Space");
-
-  const deadline = Date.now() + 1_500;
-  let after = await readState(canvas);
-  while (Date.now() < deadline && after && after.shifts === before.shifts) {
-    await page.waitForTimeout(10);
-    after = await readState(canvas);
-  }
-  if (!after) return null;
-  assert.equal(after.shifts, before.shifts + 1, \`trial \${trial} proven-handoff SHIFT must increment exactly once\`);
-  assert.notEqual(after.phase, before.phase, \`trial \${trial} proven-handoff SHIFT must toggle phase\`);
-  await page.waitForTimeout(30);
-  const settled = await readState(canvas);
-  if (settled) assert.equal(settled.shifts, after.shifts, \`trial \${trial} unsolicited duplicate proven-handoff SHIFT\`);
-  return settled ?? after;
-}
-
-function progressionBehind(state) {`,
+  ${shiftFunctionLiteral},
   "proven Stage-I/ELITE_I SHIFT handoff",
 );
 `;
