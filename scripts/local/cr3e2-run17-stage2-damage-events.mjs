@@ -191,6 +191,5 @@ console.log("CR3E2_RUN17_DAMAGE_DIAG_SCOPE=LOCAL_DRIVER_ONLY");
 try {
   await import(`${pathToFileURL(generatedPath).href}?v=${Date.now()}`);
 } finally {
-  damageDiagMovementObserver = null;
   rmSync(generatedPath, { force: true });
 }
