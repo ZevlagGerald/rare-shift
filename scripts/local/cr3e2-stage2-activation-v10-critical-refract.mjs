@@ -131,7 +131,7 @@ const elitePolicyInjection = [
   "    \"\",",
   "    \"    const priority = state.hp <= 68\",",
   "    \"      ? [\",",
-  "  ].join(\\\"\\n\\\"),",
+  "  ].join(\"\\n\"),",
   "  \"ELITE_I critical REFRACT policy\",",
   ");",
   "",
