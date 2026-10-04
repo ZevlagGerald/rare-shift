@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 const sourcePath = resolve("scripts/local/cr3e2-elite1-transition-lab.mjs");
 const runnerPath = resolve("scripts/local/.cr3e2-stage2-activation-v4-literal-handoff.runner.mjs");
 let source = await readFile(sourcePath, "utf8");
+source = source.replace(/\r\n/g, "\n");
 
 function replaceExactOnce(input, from, to, label) {
   const first = input.indexOf(from);
