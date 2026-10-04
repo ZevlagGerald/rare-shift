@@ -32,7 +32,7 @@ source = replaceOnce(
 source = replaceOnce(
   source,
   "    bossPending: state.bossPending,\n    moveTick: state.moveTick,",
-  "    bossPending: state.bossPending,\n    bossActive: state.bossActive,\n    gateResolvedCount: state.gateResolvedCount,\n    moveTick: state.moveTick,",
+  "    bossPending: state.bossPending,\n    bossActive: state.bossActive,\n    draftOpen: state.draftOpen,\n    gatePendingRewards: state.gatePendingRewards,\n    gateResolvedCount: state.gateResolvedCount,\n    moveTick: state.moveTick,",
   "compact checkpoint diagnostics",
 );
 
@@ -82,7 +82,9 @@ const checkpointContinuation = `        if (state.gateActive === "CHECKPOINT_ELI
           && state.gateResolvedCount === 2
           && state.gateResolved.length === 2
           && state.gateResolved[0] === "ELITE_I"
-          && state.gateResolved[1] === "CHECKPOINT_ELITE";
+          && state.gateResolved[1] === "CHECKPOINT_ELITE"
+          && state.draftOpen === false
+          && state.gatePendingRewards.length === 0;
 
         if (stage3Resumed) {
           const final = compact({ ...state, moveTick, checkpointTick });
@@ -90,8 +92,10 @@ const checkpointContinuation = `        if (state.gateActive === "CHECKPOINT_ELI
           assert.equal(state.elitesDefeated, 2, \`trial \${trial} must record exactly two elite defeats at Stage-III resume\`);
           assert.ok(state.cores >= 1, \`trial \${trial} must preserve at least one Evolution Core at Stage-III resume\`);
           assert.equal(state.reservedActive, 0, \`trial \${trial} checkpoint reservation must clear before Stage-III resume\`);
+          assert.deepEqual(state.gatePendingRewards, [], \`trial \${trial} checkpoint rewards must clear before Stage-III resume\`);
           assert.equal(state.bossPending, false, \`trial \${trial} boss must not be pending at Stage-III resume\`);
           assert.equal(state.bossActive, false, \`trial \${trial} boss must not be active at Stage-III resume\`);
+          assert.equal(state.draftOpen, false, \`trial \${trial} draft overlay must be closed at Stage-III resume\`);
           assert.ok(state.hp > 25, \`trial \${trial} Stage-III resume HP must remain >25; hp=\${state.hp}\`);
           record = {
             trial,
@@ -118,6 +122,10 @@ source = replaceRegexOnce(
 );
 
 source = source.replaceAll(
+  "trial ${trial} Run-17 control died before checkpoint",
+  "trial ${trial} Run-17 Stage-III control died before Stage III resume",
+);
+source = source.replaceAll(
   "trial ${trial} Run-17 control timed out before CHECKPOINT_ELITE",
   "trial ${trial} Run-17 Stage-III control timed out before Stage III resume after CHECKPOINT_ELITE",
 );
@@ -129,7 +137,7 @@ source = source.replaceAll("CR3E2_RUN17_CONTROL", "CR3E2_RUN17_STAGE3");
 source = replaceOnce(
   source,
   'console.log("CR3E2_RUN17_STAGE3_CONTROL_STOP=CHECKPOINT_ELITE_AT_180000");',
-  'console.log("CR3E2_RUN17_STAGE3_CONTROL_STOP=STAGE_III_RESUME_AFTER_CHECKPOINT_ELITE");\nconsole.log("CR3E2_RUN17_STAGE3_CONTROL_PRESERVE_STAGE2_HP_GT25=YES");',
+  'console.log("CR3E2_RUN17_STAGE3_CONTROL_STOP=STAGE_III_RESUME_AFTER_CHECKPOINT_ELITE");\nconsole.log("CR3E2_RUN17_STAGE3_CONTROL_PRESERVE_STAGE2_HP_GT25=YES");\nconsole.log("CR3E2_RUN17_STAGE3_CONTROL_RESUME_REQUIRES=DRAFT_CLOSED_REWARDS_CLEARED");',
   "Stage-III stop marker",
 );
 
@@ -165,6 +173,8 @@ source = replaceRegexOnce(
     && result.final?.elitesDefeated === 2
     && (result.final?.cores ?? 0) >= 1
     && result.final?.reservedActive === 0
+    && result.final?.draftOpen === false
+    && result.final?.gatePendingRewards?.length === 0
     && result.final?.bossPending === false
     && result.final?.bossActive === false
   );`,
